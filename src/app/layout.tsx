@@ -31,14 +31,14 @@ export default function RootLayout({
               },
               components: {
                 Layout: {
-                  siderBg: "#000C75", // (1) Màu nền của thanh Sidebar tổng
+                  siderBg: "#010345", // (1) Màu nền của thanh Sidebar tổng
                 },
                 Menu: {
                   // Màu nền của các mục menu cấp 1
-                  darkItemBg: "#000C75",
+                  darkItemBg: "#010345",
 
                   // (2) QUAN TRỌNG: Màu nền của các menu con (SubMenu) khi xổ xuống
-                  darkSubMenuItemBg: "#000C75", // <-- Bạn chỉnh dòng này trùng màu với siderBg là được
+                  darkSubMenuItemBg: "#010345", // <-- Bạn chỉnh dòng này trùng màu với siderBg là được
 
                   // (3) Tùy chọn thêm: Màu nền của mục ĐANG ĐƯỢC CHỌN (Active)
                   // Nên để màu khác một chút (sáng hơn hoặc tối hơn) để người dùng biết mình đang ở đâu

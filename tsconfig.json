@@ -18,8 +18,9 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".", // <-- Dòng này phải có
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"] // <-- Dòng này định nghĩa: @ tương đương với folder src
     }
   },
   "include": [

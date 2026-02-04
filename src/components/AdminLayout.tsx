@@ -94,7 +94,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     menuItems.splice(3, 0, {
       key: "/users",
       icon: <UserOutlined />,
-      label: "Quản lý Tài khoản (Admin)",
+      label: "Quản lý Tài khoản",
     } as any);
   }
 
@@ -208,7 +208,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         </Content>
 
         <Footer style={{ textAlign: "center", color: "#888" }}>
-          Phu Bai Factory ©{new Date().getFullYear()} - ERP System
+          Phu Bai Factory ©{new Date().getFullYear()} - Nguyễn Thiện Minh Trí
         </Footer>
       </Layout>
     </Layout>

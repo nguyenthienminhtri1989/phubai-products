@@ -41,3 +41,27 @@ yarn-error.log*
 next-env.d.ts
 
 /generated/prisma
+
+# --- BỔ SUNG THÊM ---
+
+# IDE / Editor (Cấu hình riêng của trình soạn thảo code, không nên đẩy lên)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files (File rác của hệ điều hành)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Optional: Nếu sau này có log lỗi của Next.js
+.next/
+
+# Prisma (Nếu lỡ tay tạo file SQLite hoặc backup DB)
+*.sqlite
+*.sqlite-journal
