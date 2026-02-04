@@ -1,0 +1,3728 @@
+--- PROJECT SOURCE CODE ---
+
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\package.json
+================================================================================
+{
+  "name": "phubai-products",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@ant-design/nextjs-registry": "^1.3.0",
+    "@prisma/adapter-pg": "^7.2.0",
+    "antd": "^6.1.3",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.2.3",
+    "next": "16.1.1",
+    "next-auth": "^5.0.0-beta.30",
+    "pg": "^8.16.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@prisma/client": "^5.22.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.19.27",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\package.json ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\schema.prisma
+================================================================================
+// File: schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Hoặc "mysql", "sqlserver" tùy bạn chọn
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. QUẢN LÝ CẤU TRÚC NHÀ MÁY (Hierarchy)
+// ==========================================
+
+model Factory {
+  id        Int       @id @default(autoincrement())
+  name      String    // Tên nhà máy (NM1, NM2...)
+  note      String?   // Ghi chú
+
+  processes Process[] // 1 Nhà máy có nhiều Công đoạn
+
+  @@map("factories")
+}
+
+// ==========================================
+// 2. CÔNG ĐOẠN
+// ==========================================
+model Process {
+  id        Int       @id @default(autoincrement())
+  name      String    // Tên công đoạn (bông chải, ghép thô...)
+  
+  factoryId Int
+  factory   Factory   @relation(fields: [factoryId], references: [id])
+
+  machines  Machine[] // 1 Công đoạn quản lý nhiều Máy
+  users     User[]    // Phân quyền: User nào thuộc công đoạn nào
+
+  @@map("processes")
+}
+
+// ==========================================
+// 2. DANH MỤC MẶT HÀNG (Items)
+// ==========================================
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  name        String   // Tên mặt hàng (Bắt buộc)
+  
+  // Quan hệ
+  runningOnMachines Machine[]       // Mặt hàng này đang chạy trên máy nào?
+  productionLogs    ProductionLog[] // Lịch sử sản xuất của mặt hàng này
+
+  @@map("items")
+}
+
+// ==========================================
+// 3. DANH MỤC MÁY MÓC (Machines) - Cấu hình
+// ==========================================
+
+model Machine {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique // Tên máy (Máy 01, Máy 02...)
+  isActive    Boolean  @default(true) // True: Đang dùng, False: Đã thanh lý (Thay máy mới)
+
+  // --- Phân cấp ---
+  processId   Int
+  process     Process  @relation(fields: [processId], references: [id])
+
+  // --- Cấu hình tính toán (Quan trọng) ---
+  // 1: Nhập thẳng kg
+  // 2: (Cuối - Đầu)
+  // 3: (Cuối - Đầu) * Số cọc / (Chi số * K)
+  // 4: (Cuối - Đầu) / Chi số
+  formulaType Int      @default(1) 
+
+  spindleCount Int?    // Số cọc (Chỉ dùng cho FormulaType = 3, máy khác để Null)
+
+  // --- Trạng thái hiện tại ---
+  currentItemId Int?   // Máy đang chạy hàng nào? (Dùng để gợi ý khi nhập liệu)
+  currentItem   Item?  @relation(fields: [currentItemId], references: [id])
+
+  // 2. Chi số đang chạy là bao nhiêu?
+  // Dành cho máy loại 3, 4. 
+  // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
+  currentNE     Float?
+
+  // --- Dữ liệu lịch sử ---
+  productionLogs ProductionLog[]
+
+  @@map("machines")
+}
+
+// ==========================================
+// 4. NHẬT KÝ SẢN LƯỢNG (Dữ liệu hàng ngày)
+// ==========================================
+
+model ProductionLog {
+  id          Int      @id @default(autoincrement())
+  
+  // --- Thời gian logic ---
+  recordDate  DateTime @db.Date // Ngày sản xuất (Ca 3 đêm nay vẫn lưu là ngày hôm nay)
+  shift       Int      // Ca làm việc: 1, 2, hoặc 3
+  
+  // --- Liên kết ---
+  machineId   Int
+  machine     Machine  @relation(fields: [machineId], references: [id])
+
+  itemId      Int      // Snapshot: Tại thời điểm nhập, máy chạy hàng gì?
+  item        Item     @relation(fields: [itemId], references: [id])
+
+  // --- Số liệu nhập vào (Input) ---
+  endIndex    Float?   // Chỉ số cuối (Null nếu là máy Loại 1)
+  
+  // Khi lưu, giá trị này sẽ lấy từ ô nhập liệu (dù là auto-fill hay nhập tay)
+  inputNE     Float?
+
+  // --- Kết quả (Output) ---
+  finalOutput Float    // SẢN LƯỢNG CUỐI CÙNG (KG). Đã qua tính toán.
+  
+  // --- Audit ---
+  note        String?  // Ghi chú (nếu có)
+  createdAt   DateTime @default(now()) // Giờ nhập thực tế
+  createdById Int?     // Ai nhập?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@map("production_logs")
+}
+
+// ==========================================
+// 5. NGƯỜI DÙNG (Quản lý quyền hạn)
+// ==========================================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   // Lưu hash (đã mã hóa)
+  fullName  String
+  
+  // --- PHÂN QUYỀN ---
+  role        String   @default("USER") // "ADMIN" hoặc "USER"
+  accessLevel String   @default("READ_ONLY") // "READ_ONLY", "OPERATOR", "MANAGER"
+  
+  // --- TRẠNG THÁI ---
+  isActive    Boolean  @default(false)  // false: Chờ duyệt, true: Được dùng
+
+  // --- PHẠM VI CÔNG VIỆC ---
+  processId   Int?     // User thuộc công đoạn nào?
+  process     Process? @relation(fields: [processId], references: [id])
+
+  createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
+  createdAt   DateTime @default(now())
+
+  @@map("users")
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\schema.prisma ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\seed.ts
+================================================================================
+// prisma/seed.ts
+import { PrismaClient } from '@prisma/client'
+import * as bcrypt from 'bcryptjs'
+
+const prisma = new PrismaClient()
+
+async function main() {
+  // Tạo Admin mặc định
+  const passwordHash = await bcrypt.hash('admin123', 10) // Mật khẩu: admin123
+  
+  const admin = await prisma.user.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      password: passwordHash,
+      fullName: 'Quản trị viên',
+      role: 'ADMIN',
+      accessLevel: 'MANAGER',
+      isActive: true, // Admin mặc định luôn active
+    },
+  })
+  console.log({ admin })
+}
+
+main()
+  .then(async () => { await prisma.$disconnect() })
+  .catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1) })
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\seed.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma.config.ts
+================================================================================
+// This file was generated by Prisma, and assumes you have installed the following:
+// npm install --save-dev prisma dotenv
+import "dotenv/config";
+import { defineConfig } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: {
+    url: process.env["DATABASE_URL"],
+  },
+});
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma.config.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\auth\[...nextauth]\route.ts
+================================================================================
+// src/app/api/auth/[...nextauth]/route.ts
+import { handlers } from "@/auth"; // Import từ file auth.ts vừa tạo
+export const { GET, POST } = handlers;
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\auth\[...nextauth]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\factories\route.ts
+================================================================================
+// src/app/api/factories/route.ts
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// 1. HÀM GET: TRẢ VỀ DANH SÁCH NHÀ MÁY
+export async function GET() {
+  try {
+    const factories = await prisma.factory.findMany({
+      orderBy: { id: "asc" },
+    });
+    return NextResponse.json(factories);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi khi tải danh sách nhà máy: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+// 2. HÀM POST: TẠO MỚI NHÀ MÁY
+export async function POST(request: Request) {
+  try {
+    const body = await request.json(); // Lấy dữ liệu từ phía Client gửi lên
+    const { name, note } = body; // Lấy dữ liệu từ body
+
+    // Valdate cơ bản
+    if (!name) {
+      return NextResponse.json(
+        { error: "Bắt buộc nhập tên nhà máy!" },
+        { status: 400 }
+      );
+    }
+
+    // Đẩy dữ liệu vào CSDL
+    const newFactory = await prisma.factory.create({
+      data: {
+        name: name,
+        note: note,
+      },
+    });
+
+    // Trả về thông tin nhà máy vừa thêm thành công
+    return NextResponse.json(newFactory, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi khi thêm nhà máy: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\factories\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\factories\[id]\route.ts
+================================================================================
+// app/api/factories/[id]/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// 1. HÀM PUT: Cập nhật thông tin
+export async function PUT(
+  request: Request,
+  // Sửa kiểu dữ liệu của params thành Promise
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // --- KHẮC PHỤC LỖI Ở ĐÂY ---
+    // Phải await params trước khi lấy id
+    const data = await params;
+    const idString = data.id; // Lấy giá trị của 'id' nhưng gán vào biến tên là 'idString'
+    const id = parseInt(idString);
+    // ---------------------------
+
+    const body = await request.json();
+    const { name, note } = body;
+
+    const updatedFactory = await prisma.factory.update({
+      where: { id: id },
+      data: { name, note },
+    });
+
+    return NextResponse.json(updatedFactory);
+  } catch (error) {
+    // Log lỗi ra terminal để dễ debug
+    console.error("Lỗi PUT:", error);
+    return NextResponse.json({ error: "Lỗi cập nhật" }, { status: 500 });
+  }
+}
+
+// 2. HÀM DELETE: Xóa nhà máy
+export async function DELETE(
+  request: Request,
+  // Sửa kiểu dữ liệu của params thành Promise
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // --- KHẮC PHỤC LỖI Ở ĐÂY ---
+    const { id: idString } = await params;
+    const id = parseInt(idString);
+    // ---------------------------
+
+    await prisma.factory.delete({
+      where: { id: id },
+    });
+    return NextResponse.json({ message: "Xóa thành công" }, { status: 200 });
+  } catch (error) {
+    console.error("Lỗi DELETE:", error);
+    return NextResponse.json(
+      { error: "Không xóa được, có thể do ràng buộc dữ liệu" },
+      { status: 500 }
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\factories\[id]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// Lấy danh sách sản phẩm
+export async function GET() {
+  try {
+    const items = await prisma.item.findMany({
+      orderBy: {
+        name: "asc", // Sắp xếp tên từ A - Z cho dễ tìm kiếm
+      },
+    });
+    return NextResponse.json(items);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Lỗi tải dữ liệu từ server" },
+      { status: 500 },
+    );
+  }
+}
+
+// Thêm sản phẩm
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { name } = body;
+
+    if (!name) {
+      return NextResponse.json(
+        { error: "Tên sản phẩm không được để trống" },
+        { status: 400 },
+      );
+    }
+
+    const newItem = await prisma.item.create({
+      data: { name },
+    });
+
+    return NextResponse.json(newItem, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Lỗi thêm mới dữ liệu từ server" },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\[id]\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// PUT: Sửa tên
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: idString } = await params;
+    const id = parseInt(idString);
+    const body = await request.json();
+
+    const updatedItem = await prisma.item.update({
+      where: { id: id },
+      data: { name: body.name },
+    });
+
+    return NextResponse.json(updatedItem);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Lỗi cập nhật" }, { status: 500 });
+  }
+}
+
+// DELETE: Xóa
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: idString } = await params;
+    const id = parseInt(idString);
+
+    await prisma.item.delete({ where: { id: id } });
+    return NextResponse.json({ message: "Đã xóa" });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Không thể xóa (Mặt hàng này đang được dùng trong sản xuất)" },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\[id]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\bulk-update\route.ts
+================================================================================
+// app/api/machines/bulk-update/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { machineIds, itemId, currentNE } = body;
+    // machineIds: Mảng chứa các ID [1, 2, 3, 4, 5]
+    // itemId: ID mặt hàng muốn gán
+    // currentNE: Chi số (nếu có cập nhật luôn)
+
+    if (!machineIds || machineIds.length === 0) {
+      return NextResponse.json({ error: "Chưa chọn máy nào" }, { status: 400 });
+    }
+
+    // Cập nhật 1 lần cho tất cả máy được chọn
+    await prisma.machine.updateMany({
+      where: {
+        id: { in: machineIds }, // Logic: Cập nhật những máy có ID nằm trong danh sách
+      },
+      data: {
+        currentItemId: itemId,
+        currentNE: currentNE || null, // Cập nhật luôn chi số nếu có
+      },
+    });
+
+    return NextResponse.json({ message: "Cập nhật thành công" });
+  } catch (error) {
+    console.error("Lỗi cập nhật máy móc", error);
+    return NextResponse.json({ error: "Lỗi cập nhật" }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\bulk-update\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\route.ts
+================================================================================
+// app/api/machines/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// HÀM LẤY DANH SÁCH MÁY
+export async function GET() {
+  try {
+    const machines = await prisma.machine.findMany({
+      include: {
+        process: {
+          include: { factory: true }, // Lấy cả ông nội (Factory)
+        },
+        currentItem: true, // Lấy tên mặt hàng đang chạy
+      },
+      orderBy: { id: "asc" }, // Sắp xếp theo id hoặc tên
+    });
+
+    return NextResponse.json(machines);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi tải dữ liệu: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+// HÀM THÊM MÁY MỚI
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    // Parse dữ liệu cho chuẩn
+    const data = {
+      name: body.name,
+      isActive: body.isActive,
+      processId: parseInt(body.processId),
+      formulaType: parseInt(body.formulaType),
+      spindleCount: body.spindleCount ? parseInt(body.spindleCount) : null,
+      currentItemId: body.currentItemId ? parseInt(body.currentItemId) : null,
+      currentNE: body.currentNE ? parseFloat(body.currentNE) : null,
+    };
+
+    const newMachine = await prisma.machine.create({
+      data: data,
+    });
+
+    return NextResponse.json(newMachine, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi thêm mới: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\[id]\route.ts
+================================================================================
+import { error } from "console";
+// app/api/machines/[id]/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { message } from "antd";
+
+// HÀM CẬP NHẬT THÔNG TIN MÁY
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const data = await params; // Đợi dữ liệu từ Promise params
+    const idString = data.id; // Gán id dạng chuỗi cho idString
+    const id = parseInt(idString); // Đỗi chuỗi thành số
+    const body = await request.json(); // Lấy dữ liệu từ Client gửi lên
+
+    const updatedMachine = await prisma.machine.update({
+      where: { id: id },
+      data: {
+        name: body.name,
+        isActive: body.isActive,
+        processId: parseInt(body.processId),
+        formulaType: parseInt(body.formulaType),
+        spindleCount: body.spindleCount ? parseInt(body.spindleCount) : null,
+        currentItemId: body.currentItemId ? parseInt(body.currentItemId) : null,
+        currentNE: body.currentNE ? parseFloat(body.currentNE) : null,
+      },
+    });
+
+    return NextResponse.json(updatedMachine);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi cập nhật: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+// HÀM XÓA MÁY
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const data = await params; // Đợi dữ liệu từ Promise params
+    const idString = data.id; // Gán id dạng chuỗi cho idString
+    const id = parseInt(idString); // Đỗi chuỗi thành số
+
+    await prisma.machine.delete({
+      where: { id: id },
+    });
+
+    return NextResponse.json({ message: "Đã xóa xong" }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Không thể xóa (Có dữ liệu sản xuất liên quan): " + error },
+      { status: 500 }
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\[id]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\processes\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// --- HÀM LẤY DANH SÁCH CÔNG ĐOẠN ---
+export async function GET() {
+  try {
+    // Kỹ thuật Eager Loading: Lấy kèm dữ liệu bảng cha (Factory)
+    const processes = await prisma.process.findMany({
+      include: {
+        factory: true, // <-- Quan trọng: Lấy thông tin nhà máy
+      },
+      orderBy: { id: "asc" },
+    });
+    return NextResponse.json(processes);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi lấy dữ liệu công đoạn: " + error },
+      { status: 500 },
+    );
+  }
+}
+
+// --- HÀM THÊM MỚI CÔNG ĐOẠN ---
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { name, factoryId } = body;
+
+    if (!name || !factoryId) {
+      return NextResponse.json(
+        { error: "Bắt buộc nhập tên công đoạn và tên nhà máy!" },
+        { status: 400 },
+      );
+    }
+
+    const newProcess = await prisma.process.create({
+      data: {
+        name: name,
+        factoryId: parseInt(factoryId),
+      },
+      include: { factory: true }, // // Trả về kèm thông tin nhà máy để frontend hiển thị ngay
+    });
+
+    return NextResponse.json(newProcess, { status: 200 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi thêm mới dữ liệu: " + error },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\processes\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\processes\[id]\route.ts
+================================================================================
+import { error } from "console";
+// app/api/processes/[id]/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { message } from "antd";
+
+// --- PUT. HÀM CẬP NHẬT ---
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> } // Cú pháp an toàn
+) {
+  try {
+    const data = await params; // Đợi dữ liệu từ Promise params
+    const idString = data.id; // Gán id dạng chuỗi cho idString
+    const id = parseInt(idString); // Biến đổi chuỗi thành số
+    const body = await request.json(); // Lấy dữ liệu từ Client gửi lên
+    const { name, factoryId } = body; // Destructuring
+
+    // Gọi Prisma ra cập nhật dữ liệu
+    // Đồng thời gán dữ liệu mới update cho biến updated để báo về client
+    const updated = await prisma.process.update({
+      where: { id: id },
+      data: {
+        name: name,
+        factoryId: parseInt(factoryId),
+      },
+      include: { factory: true },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi cập nhật: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+// --- DELETE. HÀM XÓA ---
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> } // Cú pháp an toàn
+) {
+  try {
+    const data = await params;
+    const idString = data.id;
+    const id = parseInt(idString);
+
+    await prisma.process.delete({
+      where: { id: id },
+    });
+
+    return NextResponse.json(
+      { message: "Đã xóa thành công!" },
+      { status: 200 }
+    );
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lỗi xóa dữ liệu ở server: " + error },
+      { status: 500 }
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\processes\[id]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-input\route.ts
+================================================================================
+// app/api/production/daily-input/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { recordDate, note } = body;
+    let { machineId, shift, itemId, endIndex, inputNE, finalOutput } = body;
+
+    // 1. Kiểm tra dữ liệu bắt buộc
+    if (!machineId || !recordDate || !shift) {
+      return NextResponse.json(
+        { error: "Thiếu thông tin máy, ngày hoặc ca" },
+        { status: 400 },
+      );
+    }
+
+    // 2. Kiểm tra itemId (tên mặt hàng được gán)
+    if (!itemId) {
+      return NextResponse.json(
+        {
+          error:
+            "Máy này chưa được gán Mặt hàng. Vui lòng vào trang 'Danh mục Máy' hoặc 'điều phối'để gán mặt hàng trước khi nhập sản lượng.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // 3. Ép kiểu dữ liệu sang số (Int/Float) để Prisma không báo lỗi
+    machineId = parseInt(machineId);
+    shift = parseInt(shift);
+    itemId = parseInt(itemId);
+    endIndex = endIndex !== null ? parseFloat(endIndex) : null;
+    inputNE = inputNE ? parseFloat(inputNE) : null;
+    finalOutput = parseFloat(finalOutput);
+    // --------------------
+
+    const dateObj = new Date(recordDate);
+
+    // 2. Kiểm tra xem đã có bản ghi nào trùng (Máy + Ngày + Ca) chưa?
+    const existingLog = await prisma.productionLog.findFirst({
+      where: {
+        machineId: machineId,
+        recordDate: dateObj,
+        shift: shift,
+      },
+    });
+
+    let savedLog;
+
+    if (existingLog) {
+      // A. Nếu có rồi -> UPDATE
+      savedLog = await prisma.productionLog.update({
+        where: { id: existingLog.id },
+        data: {
+          itemId,
+          endIndex,
+          inputNE,
+          finalOutput,
+          note,
+          // Cập nhật người sửa nếu bạn có hệ thống auth (createdById)
+        },
+      });
+    } else {
+      // B. Nếu chưa có -> CREATE
+      savedLog = await prisma.productionLog.create({
+        data: {
+          machineId,
+          recordDate: dateObj,
+          shift,
+          itemId,
+          endIndex,
+          inputNE,
+          finalOutput,
+          note,
+        },
+      });
+    }
+
+    // 2. CẬP NHẬT TRẠNG THÁI MÁY (Phụ trợ)
+    // Nếu đây là bản ghi mới nhất, hãy cập nhật lại Chi số hiện tại vào bảng Machine
+    // để lần sau mở form lên nó tự điền số mới này.
+    if (inputNE) {
+      await prisma.machine.update({
+        where: { id: machineId },
+        data: { currentNE: parseFloat(inputNE) },
+      });
+    }
+
+    return NextResponse.json(savedLog, { status: 200 });
+  } catch (error) {
+    console.error("Lỗi lưu nhật ký:", error);
+    return NextResponse.json(
+      { error: "Lỗi hệ thống khi lưu" },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-input\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-status\route.ts
+================================================================================
+// app/api/production/daily-status/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const processId = searchParams.get("processId");
+    const dateStr = searchParams.get("date"); // YYYY-MM-DD
+    const shift = searchParams.get("shift");
+
+    if (!processId || !dateStr || !shift) {
+      return NextResponse.json(
+        { error: "Thiếu thông tin lọc" },
+        { status: 400 },
+      );
+    }
+
+    // Convert date string sang Date object chuẩn ISO
+    const targetDate = new Date(dateStr);
+
+    const machines = await prisma.machine.findMany({
+      where: {
+        processId: parseInt(processId),
+        isActive: true, // Chỉ lấy máy đang hoạt động
+      },
+      include: {
+        currentItem: true, // Lấy tên mặt hàng đang chạy để hiển thị
+        // Kỹ thuật: Lấy luôn log của ngày hôm nay (nếu có) để Frontend biết đường tô màu xanh
+        productionLogs: {
+          where: {
+            recordDate: targetDate,
+            shift: parseInt(shift),
+          },
+          select: {
+            id: true,
+            finalOutput: true,
+            // Lấy thêm các trường khác nếu muốn hiển thị chi tiết ngay trên card
+          },
+          take: 1,
+        },
+      },
+      orderBy: { name: "asc" }, // Sắp xếp tên máy A->Z
+    });
+
+    // Biến đổi dữ liệu cho gọn trước khi trả về Client
+    const formattedData = machines.map((m) => ({
+      ...m,
+      // Frontend đang mong đợi field tên là "todayLog" (object hoặc null)
+      todayLog: m.productionLogs.length > 0 ? m.productionLogs[0] : null,
+      productionLogs: undefined, // Xóa mảng gốc đi cho nhẹ payload
+    }));
+
+    return NextResponse.json(formattedData);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Lỗi server" }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-status\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\last-log\route.ts
+================================================================================
+// app/api/production/last-log/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const machineId = searchParams.get("machineId");
+    const dateStr = searchParams.get("date");
+    const shiftStr = searchParams.get("shift");
+
+    if (!machineId || !dateStr || !shiftStr) return NextResponse.json(null);
+
+    const targetDate = new Date(dateStr);
+    const targetShift = parseInt(shiftStr);
+
+    // LOGIC TRUY VẤN:
+    // Tìm bản ghi có (Ngày < Ngày hiện tại) HOẶC (Ngày = Ngày hiện tại NHƯNG Ca < Ca hiện tại)
+    const lastLog = await prisma.productionLog.findFirst({
+      where: {
+        machineId: parseInt(machineId),
+        OR: [
+          { recordDate: { lt: targetDate } }, // Những ngày trước
+          {
+            recordDate: targetDate,
+            shift: { lt: targetShift }, // Cùng ngày nhưng ca trước
+          },
+        ],
+      },
+      // Sắp xếp giảm dần để lấy cái mới nhất trong quá khứ
+      orderBy: [{ recordDate: "desc" }, { shift: "desc" }],
+    });
+
+    // Nếu tìm thấy thì trả về, không thấy (máy mới) thì trả null
+    return NextResponse.json(lastLog);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Lỗi truy vấn lịch sử" },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\last-log\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\users\route.ts
+================================================================================
+// src/app/api/users/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import * as bcrypt from "bcryptjs";
+import { auth } from "@/auth"; // <-- Dùng auth() của v5
+
+// 1. GET: Lấy danh sách nhân viên
+export async function GET() {
+  try {
+    const session = await auth(); // <-- Code chuẩn v5
+
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 },
+      );
+    }
+
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { process: true },
+    });
+
+    // Loại bỏ mật khẩu
+    const safeUsers = users.map(({ password, ...rest }) => rest);
+
+    return NextResponse.json(safeUsers);
+  } catch (error) {
+    return NextResponse.json({ error: "Lỗi tải danh sách" }, { status: 500 });
+  }
+}
+
+// 2. PUT: Cập nhật thông tin nhân viên
+export async function PUT(req: Request) {
+  try {
+    const session = await auth(); // <-- SỬA LỖI Ở ĐÂY (Trước là getServerSession)
+
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 },
+      );
+    }
+
+    const body = await req.json();
+    const {
+      id,
+      isActive,
+      role,
+      accessLevel,
+      processId,
+      newPassword,
+      fullName,
+    } = body;
+
+    const updateData: any = {
+      isActive,
+      role,
+      accessLevel,
+      fullName,
+      processId: processId ? parseInt(processId) : null,
+    };
+
+    if (newPassword && newPassword.trim() !== "") {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      updateData.password = hashedPassword;
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: updateData,
+    });
+
+    return NextResponse.json(updatedUser);
+  } catch (error) {
+    return NextResponse.json({ error: "Lỗi cập nhật user" }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\users\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\factories\page.tsx
+================================================================================
+// src/app/factories/page.tsx
+"use client"; // Đây là Client Components
+
+import React, { useEffect, useState } from "react";
+import { Table, Button, Modal, Form, Input, message, Space, Card } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+
+// Định nghĩa kiểu dữ liệu nhà máy (khớp với Prisma)
+interface Factory {
+  id: number;
+  name: string;
+  note?: string;
+}
+
+export default function FactoryPage() {
+  // Khai báo State
+  const [factories, setFactories] = useState<Factory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingFactory, setEditingFactory] = useState<Factory | null>(null);
+
+  const [form] = Form.useForm(); // Hook quản lý form của Ant Design
+
+  // --- 1. Hàm gọi API để hiện dữ liệu (Fetch data) ---
+  const fetchFactories = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/factories"); // Gọi API GET ta đã viết
+      const data = await res.json();
+      setFactories(data);
+    } catch (error) {
+      message.error("Lỗi tải dữ liệu: " + error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Chạy hàm này 1 lần khi trang vừa load xong
+  useEffect(() => {
+    fetchFactories();
+  }, []);
+
+  // --- 2. Xử lý Thêm và Sửa ---
+  const handleSave = async (values: any) => {
+    try {
+      let res;
+      if (editingFactory) {
+        // Gọi API PUT để sửa
+        res = await fetch(`/api/factories/${editingFactory.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        });
+        message.success("Cập nhật thành công");
+      } else {
+        // Gọi API để thêm mới
+        res = await fetch("/api/factories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        });
+      }
+
+      // --- THÊM ĐOẠN KIỂM TRA NÀY ---
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Lỗi từ server");
+      }
+      // -----------------------------
+
+      message.success(
+        editingFactory ? "Cập nhật thành công" : "Thêm mới thành công"
+      );
+      setIsModalOpen(false); // Đóng Modal
+      form.resetFields(); // Xóa trắng Form
+      setEditingFactory(null);
+      fetchFactories(); // Load lại bảng
+    } catch (error) {
+      message.error("Có lỗi xảy ra: " + error);
+    }
+  };
+
+  // --- 3. Xử lý Xóa ---
+  const handleDelete = async (id: number) => {
+    Modal.confirm({
+      title: "Bạn có chắc chắn muốn xóa không?",
+      content: "Hành động này không thể hoàn tác",
+      onOk: async () => {
+        try {
+          await fetch(`/api/factories/${id}`, {
+            method: "DELETE",
+          });
+          message.success("Xóa thành công");
+          fetchFactories(); // Load lại bảng
+        } catch (error) {
+          message.error("Lỗi khi xóa: " + error);
+        }
+      },
+    });
+  };
+
+  // --- 4. Cấu hình cột cho bảng dữ liệu ---
+  const columns = [
+    {
+      title: "ID",
+      dataIndex: "id",
+      key: "id",
+      width: 80,
+    },
+    {
+      title: "Tên Nhà Máy",
+      dataIndex: "name",
+      key: "name",
+      render: (text: string) => <b>{text}</b>,
+    },
+    {
+      title: "Ghi Chú",
+      dataIndex: "note",
+      key: "note",
+    },
+    {
+      title: "Hành Động",
+      key: "action",
+      width: 150,
+      render: (_: any, record: Factory) => (
+        <Space>
+          <Button
+            icon={<EditOutlined />}
+            size="small"
+            onClick={() => {
+              setEditingFactory(record); // gán bản ghi cần xóa vào State
+              form.setFieldsValue(record); // Điền dữ liệu cũ vào form
+              setIsModalOpen(true); // Mở modal để sửa
+            }}
+          />
+          <Button
+            icon={<DeleteOutlined />}
+            danger
+            size="small"
+            onClick={() => handleDelete(record.id)}
+          />
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 20 }}>
+      <Card
+        title="Quản lý danh mục Nhà Máy"
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingFactory(null); // Đánh dấu là thêm mới
+              form.resetFields(); // Xóa trắng form để điền dữ liệu mới
+              setIsModalOpen(true); // Mở ô modal nhập liệu
+            }}
+          >
+            Thêm Nhà Máy
+          </Button>
+        }
+      >
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={factories}
+          loading={loading}
+          bordered
+        ></Table>
+      </Card>
+
+      {/* Modal Form Thêm/Sửa */}
+      <Modal
+        title={editingFactory ? "Sửa Nhà Máy" : "Thêm Nhà Máy Mới"}
+        open={isModalOpen}
+        onCancel={() => setIsModalOpen(false)}
+        footer={null} // Ẩn nút mặc định để dùng nút của Form
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave}>
+          <Form.Item
+            name="name"
+            label="Tên Nhà Máy"
+            rules={[{ required: true, message: "Vui lòng nhập tên!" }]}
+          >
+            <Input placeholder="Ví dụ: Nhà máy 1" />
+          </Form.Item>
+
+          <Form.Item name="note" label="Ghi chú">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+
+          <div style={{ textAlign: "right" }}>
+            <Space>
+              <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit">
+                {editingFactory ? "Cập Nhật" : "Lưu Lại"}
+              </Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\factories\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\globals.css
+================================================================================
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\globals.css ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\items\page.tsx
+================================================================================
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import { Table, Button, Modal, Form, Input, message, Space, Card, Popconfirm } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
+
+interface Item {
+    id: number;
+    name: string;
+}
+
+export default function ItemPage() {
+    const [items, setItems] = useState<Item[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+    const [form] = Form.useForm();
+    // State dùng để tìm kiếm nhanh trên bảng (Client-side search)
+    const [searchText, setSearchText] = useState('');
+
+    // --- FETCH DATA ---
+    const fetchItems = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/items');
+            const data = await res.json();
+            setItems(data);
+        } catch (error) {
+            message.error("Lỗi tải dữ liệu");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchItems(); }, []);
+
+    // --- SAVE (ADD/EDIT) ---
+    const handleSave = async (values: any) => {
+        try {
+            let res;
+            if (editingItem) {
+                res = await fetch(`/api/items/${editingItem.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(values),
+                });
+            } else {
+                res = await fetch("/api/items", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(values),
+                });
+            }
+
+            if (!res.ok) throw new Error("Lỗi từ server");
+
+            message.success(editingItem ? "Cập nhật thành công" : "Thêm mới thành công");
+            setIsModalOpen(false);
+            form.resetFields();
+            setEditingItem(null);
+            fetchItems();
+        } catch (error) {
+            message.error("Có lỗi xảy ra");
+        }
+    };
+
+    // --- DELETE ---
+    const handleDelete = async (id: number) => {
+        try {
+            const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error("Không thể xóa");
+            message.success("Đã xóa");
+            fetchItems();
+        } catch (error) {
+            message.error("Lỗi: Mặt hàng đang được sử dụng, không thể xóa!");
+        }
+    };
+
+    // --- FILTER CLIENT SIDE (Tìm kiếm trong bảng) ---
+    const filteredItems = items.filter(item =>
+        item.name.toLowerCase().includes(searchText.toLowerCase())
+    );
+
+    const columns = [
+        { title: 'ID', dataIndex: 'id', width: 80 },
+        {
+            title: 'Tên Mặt Hàng',
+            dataIndex: 'name',
+            render: (t: string) => <b style={{ fontSize: 15 }}>{t}</b>
+        },
+        {
+            title: 'Hành động',
+            width: 120,
+            render: (_: any, record: Item) => (
+                <Space>
+                    <Button
+                        icon={<EditOutlined />}
+                        size="small"
+                        onClick={() => {
+                            setEditingItem(record);
+                            form.setFieldsValue(record);
+                            setIsModalOpen(true);
+                        }}
+                    />
+                    <Popconfirm
+                        title="Xóa mặt hàng?"
+                        description="Hành động này không thể hoàn tác"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="Xóa" cancelText="Hủy"
+                    >
+                        <Button icon={<DeleteOutlined />} danger size="small" />
+                    </Popconfirm>
+                </Space>
+            )
+        }
+    ];
+
+    return (
+        <div style={{ padding: 20 }}>
+            <Card
+                title="Quản lý Danh mục Mặt Hàng"
+                extra={
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => {
+                            setEditingItem(null);
+                            form.resetFields();
+                            setIsModalOpen(true);
+                        }}
+                    >
+                        Thêm Mặt Hàng
+                    </Button>
+                }
+            >
+                <Input
+                    prefix={<FileTextOutlined />}
+                    placeholder="Tìm kiếm tên mặt hàng..."
+                    style={{ width: 300, marginBottom: 16 }}
+                    value={searchText}
+                    onChange={e => setSearchText(e.target.value)}
+                />
+
+                <Table
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={filteredItems}
+                    loading={loading}
+                    bordered
+                    pagination={{ pageSize: 10 }}
+                />
+            </Card>
+
+            <Modal
+                title={editingItem ? "Sửa tên mặt hàng" : "Thêm mặt hàng mới"}
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+            >
+                <Form form={form} layout="vertical" onFinish={handleSave}>
+                    <Form.Item
+                        name="name"
+                        label="Tên mặt hàng"
+                        rules={[{ required: true, message: 'Vui lòng nhập tên!' }]}
+                    >
+                        <Input placeholder="Ví dụ: 20/1 CVCm (60/40) W..." />
+                    </Form.Item>
+
+                    <div style={{ textAlign: 'right' }}>
+                        <Space>
+                            <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+                            <Button type="primary" htmlType="submit">
+                                {editingItem ? 'Cập Nhật' : 'Lưu Lại'}
+                            </Button>
+                        </Space>
+                    </div>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\items\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\layout.tsx
+================================================================================
+// app/layout.tsx
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css"; // File css mặc định nếu có
+import { AntdRegistry } from "@ant-design/nextjs-registry";
+import AdminLayout from "@/components/AdminLayout"; // Import Layout vào
+import { ConfigProvider } from "antd";
+import { Providers } from "./providers"; // <--- 1. Import Providers
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Phu Bai Production Manager",
+  description: "Phần mềm quản lý sản lượng",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="vi">
+      <body className={inter.className}>
+        <AntdRegistry>
+          {/* Cấu hình Theme toàn cục ở đây */}
+          <ConfigProvider
+            theme={{
+              token: {
+                colorPrimary: "#1677ff",
+              },
+              components: {
+                Layout: {
+                  siderBg: "#000C75", // (1) Màu nền của thanh Sidebar tổng
+                },
+                Menu: {
+                  // Màu nền của các mục menu cấp 1
+                  darkItemBg: "#000C75",
+
+                  // (2) QUAN TRỌNG: Màu nền của các menu con (SubMenu) khi xổ xuống
+                  darkSubMenuItemBg: "#000C75", // <-- Bạn chỉnh dòng này trùng màu với siderBg là được
+
+                  // (3) Tùy chọn thêm: Màu nền của mục ĐANG ĐƯỢC CHỌN (Active)
+                  // Nên để màu khác một chút (sáng hơn hoặc tối hơn) để người dùng biết mình đang ở đâu
+                  darkItemSelectedBg: "#02A7FA",
+                },
+              },
+            }}
+          >
+            <Providers>
+              <AdminLayout>
+                {children}
+              </AdminLayout>
+            </Providers>
+          </ConfigProvider>
+        </AntdRegistry>
+      </body>
+    </html>
+  );
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\layout.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\login\page.tsx
+================================================================================
+"use client";
+import React, { useState, useEffect } from "react";
+import { Form, Input, Button, Card, Tabs, Select, message } from "antd";
+import { UserOutlined, LockOutlined, IdcardOutlined } from "@ant-design/icons";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+
+export default function LoginPage() {
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState("login");
+    const [processes, setProcesses] = useState([]);
+
+    // Load danh sách công đoạn để phục vụ đăng ký
+    useEffect(() => {
+        fetch("/api/processes").then((res) => res.json()).then(setProcesses);
+    }, []);
+
+    const handleLogin = async (values: any) => {
+        setLoading(true);
+        const res = await signIn("credentials", {
+            redirect: false,
+            username: values.username,
+            password: values.password,
+        });
+        setLoading(false);
+
+        if (res?.error) {
+            message.error(res.error);
+        } else {
+            message.success("Đăng nhập thành công");
+            router.push("/"); // Về trang chủ
+        }
+    };
+
+    const handleRegister = async (values: any) => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            message.success(data.message);
+            setActiveTab("login"); // Chuyển về tab login
+        } catch (error: any) {
+            message.error(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f0f2f5" }}>
+            <Card style={{ width: 400, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                    <h2 style={{ color: "#1890ff" }}>PHU BAI PRODUCTION</h2>
+                </div>
+
+                <Tabs activeKey={activeTab} onChange={setActiveTab} centered items={[
+                    {
+                        key: 'login',
+                        label: 'Đăng nhập',
+                        children: (
+                            <Form onFinish={handleLogin} layout="vertical">
+                                <Form.Item name="username" rules={[{ required: true, message: "Nhập username" }]}>
+                                    <Input prefix={<UserOutlined />} placeholder="Tên đăng nhập" size="large" />
+                                </Form.Item>
+                                <Form.Item name="password" rules={[{ required: true, message: "Nhập mật khẩu" }]}>
+                                    <Input.Password prefix={<LockOutlined />} placeholder="Mật khẩu" size="large" />
+                                </Form.Item>
+                                <Button type="primary" htmlType="submit" block size="large" loading={loading}>
+                                    ĐĂNG NHẬP
+                                </Button>
+                            </Form>
+                        )
+                    },
+                    {
+                        key: 'register',
+                        label: 'Đăng ký mới',
+                        children: (
+                            <Form onFinish={handleRegister} layout="vertical">
+                                <Form.Item name="fullName" rules={[{ required: true, message: "Nhập họ tên" }]}>
+                                    <Input prefix={<IdcardOutlined />} placeholder="Họ và tên" />
+                                </Form.Item>
+                                <Form.Item name="username" rules={[{ required: true }]}>
+                                    <Input prefix={<UserOutlined />} placeholder="Tên đăng nhập muốn tạo" />
+                                </Form.Item>
+                                <Form.Item name="password" rules={[{ required: true }]}>
+                                    <Input.Password prefix={<LockOutlined />} placeholder="Mật khẩu" />
+                                </Form.Item>
+                                <Form.Item name="processId" label="Bạn thuộc bộ phận nào?" rules={[{ required: true }]}>
+                                    <Select placeholder="Chọn công đoạn" options={processes.map((p: any) => ({ label: p.name, value: p.id }))} />
+                                </Form.Item>
+                                <Button type="primary" htmlType="submit" block loading={loading}>
+                                    GỬI YÊU CẦU ĐĂNG KÝ
+                                </Button>
+                                <div style={{ marginTop: 10, fontSize: 12, color: '#888', textAlign: 'center' }}>
+                                    Tài khoản cần Admin duyệt mới có thể đăng nhập.
+                                </div>
+                            </Form>
+                        )
+                    }
+                ]} />
+            </Card>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\login\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\machines\page.tsx
+================================================================================
+"use client";
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { Table, Button, Modal, Form, Input, message, Space, Card, Select, Tag, InputNumber, Switch, Divider } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, FilterOutlined, SettingOutlined } from '@ant-design/icons';
+
+// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
+interface Factory { id: number; name: string; }
+interface Process { id: number; name: string; factoryId: number; factory?: Factory; }
+interface Item { id: number; name: string; } // Mặt hàng
+interface Machine {
+  id: number;
+  name: string;
+  isActive: boolean;
+  processId: number;
+  process?: Process;
+  formulaType: number; // 1, 2, 3, 4
+  spindleCount?: number;
+  currentItemId?: number;
+  currentItem?: Item;
+  currentNE?: number;
+}
+
+// --- HẰNG SỐ ---
+const FORMULA_TYPES = [
+  { value: 1, label: 'Loại 1: Nhập trực tiếp (Kg)' },
+  { value: 2, label: 'Loại 2: Counter (Cuối - Đầu)' },
+  { value: 3, label: 'Loại 3: Counter x Số cọc / (NE x Hệ số)' },
+  { value: 4, label: 'Loại 4: Counter / NE' },
+];
+
+export default function MachinePage() {
+  // --- STATE DỮ LIỆU ---
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [factories, setFactories] = useState<Factory[]>([]);
+  const [processes, setProcesses] = useState<Process[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+
+  const [loading, setLoading] = useState(false);
+
+  // --- STATE BỘ LỌC (TOOLBAR) ---
+  const [filterFactoryId, setFilterFactoryId] = useState<number | null>(null);
+  const [filterProcessId, setFilterProcessId] = useState<number | null>(null);
+
+  // --- STATE FORM & MODAL ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
+  const [form] = Form.useForm();
+
+  // Theo dõi giá trị form để hiển thị điều kiện (Ví dụ: Chọn Loại 3 mới hiện ô nhập Số cọc)
+  const watchFormulaType = Form.useWatch('formulaType', form);
+  const watchModalFactoryId = Form.useWatch('factoryId_temp', form); // Biến tạm để lọc dropdown trong modal
+
+  // --- 1. FETCH ALL DATA ---
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [resMac, resFac, resPro, resItem] = await Promise.all([
+        fetch('/api/machines'),
+        fetch('/api/factories'),
+        fetch('/api/processes'),
+        fetch('/api/items'),
+      ]);
+
+      setMachines(await resMac.json());
+      setFactories(await resFac.json());
+      setProcesses(await resPro.json());
+      setItems(await resItem.json());
+    } catch (error) {
+      message.error("Lỗi tải dữ liệu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // --- 2. LOGIC LỌC DỮ LIỆU BẢNG ---
+  const filteredMachines = useMemo(() => {
+    return machines.filter(m => {
+      // Lọc theo Nhà máy (thông qua Process)
+      if (filterFactoryId && m.process?.factoryId !== filterFactoryId) return false;
+      // Lọc theo Công đoạn
+      if (filterProcessId && m.processId !== filterProcessId) return false;
+      return true;
+    });
+  }, [machines, filterFactoryId, filterProcessId]);
+
+  // Danh sách công đoạn hiển thị trên Toolbar (phụ thuộc vào Nhà máy đang chọn)
+  const toolbarProcesses = useMemo(() => {
+    if (!filterFactoryId) return [];
+    return processes.filter(p => p.factoryId === filterFactoryId);
+  }, [processes, filterFactoryId]);
+
+  // --- 3. XỬ LÝ LƯU (CREATE/UPDATE) ---
+  const handleSave = async (values: any) => {
+    try {
+      const payload = { ...values };
+      // Xóa trường tạm (factoryId_temp) trước khi gửi lên server
+      delete payload.factoryId_temp;
+
+      let res;
+      if (editingMachine) {
+        res = await fetch(`/api/machines/${editingMachine.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch("/api/machines", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (!res.ok) throw new Error("Lỗi lưu dữ liệu");
+
+      message.success("Thành công");
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      message.error("Có lỗi xảy ra");
+    }
+  };
+
+  // --- 4. XỬ LÝ XÓA ---
+  const handleDelete = (id: number) => {
+    Modal.confirm({
+      title: 'Xóa máy này?',
+      content: 'Dữ liệu sản xuất cũ vẫn giữ nguyên, nhưng máy sẽ biến mất khỏi danh sách.',
+      onOk: async () => {
+        const res = await fetch(`/api/machines/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          message.success('Đã xóa');
+          fetchData();
+        } else {
+          message.error('Không thể xóa (Có thể do ràng buộc)');
+        }
+      }
+    });
+  };
+
+  // --- 5. CHUẨN BỊ MODAL ---
+  const openModal = (record: Machine | null) => {
+    setEditingMachine(record);
+    if (record) {
+      // EDIT: Điền dữ liệu cũ
+      form.setFieldsValue({
+        ...record,
+        // Cần điền thêm factoryId_temp để dropdown công đoạn hiển thị đúng
+        factoryId_temp: record.process?.factoryId
+      });
+    } else {
+      // ADD NEW: Reset
+      form.resetFields();
+      form.setFieldsValue({
+        isActive: true,
+        formulaType: 1,
+        // Nếu trên Toolbar đang lọc Nhà máy/Công đoạn nào thì điền sẵn luôn (UX)
+        factoryId_temp: filterFactoryId,
+        processId: filterProcessId
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  // Danh sách công đoạn TRONG MODAL (phụ thuộc vào Nhà máy được chọn trong Modal)
+  const modalProcesses = useMemo(() => {
+    if (!watchModalFactoryId) return [];
+    return processes.filter(p => p.factoryId === watchModalFactoryId);
+  }, [processes, watchModalFactoryId]);
+
+
+  // --- 6. CẤU HÌNH CỘT ---
+  const columns = [
+    { title: 'Tên Máy', dataIndex: 'name', width: 150, fixed: 'left' as const, render: (t: string) => <b>{t}</b> },
+    {
+      title: 'Vị trí',
+      render: (_: any, r: Machine) => (
+        <Space direction="vertical" size={0}>
+          <Tag color="blue">{r.process?.name}</Tag>
+          <small style={{ color: '#888' }}>{r.process?.factory?.name}</small>
+        </Space>
+      )
+    },
+    {
+      title: 'Công thức',
+      dataIndex: 'formulaType',
+      render: (type: number) => {
+        const f = FORMULA_TYPES.find(x => x.value === type);
+        return <Tag color={type === 1 ? 'green' : 'orange'}>{f?.label.split(':')[0]}</Tag>
+      }
+    },
+    {
+      title: 'Trạng thái hiện tại',
+      render: (_: any, r: Machine) => (
+        <div style={{ fontSize: 12 }}>
+          <div>Mặt Hàng: <b>{r.currentItem?.name || '-'}</b></div>
+          {(r.formulaType === 3 || r.formulaType === 4) &&
+            <div>Chi số: <b>{r.currentNE || '-'}</b></div>
+          }
+        </div>
+      )
+    },
+    {
+      title: 'Active',
+      dataIndex: 'isActive',
+      render: (active: boolean) => active ? <Tag color="success">Đang chạy</Tag> : <Tag color="error">Ngưng</Tag>
+    },
+    {
+      title: 'Hành động',
+      key: 'action',
+      width: 100,
+      fixed: 'right' as const,
+      render: (_: any, record: Machine) => (
+        <Space>
+          <Button icon={<EditOutlined />} size="small" onClick={() => openModal(record)} />
+          <Button icon={<DeleteOutlined />} danger size="small" onClick={() => handleDelete(record.id)} />
+        </Space>
+      )
+    }
+  ];
+
+  return (
+    <div style={{ padding: 20 }}>
+      <Card title="Quản lý Danh mục Máy Móc"
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openModal(null)}>Thêm Máy</Button>}
+      >
+        {/* TOOLBAR LỌC */}
+        <Space style={{ marginBottom: 16 }} wrap>
+          <FilterOutlined />
+          <Select
+            style={{ width: 200 }}
+            placeholder="Chọn Nhà máy..."
+            allowClear
+            value={filterFactoryId}
+            onChange={(val) => {
+              setFilterFactoryId(val);
+              setFilterProcessId(null); // Reset công đoạn khi đổi nhà máy
+            }}
+            options={factories.map(f => ({ label: f.name, value: f.id }))}
+          />
+          <Select
+            style={{ width: 200 }}
+            placeholder="Chọn Công đoạn..."
+            allowClear
+            value={filterProcessId}
+            onChange={setFilterProcessId}
+            options={toolbarProcesses.map(p => ({ label: p.name, value: p.id }))}
+            disabled={!filterFactoryId} // Chỉ cho chọn khi đã chọn nhà máy
+          />
+        </Space>
+
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredMachines}
+          loading={loading}
+          bordered
+          scroll={{ x: 1000 }} // Cho phép cuộn ngang nếu bảng quá rộng
+        />
+      </Card>
+
+      {/* MODAL FORM */}
+      <Modal
+        title={editingMachine ? `Sửa ${editingMachine.name}` : "Thêm Máy Mới"}
+        open={isModalOpen}
+        onCancel={() => setIsModalOpen(false)}
+        footer={null}
+        width={700}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave}>
+          <div style={{ display: 'flex', gap: 16 }}>
+            {/* Cột 1: Thông tin chung */}
+            <div style={{ flex: 1 }}>
+              <Divider orientation={"left" as any} style={{ marginTop: 0 }}>Vị trí & Tên</Divider>
+              {/* Chọn Nhà máy (Chỉ dùng để lọc dropdown dưới, ko lưu vào bảng Machine) */}
+              <Form.Item name="factoryId_temp" label="Nhà máy">
+                <Select
+                  placeholder="Chọn nhà máy"
+                  onChange={() => form.setFieldValue('processId', null)}
+                  options={factories.map(f => ({ label: f.name, value: f.id }))}
+                />
+              </Form.Item>
+
+              <Form.Item name="processId" label="Công đoạn" rules={[{ required: true }]}>
+                <Select
+                  placeholder="Chọn công đoạn"
+                  options={modalProcesses.map(p => ({ label: p.name, value: p.id }))}
+                  disabled={!watchModalFactoryId}
+                />
+              </Form.Item>
+
+              <Form.Item name="name" label="Tên Máy" rules={[{ required: true }]}>
+                <Input placeholder="Ví dụ: Máy 01" />
+              </Form.Item>
+
+              <Form.Item name="isActive" label="Trạng thái" valuePropName="checked">
+                <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngưng" />
+              </Form.Item>
+            </div>
+
+            {/* Cột 2: Cấu hình kỹ thuật */}
+            <div style={{ flex: 1, background: '#f5f5f5', padding: 15, borderRadius: 8 }}>
+              <Divider orientation={"left" as any} style={{ marginTop: 0 }}>Cấu hình tính toán</Divider>
+
+              <Form.Item name="formulaType" label="Công thức tính sản lượng" rules={[{ required: true }]}>
+                <Select options={FORMULA_TYPES} />
+              </Form.Item>
+
+              {/* Chỉ hiện khi chọn Loại 3 */}
+              {watchFormulaType === 3 && (
+                <Form.Item name="spindleCount" label="Số cọc (Spindles)" rules={[{ required: true }]}>
+                  <InputNumber style={{ width: '100%' }} placeholder="Nhập số cọc cố định" />
+                </Form.Item>
+              )}
+
+              <Divider orientation={"left" as any}>Trạng thái hiện tại</Divider>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+                Dùng để tự điền khi nhập liệu hàng ngày.
+              </div>
+
+              <Form.Item name="currentItemId" label="Đang chạy mặt hàng">
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="Chọn mặt hàng..."
+                  filterOption={(input, option) =>
+                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={items.map(i => ({ label: i.name, value: i.id }))}
+                />
+              </Form.Item>
+
+              {/* Chỉ hiện khi chọn Loại 3 hoặc 4 */}
+              {(watchFormulaType === 3 || watchFormulaType === 4) && (
+                <Form.Item name="currentNE" label="Chi số hiện tại (NE)">
+                  <InputNumber style={{ width: '100%' }} step={0.1} />
+                </Form.Item>
+              )}
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'right', marginTop: 20 }}>
+            <Space>
+              <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit" icon={<SettingOutlined />}>Lưu Cấu Hình</Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\machines\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\page.tsx
+================================================================================
+import Image from "next/image";
+
+export default function Home() {
+  return (
+    <div>
+      <h1>Welcome to NEXTJS App.</h1>
+      <Image src="/nextjs-logo.png" alt="Logo" width={301} height={168}></Image>
+    </div>
+  );
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\processes\page.tsx
+================================================================================
+"use client";
+
+import React, { useEffect, useState } from "react";
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  message,
+  Space,
+  Card,
+  Select,
+  Tag,
+} from "antd";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  FilterOutlined,
+} from "@ant-design/icons";
+
+// Định nghĩa kiểu dữ liệu
+interface Factory {
+  id: number;
+  name: string;
+}
+
+interface Process {
+  id: number;
+  name: string;
+  factoryId: number;
+  factory?: Factory; // Dữ liệu quan hệ
+}
+
+export default function ProcessPage() {
+  // --- STATE ---
+  const [processes, setProcesses] = useState<Process[]>([]); // Dữ liệu gốc
+  const [filteredProcesses, setFilteredProcesses] = useState<Process[]>([]); // Dữ liệu hiển thị (sau khi lọc)
+  const [factories, setFactories] = useState<Factory[]>([]); // Danh sách nhà máy cho Dropdown
+
+  const [loading, setLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProcess, setEditingProcess] = useState<Process | null>(null);
+  const [filterFactoryId, setFilterFactoryId] = useState<number | null>(null); // State lưu nhà máy đang lọc
+
+  const [form] = Form.useForm();
+  // --- 1. FETCH DATA (Gọi cả 2 API) ---
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Gọi song song 2 API cho nhanh
+      const [resFactories, resProcesses] = await Promise.all([
+        fetch("/api/factories"),
+        fetch("/api/processes"),
+      ]);
+
+      const factoriesData = await resFactories.json();
+      const processesData = await resProcesses.json();
+
+      setFactories(factoriesData);
+      setProcesses(processesData);
+      setFilteredProcesses(processesData); // Mặc định hiển thị hết
+    } catch (error) {
+      message.error("Lỗi tải dữ liệu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // --- 2. LOGIC LỌC (Khi chọn Dropdown Nhà máy ở trên cùng) ---
+  useEffect(() => {
+    if (filterFactoryId === null) {
+      setFilteredProcesses(processes); // Nếu chọn "Tất cả" -> Hiện hết
+    } else {
+      // Lọc các công đoạn thuộc nhà máy đã chọn
+      const result = processes.filter((p) => p.factoryId === filterFactoryId);
+      setFilteredProcesses(result);
+    }
+  }, [filterFactoryId, processes]);
+
+  // --- 3. XỬ LÝ LƯU (THÊM/SỬA) ---
+  const handleSave = async (values: any) => {
+    try {
+      let res;
+      const payload = { ...values }; // { name: '...', factoryId: ... }
+
+      if (editingProcess) {
+        // Update
+        res = await fetch(`/api/processes/${editingProcess.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Create
+        res = await fetch("/api/processes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error);
+      }
+
+      message.success(
+        editingProcess ? "Cập nhật thành công" : "Thêm mới thành công"
+      );
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingProcess(null);
+      fetchData(); // Load lại dữ liệu mới nhất
+    } catch (error: any) {
+      message.error(error.message || "Có lỗi xảy ra");
+    }
+  };
+
+  // --- 4. XỬ LÝ XÓA ---
+  const handleDelete = (id: number) => {
+    Modal.confirm({
+      title: "Cảnh báo xóa",
+      content: "Bạn có chắc chắn muốn xóa công đoạn này?",
+      onOk: async () => {
+        try {
+          const res = await fetch(`/api/processes/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Không thể xóa");
+          message.success("Đã xóa");
+          fetchData();
+        } catch (error) {
+          message.error("Lỗi: Không thể xóa (Có thể đang chứa máy móc)");
+        }
+      },
+    });
+  };
+
+  // --- 5. CẤU HÌNH CỘT BẢNG ---
+  const columns = [
+    { title: "ID", dataIndex: "id", width: 60 },
+    {
+      title: "Tên Công Đoạn",
+      dataIndex: "name",
+      render: (text: string) => <b>{text}</b>,
+    },
+    {
+      title: "Thuộc Nhà Máy",
+      dataIndex: "factory",
+      render: (factory: Factory) => (
+        // Hiển thị tên nhà máy dưới dạng thẻ màu cho đẹp
+        <Tag color="blue">{factory?.name || "N/A"}</Tag>
+      ),
+    },
+    {
+      title: "Hành động",
+      key: "action",
+      width: 120,
+      render: (_: any, record: Process) => (
+        <Space>
+          <Button
+            icon={<EditOutlined />}
+            size="small"
+            onClick={() => {
+              setEditingProcess(record);
+              form.setFieldsValue({
+                name: record.name,
+                factoryId: record.factoryId, // Điền ID nhà máy vào dropdown
+              });
+              setIsModalOpen(true);
+            }}
+          />
+          <Button
+            icon={<DeleteOutlined />}
+            danger
+            size="small"
+            onClick={() => handleDelete(record.id)}
+          />
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 20 }}>
+      <Card
+        title="Quản lý Công Đoạn Sản Xuất"
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingProcess(null);
+              form.resetFields();
+              // Nếu đang lọc theo nhà máy nào, tự động điền nhà máy đó vào form thêm mới luôn (UX tốt)
+              if (filterFactoryId) {
+                form.setFieldValue("factoryId", filterFactoryId);
+              }
+              setIsModalOpen(true);
+            }}
+          >
+            Thêm Công Đoạn
+          </Button>
+        }
+      >
+        {/* --- THANH CÔNG CỤ LỌC --- */}
+        <div
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <FilterOutlined />
+          <span style={{ fontWeight: 500 }}>Lọc theo nhà máy:</span>
+          <Select
+            style={{ width: 200 }}
+            placeholder="Chọn nhà máy..."
+            allowClear
+            onChange={(value) => setFilterFactoryId(value)}
+            options={factories.map((f) => ({ label: f.name, value: f.id }))}
+          />
+        </div>
+
+        {/* --- BẢNG DỮ LIỆU --- */}
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredProcesses} // Dùng dữ liệu đã lọc
+          loading={loading}
+          bordered
+          pagination={{ pageSize: 10 }}
+        />
+      </Card>
+
+      {/* --- MODAL FORM --- */}
+      <Modal
+        title={editingProcess ? "Sửa Công Đoạn" : "Thêm Công Đoạn"}
+        open={isModalOpen}
+        onCancel={() => setIsModalOpen(false)}
+        footer={null}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave}>
+          <Form.Item
+            name="factoryId"
+            label="Thuộc Nhà Máy"
+            rules={[{ required: true, message: "Vui lòng chọn nhà máy!" }]}
+          >
+            <Select
+              placeholder="Chọn nhà máy"
+              options={factories.map((f) => ({ label: f.name, value: f.id }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="name"
+            label="Tên Công Đoạn"
+            rules={[{ required: true, message: "Nhập tên công đoạn!" }]}
+          >
+            <Input placeholder="Ví dụ: Bông chải, Ghép thô..." />
+          </Form.Item>
+
+          <div style={{ textAlign: "right", marginTop: 20 }}>
+            <Space>
+              <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit">
+                {editingProcess ? "Cập Nhật" : "Lưu Lại"}
+              </Button>
+            </Space>
+          </div>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\processes\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production\assign\page.tsx
+================================================================================
+"use client";
+import React, { useEffect, useState, useCallback } from 'react';
+import { Table, Button, Card, Select, message, Tag, Space, Divider } from 'antd';
+import { ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
+
+export default function AssignProductionPage() {
+    const [machines, setMachines] = useState([]);
+    const [items, setItems] = useState([]);
+    const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]); // Lưu các máy đang tích chọn
+    const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    // --- 1. Tải dữ liệu (Dùng useCallback để tránh lỗi render vòng lặp) ---
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [resMac, resItem] = await Promise.all([
+                fetch('/api/machines'),
+                fetch('/api/items')
+            ]);
+
+            if (resMac.ok && resItem.ok) {
+                setMachines(await resMac.json());
+                setItems(await resItem.json());
+            } else {
+                message.error("Không tải được dữ liệu");
+            }
+        } catch (error) {
+            message.error("Lỗi hệ thống");
+        } finally {
+            setLoading(false);
+        }
+    }, []); // [] Rỗng nghĩa là hàm này không thay đổi, chỉ tạo 1 lần
+
+    // Gọi hàm khi trang vừa load
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]); // Chỉ chạy lại nếu hàm fetchData thay đổi (mà ta đã cố định nó bằng useCallback rồi)
+
+    // --- 2. Xử lý nút "Áp dụng" ---
+    const handleBulkUpdate = async () => {
+        if (selectedRowKeys.length === 0) return message.warning('Vui lòng chọn ít nhất 1 máy!');
+        if (!selectedItemId) return message.warning('Vui lòng chọn mặt hàng!');
+
+        try {
+            const res = await fetch('/api/machines/bulk-update', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    machineIds: selectedRowKeys,
+                    itemId: selectedItemId
+                })
+            });
+
+            if (res.ok) {
+                message.success(`Đã gán hàng cho ${selectedRowKeys.length} máy!`);
+                setSelectedRowKeys([]); // Bỏ chọn
+                fetchData(); // Load lại bảng để thấy kết quả mới
+            } else {
+                message.error('Lỗi cập nhật');
+            }
+        } catch (error) {
+            message.error('Lỗi hệ thống');
+        }
+    };
+
+    // --- Cấu hình bảng ---
+    const columns = [
+        { title: 'Tên Máy', dataIndex: 'name', width: 100, render: (t: any) => <b>{t}</b> },
+        { title: 'Nhà máy', render: (_: any, r: any) => r.process?.factory?.name },
+        {
+            title: 'Đang chạy hàng',
+            dataIndex: 'currentItem',
+            render: (item: any) => item ? <Tag color="blue">{item.name}</Tag> : <span style={{ color: '#ccc' }}>Trống</span>
+        }
+    ];
+
+    return (
+        <div style={{ padding: 20 }}>
+            <Card title="Điều Phối Mặt Hàng Cho Máy (Gán Hàng Loạt)">
+
+                {/* THANH CÔNG CỤ */}
+                <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                        <span style={{ marginRight: 10, fontWeight: 500 }}>1. Chọn Mặt Hàng muốn chạy:</span>
+                        <Select
+                            showSearch
+                            style={{ width: 300 }}
+                            placeholder="Tìm tên mặt hàng..."
+                            optionFilterProp="children"
+                            onChange={(val) => setSelectedItemId(val)}
+                            filterOption={(input, option: any) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                            options={items.map((i: any) => ({ label: i.name, value: i.id }))}
+                        />
+                    </div>
+
+                    <div style={{ borderLeft: '1px solid #d9d9d9', paddingLeft: 16 }}>
+                        <span style={{ marginRight: 10 }}>2. Áp dụng cho <b>{selectedRowKeys.length}</b> máy đang chọn:</span>
+                        <Button
+                            type="primary"
+                            icon={<ThunderboltOutlined />}
+                            onClick={handleBulkUpdate}
+                            disabled={selectedRowKeys.length === 0 || !selectedItemId}
+                        >
+                            Cập Nhật Ngay
+                        </Button>
+                    </div>
+                </div>
+
+                {/* BẢNG CHỌN MÁY */}
+                <Table
+                    rowKey="id"
+                    rowSelection={{
+                        selectedRowKeys,
+                        onChange: (newSelectedKeys) => setSelectedRowKeys(newSelectedKeys),
+                    }}
+                    columns={columns}
+                    dataSource={machines}
+                    loading={loading}
+                    pagination={{ pageSize: 20 }} // Hiện nhiều máy để dễ chọn
+                    size="small"
+                />
+            </Card>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production\assign\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production\daily-input\page.tsx
+================================================================================
+"use client";
+
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Alert, Input } from 'antd';
+import { SaveOutlined, ArrowRightOutlined, HistoryOutlined, WarningOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import { useSession } from "next-auth/react";
+
+// --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
+interface Machine {
+    id: number;
+    name: string;
+    formulaType: number; // 1,2,3,4
+    processId: number;
+    spindleCount?: number; // Cho loại 3
+    currentItem?: { id: number; name: string };
+    currentNE?: number; // Cho loại 3,4
+    // Dữ liệu tạm để hiển thị trạng thái trên lưới
+    lastLog?: { endIndex: number };
+    todayLog?: { id: number; finalOutput: number }; // Nếu đã nhập hôm nay
+}
+
+interface Factory { id: number; name: string; }
+interface Process { id: number; name: string; factoryId: number; }
+
+export default function DailyInputPage() {
+
+    // --- 2. STATE QUẢN LÝ BỘ LỌC ---
+    const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
+    const [selectedShift, setSelectedShift] = useState<number>(1);
+    const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
+    const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null);
+
+    // --- 3. STATE DỮ LIỆU ---
+    const [machines, setMachines] = useState<Machine[]>([]);
+    const [factories, setFactories] = useState<Factory[]>([]);
+    const [processes, setProcesses] = useState<Process[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    // --- 4. STATE MODAL NHẬP LIỆU ---
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentMachine, setCurrentMachine] = useState<Machine | null>(null);
+    const [form] = Form.useForm();
+
+    // Các biến theo dõi giá trị trong form để tính toán realtime
+    const watchEndIndex = Form.useWatch('endIndex', form);
+    const watchStartIndex = Form.useWatch('startIndex', form);
+    const watchIsReset = Form.useWatch('isReset', form);
+    const watchIsStopped = Form.useWatch('isStopped', form);
+    const watchInputNE = Form.useWatch('inputNE', form);
+
+    // Ref để focus vào ô nhập
+    const inputRef = useRef<any>(null);
+
+    // --- 5. LOGIC KHỞI TẠO NGÀY GIỜ THÔNG MINH (SỚM 1 TIẾNG) ---
+    useEffect(() => {
+        const hour = dayjs().hour();
+        // 05:00 - 12:59 -> Ca 3 ngày hôm qua
+        if (hour >= 5 && hour < 13) {
+            setSelectedShift(3);
+            setSelectedDate(dayjs().subtract(1, 'day'));
+        }
+        // 13:00 - 20:59 -> Ca 1 ngày hôm nay
+        else if (hour >= 13 && hour < 21) {
+            setSelectedShift(1);
+            setSelectedDate(dayjs());
+        }
+        // 21:00 - 04:59 -> Ca 2 ngày hôm nay (Lưu ý: 21h-23h là hôm nay, 0h-4h là hôm nay)
+        else {
+            setSelectedShift(2);
+            setSelectedDate(dayjs()); // 21h đêm nay vẫn là ngày hôm nay
+        }
+
+        // Tải danh mục Factory/Process lần đầu
+        fetchMetadata();
+    }, []);
+
+    const fetchMetadata = async () => {
+        const [resFac, resPro] = await Promise.all([fetch('/api/factories'), fetch('/api/processes')]);
+        setFactories(await resFac.json());
+        setProcesses(await resPro.json());
+    };
+
+    // --- 6. TẢI DANH SÁCH MÁY & TRẠNG THÁI ---
+    const fetchMachines = async () => {
+        if (!selectedProcessId) return;
+        setLoading(true);
+        try {
+            // Gửi kèm Date & Shift để server check xem máy nào đã nhập rồi
+            const dateStr = selectedDate.format('YYYY-MM-DD');
+            const query = `?processId=${selectedProcessId}&date=${dateStr}&shift=${selectedShift}`;
+            const res = await fetch(`/api/production/daily-status${query}`); // API này ta sẽ viết sau
+            const data = await res.json();
+            setMachines(data);
+        } catch (error) {
+            message.error("Lỗi tải danh sách máy");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Tự động tải lại khi đổi bộ lọc
+    useEffect(() => { fetchMachines(); }, [selectedProcessId, selectedDate, selectedShift]);
+
+    // --- 7. MỞ MODAL NHẬP LIỆU ---
+    const handleOpenMachine = async (machine: Machine) => {
+        // --- THÊM ĐOẠN NÀY ---
+        if (!machine.currentItem) {
+            message.warning(`Máy ${machine.name} chưa được gán mặt hàng! Vui lòng gán mặt hàng trước.`);
+            // Tùy chọn: Có thể return luôn để không cho mở modal
+            // return; 
+        }
+        // --------------------
+
+        setCurrentMachine(machine);
+        form.resetFields();
+
+        // Giá trị mặc định
+        const initValues: any = {
+            startIndex: 0, // Mặc định 0, sẽ fetch sau
+            endIndex: null,
+            isReset: false,
+            isStopped: false,
+            // Lấy từ cấu hình máy (Auto-fill)
+            inputNE: machine.currentNE || 30, // Default tạm nếu chưa có
+            itemId: machine.currentItem?.id,
+            itemName: machine.currentItem?.name // Chỉ để hiện, ko submit
+        };
+
+        // Nếu đã nhập hôm nay rồi (Sửa lại)
+        if (machine.todayLog) {
+            // Logic load dữ liệu cũ để sửa... (Ta làm sau cho đơn giản)
+            message.info("Đang mở chế độ chỉnh sửa");
+        } else {
+            // --- LOGIC QUAN TRỌNG: LẤY CHỈ SỐ TRƯỚC ---
+            // Gọi API lấy bản ghi gần nhất của máy này
+            try {
+                const res = await fetch(`/api/production/last-log?machineId=${machine.id}&date=${selectedDate.format('YYYY-MM-DD')}&shift=${selectedShift}`);
+                const lastLog = await res.json();
+
+                if (lastLog && lastLog.endIndex !== undefined) {
+                    initValues.startIndex = lastLog.endIndex;
+                } else {
+                    // Máy mới chưa có lịch sử -> Cho phép nhập tay startIndex
+                    // Ta dùng 1 cờ hiệu để UI biết mà mở khóa ô input
+                    initValues.isNewMachine = true;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        form.setFieldsValue(initValues);
+        setIsModalOpen(true);
+
+        // Focus vào ô endIndex sau 100ms
+        setTimeout(() => inputRef.current?.focus(), 100);
+    };
+
+    // --- 8. LOGIC TÍNH TOÁN SẢN LƯỢNG (REAL-TIME) ---
+    const calculatedOutput = useMemo(() => {
+        if (!currentMachine) return 0;
+
+        // Nếu máy dừng -> Sản lượng 0
+        if (watchIsStopped) return 0;
+
+        const start = Number(watchStartIndex) || 0;
+        const end = Number(watchEndIndex) || 0;
+
+        // Nếu chưa nhập số cuối -> 0
+        if (watchEndIndex === null || watchEndIndex === undefined) return 0;
+
+        // Logic Delta (Chênh lệch)
+        let delta = 0;
+        if (watchIsReset) {
+            delta = end; // Nếu reset, coi như chạy từ 0 đến End
+        } else {
+            delta = end - start;
+        }
+
+        // Nếu âm (và không reset) -> Trả về âm để UI cảnh báo
+        if (delta < 0) return delta;
+
+        // ÁP DỤNG CÔNG THỨC
+        const type = currentMachine.formulaType;
+        let result = 0;
+
+        if (type === 1) {
+            result = end; // Nhập thẳng (Với loại 1, ô EndIndex chính là sản lượng)
+        } else if (type === 2) {
+            result = delta; // Trừ lùi
+        } else if (type === 3) {
+            // ((Cuối - Đầu) * Số cọc) / (Chi số * 1000 * 1.693)
+            const ne = Number(watchInputNE) || 1;
+            const spindles = currentMachine.spindleCount || 1;
+            const denominator = ne * 1000 * 1.693;
+            if (denominator !== 0) {
+                result = (delta * spindles) / denominator;
+            }
+        } else if (type === 4) {
+            // (Cuối - Đầu) / Chi số
+            const ne = Number(watchInputNE) || 1;
+            if (ne !== 0) result = delta / ne;
+        }
+
+        return parseFloat(result.toFixed(2)); // Làm tròn 2 số thập phân
+    }, [watchEndIndex, watchStartIndex, watchIsReset, watchIsStopped, watchInputNE, currentMachine]);
+
+    // --- 9. LƯU DỮ LIỆU ---
+    const handleSave = async (saveAndNext: boolean) => {
+        try {
+            const values = await form.validateFields();
+
+            // Kiểm tra logic an toàn
+            if (calculatedOutput < 0 && !values.isReset && !values.isStopped) {
+                message.error("Sản lượng bị ÂM. Vui lòng kiểm tra lại hoặc tích 'Reset đồng hồ'");
+                return;
+            }
+
+            // Gửi API
+            const payload = {
+                recordDate: selectedDate.format('YYYY-MM-DD'),
+                shift: selectedShift,
+                machineId: currentMachine?.id,
+                itemId: values.itemId, // ID mặt hàng đang chạy (lấy từ form hidden)
+                endIndex: values.endIndex,
+                inputNE: values.inputNE,
+                finalOutput: calculatedOutput,
+                note: values.isStopped ? "Máy dừng" : (values.isReset ? "Reset đồng hồ" : "")
+            };
+
+            const res = await fetch('/api/production/daily-input', { // API Save
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Lỗi lưu');
+
+            message.success("Đã lưu!");
+
+            // Cập nhật lại trạng thái máy trong list (để đổi màu xanh)
+            setMachines(prev => prev.map(m =>
+                m.id === currentMachine?.id
+                    ? { ...m, todayLog: { id: 0, finalOutput: calculatedOutput } }
+                    : m
+            ));
+
+            if (saveAndNext) {
+                // Tìm máy tiếp theo trong list
+                const currentIndex = machines.findIndex(m => m.id === currentMachine?.id);
+                if (currentIndex < machines.length - 1) {
+                    handleOpenMachine(machines[currentIndex + 1]); // Mở máy kế tiếp
+                } else {
+                    setIsModalOpen(false);
+                    message.success("Đã nhập hết danh sách!");
+                }
+            } else {
+                setIsModalOpen(false);
+            }
+
+        } catch (e) {
+            message.error("Có lỗi xảy ra");
+        }
+    };
+
+    // --- GIAO DIỆN ---
+    return (
+        <div style={{ padding: 20 }}>
+            {/* 1. THANH CÔNG CỤ (FILTERS) */}
+            <Card style={{ marginBottom: 16 }} size="small">
+                <Row gutter={16} align="middle">
+                    <Col span={6}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy & Công đoạn:</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <Select
+                                style={{ width: '50%' }} placeholder="Nhà máy"
+                                options={factories.map(f => ({ label: f.name, value: f.id }))}
+                                onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
+                            />
+                            <Select
+                                style={{ width: '50%' }} placeholder="Công đoạn"
+                                options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
+                                onChange={setSelectedProcessId}
+                                value={selectedProcessId}
+                            />
+                        </div>
+                    </Col>
+                    <Col span={6}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày & Ca sản xuất:</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <DatePicker
+                                value={selectedDate}
+                                onChange={val => val && setSelectedDate(val)}
+                                format="DD/MM/YYYY" style={{ flex: 1 }}
+                                allowClear={false}
+                            />
+                            <Select
+                                value={selectedShift}
+                                onChange={setSelectedShift}
+                                style={{ width: 80 }}
+                                options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]}
+                            />
+                        </div>
+                    </Col>
+                    <Col span={12} style={{ textAlign: 'right' }}>
+                        <Statistic
+                            title="Tiến độ nhập liệu"
+                            value={machines.filter(m => m.todayLog).length}
+                            suffix={`/ ${machines.length} máy`}
+                            valueStyle={{ fontSize: 20, color: '#1890ff' }}
+                        />
+                    </Col>
+                </Row>
+            </Card>
+
+            {/* 2. LƯỚI MÁY (GRID) */}
+            {!selectedProcessId ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Vui lòng chọn Công đoạn để bắt đầu</div>
+            ) : (
+                <Row gutter={[12, 12]}>
+                    {machines.map(machine => {
+                        const isDone = !!machine.todayLog;
+                        return (
+                            <Col xs={12} sm={8} md={6} lg={4} key={machine.id}>
+                                <Card
+                                    hoverable
+                                    onClick={() => handleOpenMachine(machine)}
+                                    style={{
+                                        cursor: 'pointer',
+                                        border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9',
+                                        background: isDone ? '#f6ffed' : '#fff'
+                                    }}
+                                    bodyStyle={{ padding: 12 }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <b>{machine.name}</b>
+                                        {isDone && <SaveOutlined style={{ color: '#52c41a' }} />}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4, height: 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {machine.currentItem?.name || '-'}
+                                    </div>
+
+                                    <div style={{ marginTop: 8, textAlign: 'right' }}>
+                                        {isDone ? (
+                                            <b style={{ fontSize: 18, color: '#52c41a' }}>{machine.todayLog?.finalOutput} <small>kg</small></b>
+                                        ) : (
+                                            <span style={{ color: '#ccc' }}>Chưa nhập</span>
+                                        )}
+                                    </div>
+                                </Card>
+                            </Col>
+                        )
+                    })}
+                </Row>
+            )}
+
+            {/* 3. MODAL NHẬP LIỆU (TRÁI TIM CỦA TRANG) */}
+            <Modal
+                title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 30 }}>
+                        <span>
+                            {currentMachine?.name}
+                            <Tag style={{ marginLeft: 8 }} color="blue">{currentMachine?.currentItem?.name}</Tag>
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 'normal', color: '#888' }}>
+                            Công thức loại: {currentMachine?.formulaType}
+                        </span>
+                    </div>
+                }
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+                width={500}
+                centered
+            >
+                <Form form={form} layout="vertical">
+                    {/* Trường ẩn lưu ID mặt hàng */}
+                    <Form.Item name="itemId" hidden><Input /></Form.Item>
+
+                    {/* SWITCH: Máy dừng & Reset */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
+                        <Form.Item name="isStopped" valuePropName="checked" noStyle>
+                            <Switch checkedChildren="Máy dừng" unCheckedChildren="Máy đang chạy" />
+                        </Form.Item>
+                        <Form.Item name="isReset" valuePropName="checked" noStyle>
+                            <Switch
+                                checkedChildren="Đã Reset/Thay đồng hồ"
+                                unCheckedChildren="Đồng hồ bình thường"
+                                style={{ background: watchIsReset ? '#faad14' : undefined }}
+                                disabled={watchIsStopped}
+                            />
+                        </Form.Item>
+                    </div>
+
+                    {/* Cảnh báo nếu máy dừng */}
+                    {watchIsStopped && <Alert message="Máy dừng sẽ được ghi nhận sản lượng = 0" type="warning" showIcon style={{ marginBottom: 16 }} />}
+
+                    {/* INPUTS CHÍNH */}
+                    <Row gutter={16}>
+                        {/* Chỉ số TRƯỚC */}
+                        <Col span={12}>
+                            <Form.Item
+                                name="startIndex"
+                                label="Chỉ số TRƯỚC (Ca trước)"
+                            >
+                                <InputNumber
+                                    style={{ width: '100%' }}
+                                    readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')}
+                                    disabled={watchIsStopped}
+                                    variant={(!watchIsReset && !form.getFieldValue('isNewMachine')) ? "filled" : "outlined"}
+                                />
+                            </Form.Item>
+                        </Col>
+
+                        {/* Chỉ số SAU */}
+                        <Col span={12}>
+                            <Form.Item
+                                name="endIndex"
+                                label="Chỉ số SAU (Hiện tại)"
+                                rules={[{ required: !watchIsStopped, message: 'Nhập chỉ số!' }]}
+                            >
+                                <InputNumber
+                                    ref={inputRef}
+                                    style={{ width: '100%', fontWeight: 'bold', fontSize: 16 }}
+                                    disabled={watchIsStopped}
+                                    onPressEnter={() => handleSave(true)} // Enter là lưu & next luôn
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    {/* Input phụ cho loại 3, 4 (Chi số) */}
+                    {(currentMachine?.formulaType === 3 || currentMachine?.formulaType === 4) && (
+                        <Form.Item name="inputNE" label="Chi số (NE) thực tế">
+                            <InputNumber style={{ width: '100%' }} disabled={watchIsStopped} />
+                        </Form.Item>
+                    )}
+
+                    {/* KẾT QUẢ TÍNH TOÁN */}
+                    <div style={{ textAlign: 'center', padding: 15, background: calculatedOutput < 0 ? '#fff1f0' : '#f6ffed', borderRadius: 8, border: calculatedOutput < 0 ? '1px solid #ffccc7' : '1px solid #b7eb8f' }}>
+                        <div style={{ color: '#666', fontSize: 12 }}>Sản lượng ước tính:</div>
+                        <div style={{ fontSize: 28, fontWeight: 'bold', color: calculatedOutput < 0 ? 'red' : '#389e0d' }}>
+                            {calculatedOutput} <small>kg</small>
+                        </div>
+
+                        {/* Cảnh báo logic */}
+                        {calculatedOutput < 0 && !watchIsReset && !watchIsStopped && (
+                            <div style={{ color: 'red', marginTop: 5 }}>
+                                <WarningOutlined /> Chỉ số sau nhỏ hơn chỉ số trước!
+                            </div>
+                        )}
+                        {calculatedOutput > 1000 && (
+                            <div style={{ color: '#faad14', marginTop: 5 }}>
+                                <WarningOutlined /> Sản lượng quá lớn, hãy kiểm tra lại!
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ACTION BUTTONS */}
+                    <Row gutter={16} style={{ marginTop: 24 }}>
+                        <Col span={8}>
+                            <Button block onClick={() => setIsModalOpen(false)}>Hủy</Button>
+                        </Col>
+                        <Col span={8}>
+                            <Button block icon={<SaveOutlined />} onClick={() => handleSave(false)} disabled={watchIsStopped ? false : calculatedOutput < 0}>Lưu</Button>
+                        </Col>
+                        <Col span={8}>
+                            <Button block type="primary" icon={<ArrowRightOutlined />} onClick={() => handleSave(true)} disabled={watchIsStopped ? false : calculatedOutput < 0}>
+                                Lưu & Tiếp
+                            </Button>
+                        </Col>
+                    </Row>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production\daily-input\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\providers.tsx
+================================================================================
+// app/providers.tsx
+"use client";
+
+import { SessionProvider } from "next-auth/react";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+    return <SessionProvider>{children}</SessionProvider>;
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\providers.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\users\page.tsx
+================================================================================
+
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space, Tooltip } from 'antd';
+import { EditOutlined, ReloadOutlined, SafetyCertificateOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { useSession } from 'next-auth/react';
+
+// Định nghĩa kiểu dữ liệu cho User hiển thị
+interface UserType {
+    id: number;
+    username: string;
+    fullName: string;
+    isActive: boolean;
+    role: string;
+    accessLevel: string;
+    process?: { id: number; name: string };
+    processId: number | null;
+}
+
+export default function UserManagementPage() {
+    const { data: session } = useSession();
+    const [users, setUsers] = useState<UserType[]>([]);
+    const [processes, setProcesses] = useState<any[]>([]); // List công đoạn cho dropdown
+    const [loading, setLoading] = useState(false);
+
+    // State cho Modal Sửa
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<UserType | null>(null);
+    const [form] = Form.useForm();
+
+    // --- 1. Tải dữ liệu ---
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [resUsers, resProcesses] = await Promise.all([
+                fetch('/api/users'),
+                fetch('/api/processes')
+            ]);
+
+            if (resUsers.ok && resProcesses.ok) {
+                setUsers(await resUsers.json());
+                setProcesses(await resProcesses.json());
+            } else {
+                message.error("Không tải được dữ liệu (Có thể bạn không phải Admin)");
+            }
+        } catch (error) {
+            message.error("Lỗi kết nối");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (session?.user?.role === 'ADMIN') {
+            fetchData();
+        }
+    }, [session]);
+
+    // --- 2. Xử lý Lưu (Cập nhật) ---
+    const handleSave = async (values: any) => {
+        try {
+            if (editingUser) {
+                const payload = { ...values, id: editingUser.id };
+
+                const res = await fetch('/api/users', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error("Lỗi cập nhật");
+
+                message.success("Đã cập nhật thông tin thành công!");
+                setIsModalOpen(false);
+                setEditingUser(null);
+                fetchData(); // Load lại bảng
+            }
+        } catch (error) {
+            message.error("Có lỗi xảy ra khi lưu");
+        }
+    };
+
+    // --- 3. Mở Modal ---
+    const openEditModal = (user: UserType) => {
+        setEditingUser(user);
+        form.resetFields();
+        // Điền dữ liệu cũ vào form
+        form.setFieldsValue({
+            fullName: user.fullName,
+            isActive: user.isActive,
+            role: user.role,
+            accessLevel: user.accessLevel,
+            processId: user.processId,
+            newPassword: '' // Mật khẩu luôn để trống
+        });
+        setIsModalOpen(true);
+    };
+
+    // --- 4. Cấu hình Cột Bảng ---
+    const columns = [
+        {
+            title: 'Nhân viên',
+            render: (_: any, r: UserType) => (
+                <div>
+                    <div style={{ fontWeight: 'bold', fontSize: 15 }}>{r.fullName}</div>
+                    <div style={{ color: '#888', fontSize: 12 }}>@{r.username}</div>
+                </div>
+            )
+        },
+        {
+            title: 'Thuộc Bộ phận',
+            dataIndex: 'process',
+            render: (p: any) => p ? <Tag color="blue">{p.name}</Tag> : <Tag>Văn phòng / Chưa gán</Tag>
+        },
+        {
+            title: 'Vai trò',
+            dataIndex: 'role',
+            render: (role: string) => role === 'ADMIN' ? <Tag color="red">ADMIN</Tag> : <Tag color="green">USER</Tag>
+        },
+        {
+            title: 'Quyền hạn',
+            dataIndex: 'accessLevel',
+            render: (level: string) => {
+                let color = 'default';
+                let text = 'Chỉ xem';
+                if (level === 'MANAGER') { color = 'gold'; text = 'Quản lý'; }
+                if (level === 'OPERATOR') { color = 'cyan'; text = 'Nhập liệu'; }
+                return <Tag color={color}>{text}</Tag>
+            }
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'isActive',
+            align: 'center' as const,
+            render: (isActive: boolean) => isActive
+                ? <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
+                : <Tooltip title="Chưa kích hoạt"><CloseCircleOutlined style={{ fontSize: 20, color: 'red' }} /></Tooltip>
+        },
+        {
+            title: 'Hành động',
+            key: 'action',
+            render: (_: any, r: UserType) => (
+                <Button type="primary" ghost size="small" icon={<EditOutlined />} onClick={() => openEditModal(r)}>
+                    Chi tiết / Duyệt
+                </Button>
+            )
+        }
+    ];
+
+    // Bảo vệ Frontend: Nếu không phải Admin thì hiển thị thông báo
+    if (session?.user?.role !== 'ADMIN') {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
+                <SafetyCertificateOutlined style={{ fontSize: 50, color: 'red', marginBottom: 20 }} />
+                <h2>Bạn không có quyền truy cập trang này</h2>
+                <p>Vui lòng liên hệ quản trị viên.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ padding: 20 }}>
+            <Card
+                title="Quản trị Người dùng & Phân quyền"
+                extra={<Button icon={<ReloadOutlined />} onClick={fetchData}>Làm mới</Button>}
+            >
+                <Table
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={users}
+                    loading={loading}
+                    pagination={{ pageSize: 10 }}
+                    bordered
+                />
+            </Card>
+
+            {/* --- MODAL CHỈNH SỬA --- */}
+            <Modal
+                title={`Cập nhật: ${editingUser?.fullName}`}
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+                width={600}
+            >
+                <Form form={form} layout="vertical" onFinish={handleSave}>
+
+                    {/* Khu vực trạng thái kích hoạt (Quan trọng nhất) */}
+                    <div style={{ background: '#f6ffed', padding: 15, borderRadius: 8, border: '1px solid #b7eb8f', marginBottom: 20 }}>
+                        <Form.Item name="isActive" valuePropName="checked" label="Trạng thái tài khoản" style={{ marginBottom: 0 }}>
+                            <Switch
+                                checkedChildren="ĐÃ KÍCH HOẠT (Cho phép đăng nhập)"
+                                unCheckedChildren="ĐANG KHÓA (Chờ duyệt)"
+                                style={{ width: '100%' }}
+                            />
+                        </Form.Item>
+                    </div>
+
+                    <Form.Item name="fullName" label="Họ và tên hiển thị">
+                        <Input />
+                    </Form.Item>
+
+                    <Space style={{ display: 'flex', width: '100%' }} align="start" size={16}>
+                        <Form.Item name="role" label="Vai trò hệ thống" style={{ flex: 1 }}>
+                            <Select>
+                                <Select.Option value="USER">User (Nhân viên)</Select.Option>
+                                <Select.Option value="ADMIN">Admin (Quản trị)</Select.Option>
+                            </Select>
+                        </Form.Item>
+
+                        <Form.Item name="accessLevel" label="Quyền thao tác dữ liệu" style={{ flex: 1 }}>
+                            <Select>
+                                <Select.Option value="READ_ONLY">Chỉ xem (Read Only)</Select.Option>
+                                <Select.Option value="OPERATOR">Nhập liệu (Operator)</Select.Option>
+                                <Select.Option value="MANAGER">Quản lý (Sửa/Xóa)</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </Space>
+
+                    <Form.Item name="processId" label="Thuộc công đoạn (Phòng ban)">
+                        <Select allowClear placeholder="Chọn công đoạn...">
+                            {processes.map((p: any) => (
+                                <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+                            ))}
+                        </Select>
+                        <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                            * User chỉ được phép nhập liệu cho công đoạn này.
+                        </div>
+                    </Form.Item>
+
+                    <div style={{ borderTop: '1px dashed #d9d9d9', paddingTop: 16, marginTop: 16 }}>
+                        <Form.Item name="newPassword" label="Đặt lại mật khẩu (Chỉ nhập nếu nhân viên quên mật khẩu)">
+                            <Input.Password placeholder="Nhập mật khẩu mới..." />
+                        </Form.Item>
+                    </div>
+
+                    <div style={{ textAlign: 'right', marginTop: 20 }}>
+                        <Space>
+                            <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+                            <Button type="primary" htmlType="submit" icon={<SafetyCertificateOutlined />}>
+                                Lưu Thiết Lập
+                            </Button>
+                        </Space>
+                    </div>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\users\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\auth.config.ts
+================================================================================
+// src/auth.config.ts
+import type { NextAuthConfig } from "next-auth";
+
+export const authConfig = {
+  pages: {
+    signIn: "/login", // Dẫn về trang đăng nhập của bạn
+  },
+  callbacks: {
+    // 1. Logic bảo vệ route (Middleware dùng cái này)
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isOnDashboard = nextUrl.pathname.startsWith("/");
+      const isOnLogin = nextUrl.pathname.startsWith("/login");
+
+      if (isOnDashboard) {
+        if (isLoggedIn) return true;
+        return false; // Chưa login -> Đá về trang login
+      } else if (isLoggedIn && isOnLogin) {
+        // Đã login mà cố vào trang login -> Đá về trang chủ
+        return Response.redirect(new URL("/", nextUrl));
+      }
+      return true;
+    },
+    // 2. Tùy biến JWT để lưu thêm thông tin
+    jwt({ token, user, trigger, session }) {
+      if (user) {
+        token.role = user.role;
+        token.processId = user.processId;
+        token.accessLevel = user.accessLevel;
+        token.username = user.username;
+        token.fullName = user.fullName;
+      }
+      if (trigger === "update" && session) {
+        return { ...token, ...session.user };
+      }
+      return token;
+    },
+    // 3. Tùy biến Session để Client đọc được
+    session({ session, token }) {
+      if (session.user && token) {
+        session.user.id = token.sub as string;
+        session.user.role = token.role as string;
+        session.user.processId = token.processId as number | null;
+        session.user.accessLevel = token.accessLevel as string;
+        session.user.username = token.username as string;
+        session.user.fullName = token.fullName as string;
+      }
+      return session;
+    },
+  },
+  providers: [], // Để trống, sẽ nạp ở auth.ts
+} satisfies NextAuthConfig;
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\auth.config.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\auth.ts
+================================================================================
+// src/auth.ts
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { authConfig } from "./auth.config";
+import { prisma } from "@/lib/prisma";
+import * as bcrypt from "bcryptjs";
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+  providers: [
+    Credentials({
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) return null;
+
+        const username = String(credentials.username);
+        const password = String(credentials.password);
+
+        // Tìm user trong DB
+        const user = await prisma.user.findUnique({
+          where: { username },
+        });
+
+        if (!user) return null; // Không tìm thấy user
+
+        // Kiểm tra mật khẩu
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) return null; // Sai mật khẩu
+
+        // Kiểm tra kích hoạt
+        if (!user.isActive) throw new Error("Tài khoản chưa được kích hoạt");
+
+        // Trả về user đầy đủ thông tin
+        return {
+          id: user.id.toString(),
+          name: user.fullName,
+          username: user.username,
+          role: user.role,
+          processId: user.processId,
+          accessLevel: user.accessLevel,
+          fullName: user.fullName,
+        };
+      },
+    }),
+  ],
+});
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\auth.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\AdminLayout.tsx
+================================================================================
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Spin } from "antd";
+import {
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  DashboardOutlined,
+  DatabaseOutlined,
+  AppstoreOutlined,
+  UserOutlined,
+  HistoryOutlined,
+  LogoutOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
+import { useRouter, usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+
+const { Header, Sider, Content, Footer } = Layout;
+
+interface AdminLayoutProps {
+  children: React.ReactNode;
+}
+
+const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
+  const { data: session, status } = useSession();
+  const [collapsed, setCollapsed] = useState(false);
+  const {
+    token: { colorBgContainer, borderRadiusLG },
+  } = theme.useToken();
+
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Bảo vệ route
+  useEffect(() => {
+    if (status === "unauthenticated" && pathname !== "/login" && pathname !== "/register") {
+      router.push("/login");
+    }
+  }, [status, pathname, router]);
+
+  if (pathname === "/login" || pathname === "/register") {
+    return <>{children}</>;
+  }
+
+  if (status === "loading") {
+    return (
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  // Cấu hình Menu
+  const menuItems = [
+    {
+      key: "/",
+      icon: <DashboardOutlined />,
+      label: "Tổng quan (Dashboard)",
+    },
+    {
+      key: "sub1",
+      icon: <DatabaseOutlined />,
+      label: "Danh mục dữ liệu",
+      children: [
+        { key: "/factories", label: "Nhà máy" },
+        { key: "/processes", label: "Công đoạn" },
+        { key: "/items", label: "Mặt hàng" },
+        { key: "/machines", label: "Máy móc" },
+      ],
+    },
+    {
+      key: "sub2",
+      icon: <AppstoreOutlined />,
+      label: "Quản lý Sản xuất",
+      children: [
+        { key: "/production/assign", label: "Điều phối (Gán mặt hàng)" },
+        { key: "/production/daily-input", label: "Nhập sản lượng" },
+        {
+          key: "/production/history",
+          label: "Lịch sử & Báo cáo",
+          icon: <HistoryOutlined />,
+        },
+      ],
+    },
+    {
+      key: "/settings",
+      icon: <SettingOutlined />,
+      label: "Cấu hình hệ thống",
+    },
+  ];
+
+  if (session?.user?.role === "ADMIN") {
+    menuItems.splice(3, 0, {
+      key: "/users",
+      icon: <UserOutlined />,
+      label: "Quản lý Tài khoản (Admin)",
+    } as any);
+  }
+
+  const userMenu = {
+    items: [
+      {
+        key: "0",
+        label: (
+          <div style={{ padding: '4px 0', cursor: 'default' }}>
+            <div style={{ fontWeight: 'bold' }}>{session?.user?.fullName}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>
+              {session?.user?.role} - {session?.user?.accessLevel}
+            </div>
+          </div>
+        ),
+      },
+      { type: 'divider' },
+      {
+        key: "2",
+        label: "Đăng xuất",
+        icon: <LogoutOutlined />,
+        danger: true,
+        onClick: () => { signOut({ callbackUrl: "/login" }); },
+      },
+    ],
+  };
+
+  return (
+    <Layout style={{ minHeight: "100vh" }}>
+      {/* 1. SIDER: Đổi lại theme="dark" */}
+      <Sider trigger={null} collapsible collapsed={collapsed} width={250} theme="dark">
+        <div
+          style={{
+            height: 64,
+            margin: 16,
+            // Đổi lại màu nền logo cho nổi bật trên nền đen
+            background: "rgba(255, 255, 255, 0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white", // Chữ màu trắng
+            fontWeight: "bold",
+            fontSize: collapsed ? 16 : 20,
+            borderRadius: 6,
+          }}
+        >
+          {collapsed ? "PB" : "PHU BAI ERP"}
+        </div>
+
+        <Menu
+          theme="dark" // 2. MENU: Đổi lại theme="dark"
+          mode="inline"
+          selectedKeys={[pathname]}
+          defaultOpenKeys={["sub1", "sub2"]}
+          items={menuItems}
+          onClick={({ key }) => {
+            if (key.startsWith("/")) {
+              router.push(key);
+            }
+          }}
+        />
+      </Sider>
+
+      <Layout>
+        <Header
+          style={{
+            padding: 0,
+            background: colorBgContainer,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingRight: 24,
+          }}
+        >
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              fontSize: "16px",
+              width: 64,
+              height: 64,
+            }}
+          />
+
+          <Space>
+            <span style={{ marginRight: 8 }}>
+              Xin chào, <b>{session?.user?.fullName || "User"}</b>
+            </span>
+            <Dropdown menu={userMenu} trigger={['click']}>
+              <Avatar
+                style={{ backgroundColor: "#1890ff", cursor: "pointer" }}
+                icon={<UserOutlined />}
+                src={`https://ui-avatars.com/api/?name=${session?.user?.fullName}&background=random`}
+              />
+            </Dropdown>
+          </Space>
+        </Header>
+
+        <Content
+          style={{
+            margin: "24px 16px",
+            padding: 24,
+            minHeight: 280,
+            background: colorBgContainer,
+            borderRadius: borderRadiusLG,
+            overflow: "auto",
+          }}
+        >
+          {children}
+        </Content>
+
+        <Footer style={{ textAlign: "center", color: "#888" }}>
+          Phu Bai Factory ©{new Date().getFullYear()} - ERP System
+        </Footer>
+      </Layout>
+    </Layout>
+  );
+};
+
+export default AdminLayout;
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\AdminLayout.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\SessionProviderWrapper.tsx
+================================================================================
+"use client"; // Bắt buộc phải có dòng này
+
+import { SessionProvider } from "next-auth/react";
+
+export default function SessionProviderWrapper({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <SessionProvider>{children}</SessionProvider>;
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\SessionProviderWrapper.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\AntdRegistry.tsx
+================================================================================
+// src/lib/AntdRegistry.tsx
+"use client";
+
+import React from "react";
+import { createCache, extractStyle, StyleProvider } from "@ant-design/cssinjs";
+import type Entity from "@ant-design/cssinjs/es/Cache";
+import { useServerInsertedHTML } from "next/navigation";
+
+const StyledComponentsRegistry = ({ children }: React.PropsWithChildren) => {
+  const cache = React.useMemo<Entity>(() => createCache(), []);
+  useServerInsertedHTML(() => (
+    <style
+      id="antd"
+      dangerouslySetInnerHTML={{ __html: extractStyle(cache, true) }}
+    />
+  ));
+  return <StyleProvider cache={cache}>{children}</StyleProvider>;
+};
+
+export default StyledComponentsRegistry;
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\AntdRegistry.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\prisma.ts
+================================================================================
+// lib/prisma.ts
+
+// Tác dụng: Đảm bảo chỉ có DUY NHẤT 1 kết nối đến Database được tạo ra trong suốt quá trình chạy app.
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\prisma.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\middleware.ts
+================================================================================
+// src/middleware.ts
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+
+export default NextAuth(authConfig).auth;
+
+export const config = {
+  // Chặn tất cả, trừ các file tĩnh và API
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\middleware.ts ---

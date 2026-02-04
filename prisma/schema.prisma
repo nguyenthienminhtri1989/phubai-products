@@ -1,0 +1,155 @@
+// File: schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Hoặc "mysql", "sqlserver" tùy bạn chọn
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. QUẢN LÝ CẤU TRÚC NHÀ MÁY (Hierarchy)
+// ==========================================
+
+model Factory {
+  id        Int       @id @default(autoincrement())
+  name      String    // Tên nhà máy (NM1, NM2...)
+  note      String?   // Ghi chú
+
+  processes Process[] // 1 Nhà máy có nhiều Công đoạn
+
+  @@map("factories")
+}
+
+// ==========================================
+// 2. CÔNG ĐOẠN
+// ==========================================
+model Process {
+  id        Int       @id @default(autoincrement())
+  name      String    // Tên công đoạn (bông chải, ghép thô...)
+  
+  factoryId Int
+  factory   Factory   @relation(fields: [factoryId], references: [id])
+
+  machines  Machine[] // 1 Công đoạn quản lý nhiều Máy
+  users     User[]    // Phân quyền: User nào thuộc công đoạn nào
+
+  @@map("processes")
+}
+
+// ==========================================
+// 2. DANH MỤC MẶT HÀNG (Items)
+// ==========================================
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  name        String   // Tên mặt hàng (Bắt buộc)
+  
+  // Quan hệ
+  runningOnMachines Machine[]       // Mặt hàng này đang chạy trên máy nào?
+  productionLogs    ProductionLog[] // Lịch sử sản xuất của mặt hàng này
+
+  @@map("items")
+}
+
+// ==========================================
+// 3. DANH MỤC MÁY MÓC (Machines) - Cấu hình
+// ==========================================
+
+model Machine {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique // Tên máy (Máy 01, Máy 02...)
+  isActive    Boolean  @default(true) // True: Đang dùng, False: Đã thanh lý (Thay máy mới)
+
+  // --- Phân cấp ---
+  processId   Int
+  process     Process  @relation(fields: [processId], references: [id])
+
+  // --- Cấu hình tính toán (Quan trọng) ---
+  // 1: Nhập thẳng kg
+  // 2: (Cuối - Đầu)
+  // 3: (Cuối - Đầu) * Số cọc / (Chi số * K)
+  // 4: (Cuối - Đầu) / Chi số
+  formulaType Int      @default(1) 
+
+  spindleCount Int?    // Số cọc (Chỉ dùng cho FormulaType = 3, máy khác để Null)
+
+  // --- Trạng thái hiện tại ---
+  currentItemId Int?   // Máy đang chạy hàng nào? (Dùng để gợi ý khi nhập liệu)
+  currentItem   Item?  @relation(fields: [currentItemId], references: [id])
+
+  // 2. Chi số đang chạy là bao nhiêu?
+  // Dành cho máy loại 3, 4. 
+  // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
+  currentNE     Float?
+
+  // --- Dữ liệu lịch sử ---
+  productionLogs ProductionLog[]
+
+  @@map("machines")
+}
+
+// ==========================================
+// 4. NHẬT KÝ SẢN LƯỢNG (Dữ liệu hàng ngày)
+// ==========================================
+
+model ProductionLog {
+  id          Int      @id @default(autoincrement())
+  
+  // --- Thời gian logic ---
+  recordDate  DateTime @db.Date // Ngày sản xuất (Ca 3 đêm nay vẫn lưu là ngày hôm nay)
+  shift       Int      // Ca làm việc: 1, 2, hoặc 3
+  
+  // --- Liên kết ---
+  machineId   Int
+  machine     Machine  @relation(fields: [machineId], references: [id])
+
+  itemId      Int      // Snapshot: Tại thời điểm nhập, máy chạy hàng gì?
+  item        Item     @relation(fields: [itemId], references: [id])
+
+  // --- Số liệu nhập vào (Input) ---
+  endIndex    Float?   // Chỉ số cuối (Null nếu là máy Loại 1)
+  
+  // Khi lưu, giá trị này sẽ lấy từ ô nhập liệu (dù là auto-fill hay nhập tay)
+  inputNE     Float?
+
+  // --- Kết quả (Output) ---
+  finalOutput Float    // SẢN LƯỢNG CUỐI CÙNG (KG). Đã qua tính toán.
+  
+  // --- Audit ---
+  note        String?  // Ghi chú (nếu có)
+  createdAt   DateTime @default(now()) // Giờ nhập thực tế
+  createdById Int?     // Ai nhập?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@map("production_logs")
+}
+
+// ==========================================
+// 5. NGƯỜI DÙNG (Quản lý quyền hạn)
+// ==========================================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   // Lưu hash (đã mã hóa)
+  fullName  String
+  
+  // --- PHÂN QUYỀN ---
+  role        String   @default("USER") // "ADMIN" hoặc "USER"
+  accessLevel String   @default("READ_ONLY") // "READ_ONLY", "OPERATOR", "MANAGER"
+  
+  // --- TRẠNG THÁI ---
+  isActive    Boolean  @default(false)  // false: Chờ duyệt, true: Được dùng
+
+  // --- PHẠM VI CÔNG VIỆC ---
+  processId   Int?     // User thuộc công đoạn nào?
+  process     Process? @relation(fields: [processId], references: [id])
+
+  createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
+  createdAt   DateTime @default(now())
+
+  @@map("users")
+}
