@@ -1,19 +1,39 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
-// PUT: Sửa tên
+// 1. PUT: Cập nhật (Dựa vào ID trên URL)
 export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }, // Lưu ý: Next.js 15+ params là Promise
 ) {
   try {
-    const { id: idString } = await params;
-    const id = parseInt(idString);
-    const body = await request.json();
+    const session = await auth();
+    if (
+      session?.user?.role !== "ADMIN" &&
+      session?.user?.accessLevel !== "MANAGER"
+    ) {
+      return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
+    }
+
+    // Await params để lấy ID
+    const { id } = await params;
+    const itemId = parseInt(id);
+
+    const body = await req.json();
+    const { name, code, ne, composition, twist, weavingStyle, material } = body;
 
     const updatedItem = await prisma.item.update({
-      where: { id: id },
-      data: { name: body.name },
+      where: { id: itemId },
+      data: {
+        name,
+        code,
+        ne: ne ? parseInt(ne) : null,
+        composition,
+        twist: twist ? parseInt(twist) : null,
+        weavingStyle,
+        material,
+      },
     });
 
     return NextResponse.json(updatedItem);
@@ -23,22 +43,41 @@ export async function PUT(
   }
 }
 
-// DELETE: Xóa
+// 2. DELETE: Xóa (Dựa vào ID trên URL)
 export async function DELETE(
-  request: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: idString } = await params;
-    const id = parseInt(idString);
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Chỉ Admin được xóa" },
+        { status: 403 },
+      );
+    }
 
-    await prisma.item.delete({ where: { id: id } });
-    return NextResponse.json({ message: "Đã xóa" });
+    const { id } = await params;
+    const itemId = parseInt(id);
+
+    // Kiểm tra ràng buộc
+    const item = await prisma.item.findUnique({
+      where: { id: itemId },
+      include: { _count: { select: { productionLogs: true } } },
+    });
+
+    if (item && item._count.productionLogs > 0) {
+      return NextResponse.json(
+        { error: "Mặt hàng này đã có dữ liệu sản xuất, không thể xóa!" },
+        { status: 400 },
+      );
+    }
+
+    await prisma.item.delete({ where: { id: itemId } });
+
+    return NextResponse.json({ message: "Đã xóa thành công" });
   } catch (error) {
     console.error(error);
-    return NextResponse.json(
-      { error: "Không thể xóa (Mặt hàng này đang được dùng trong sản xuất)" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Lỗi xóa dữ liệu" }, { status: 500 });
   }
 }

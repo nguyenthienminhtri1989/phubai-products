@@ -44,12 +44,25 @@ model Process {
 // ==========================================
 
 model Item {
-  id          Int      @id @default(autoincrement())
-  name        String   // Tên mặt hàng (Bắt buộc)
+  id           Int     @id @default(autoincrement())
   
-  // Quan hệ
-  runningOnMachines Machine[]       // Mặt hàng này đang chạy trên máy nào?
-  productionLogs    ProductionLog[] // Lịch sử sản xuất của mặt hàng này
+  // Các trường thông tin cơ bản
+  name         String  @unique // Tên đầy đủ (Không được trùng)
+  code         String? // Mã viết tắt (nếu cần sau này, tạm để optional)
+  
+  // Các thông số kỹ thuật (Optional - Không bắt buộc)
+  ne           Int?    // Chi số (Số nguyên 3 chữ số)
+  composition  String? // Thành phần
+  twist        Int?    // Độ săn (Số nguyên)
+  weavingStyle String? // Kiểu dệt
+  material     String? // Nguyên liệu
+  
+  // Quan hệ (Giữ nguyên logic cũ)
+  runningOnMachines Machine[]       // Đang chạy trên máy nào?
+  productionLogs    ProductionLog[] // Lịch sử sản xuất
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("items")
 }
@@ -98,32 +111,36 @@ model Machine {
 model ProductionLog {
   id          Int      @id @default(autoincrement())
   
-  // --- Thời gian logic ---
-  recordDate  DateTime @db.Date // Ngày sản xuất (Ca 3 đêm nay vẫn lưu là ngày hôm nay)
-  shift       Int      // Ca làm việc: 1, 2, hoặc 3
-  
-  // --- Liên kết ---
+  // 1. Thông tin Máy & Thời gian
   machineId   Int
-  machine     Machine  @relation(fields: [machineId], references: [id])
-
-  itemId      Int      // Snapshot: Tại thời điểm nhập, máy chạy hàng gì?
-  item        Item     @relation(fields: [itemId], references: [id])
-
-  // --- Số liệu nhập vào (Input) ---
-  endIndex    Float?   // Chỉ số cuối (Null nếu là máy Loại 1)
+  recordDate  DateTime @db.Date // Chỉ lưu ngày
+  shift       Int      // 1, 2, 3
   
-  // Khi lưu, giá trị này sẽ lấy từ ô nhập liệu (dù là auto-fill hay nhập tay)
-  inputNE     Float?
-
-  // --- Kết quả (Output) ---
-  finalOutput Float    // SẢN LƯỢNG CUỐI CÙNG (KG). Đã qua tính toán.
+  // 2. Thông tin Mặt hàng (Sửa lỗi quan hệ với Item)
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id]) 
   
-  // --- Audit ---
-  note        String?  // Ghi chú (nếu có)
-  createdAt   DateTime @default(now()) // Giờ nhập thực tế
-  createdById Int?     // Ai nhập?
+  // 3. Chỉ số & Sản lượng
+  startIndex  Float?   @default(0) // <--- Cột mới thêm
+  endIndex    Float?
+  inputNE     Float?   
+  finalOutput Float    
+  
+  note        String?
+
+  // 4. Quan hệ với User (Sửa lỗi createdLogs trong User)
+  // Thêm dòng này để Prisma biết ai là người tạo bản ghi
+  createdById Int?     // Có thể để null nếu chưa bắt buộc
   createdBy   User?    @relation(fields: [createdById], references: [id])
+  
+  // 5. Quan hệ với Máy
+  machine     Machine  @relation(fields: [machineId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca chỉ có 1 bản ghi
+  @@unique([machineId, recordDate, shift])
   @@map("production_logs")
 }
 

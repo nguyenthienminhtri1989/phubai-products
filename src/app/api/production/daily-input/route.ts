@@ -1,4 +1,3 @@
-// app/api/production/daily-input/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -6,81 +5,70 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { recordDate, note } = body;
-    let { machineId, shift, itemId, endIndex, inputNE, finalOutput } = body;
+    let {
+      machineId,
+      shift,
+      itemId,
+      startIndex,
+      endIndex,
+      inputNE,
+      finalOutput,
+    } = body;
 
-    // 1. Kiểm tra dữ liệu bắt buộc
+    // Validate
     if (!machineId || !recordDate || !shift) {
       return NextResponse.json(
-        { error: "Thiếu thông tin máy, ngày hoặc ca" },
+        { error: "Thiếu thông tin bắt buộc" },
         { status: 400 },
       );
     }
 
-    // 2. Kiểm tra itemId (tên mặt hàng được gán)
-    if (!itemId) {
-      return NextResponse.json(
-        {
-          error:
-            "Máy này chưa được gán Mặt hàng. Vui lòng vào trang 'Danh mục Máy' hoặc 'điều phối'để gán mặt hàng trước khi nhập sản lượng.",
-        },
-        { status: 400 },
-      );
-    }
-
-    // 3. Ép kiểu dữ liệu sang số (Int/Float) để Prisma không báo lỗi
+    // Ép kiểu an toàn
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
+    startIndex = startIndex !== null ? parseFloat(startIndex) : 0; // Lưu 0 nếu null
     endIndex = endIndex !== null ? parseFloat(endIndex) : null;
     inputNE = inputNE ? parseFloat(inputNE) : null;
     finalOutput = parseFloat(finalOutput);
-    // --------------------
 
+    // Xử lý Date: Giữ nguyên ngày YYYY-MM-DD từ client gửi lên để tránh lệch múi giờ
     const dateObj = new Date(recordDate);
 
-    // 2. Kiểm tra xem đã có bản ghi nào trùng (Máy + Ngày + Ca) chưa?
+    // Tìm xem đã có chưa (Update hay Create)
     const existingLog = await prisma.productionLog.findFirst({
       where: {
-        machineId: machineId,
+        machineId,
         recordDate: dateObj,
-        shift: shift,
+        shift,
       },
     });
 
     let savedLog;
+    const dataToSave = {
+      machineId,
+      recordDate: dateObj,
+      shift,
+      itemId,
+      startIndex, // Đã có trong Schema
+      endIndex,
+      inputNE,
+      finalOutput,
+      note,
+    };
 
     if (existingLog) {
-      // A. Nếu có rồi -> UPDATE
       savedLog = await prisma.productionLog.update({
         where: { id: existingLog.id },
-        data: {
-          itemId,
-          endIndex,
-          inputNE,
-          finalOutput,
-          note,
-          // Cập nhật người sửa nếu bạn có hệ thống auth (createdById)
-        },
+        data: dataToSave,
       });
     } else {
-      // B. Nếu chưa có -> CREATE
       savedLog = await prisma.productionLog.create({
-        data: {
-          machineId,
-          recordDate: dateObj,
-          shift,
-          itemId,
-          endIndex,
-          inputNE,
-          finalOutput,
-          note,
-        },
+        data: dataToSave,
       });
     }
 
-    // 2. CẬP NHẬT TRẠNG THÁI MÁY (Phụ trợ)
-    // Nếu đây là bản ghi mới nhất, hãy cập nhật lại Chi số hiện tại vào bảng Machine
-    // để lần sau mở form lên nó tự điền số mới này.
+    // Update NE cho máy để lần sau tự điền
     if (inputNE) {
       await prisma.machine.update({
         where: { id: machineId },
@@ -88,12 +76,9 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(savedLog, { status: 200 });
+    return NextResponse.json(savedLog);
   } catch (error) {
-    console.error("Lỗi lưu nhật ký:", error);
-    return NextResponse.json(
-      { error: "Lỗi hệ thống khi lưu" },
-      { status: 500 },
-    );
+    console.error("Save Error:", error);
+    return NextResponse.json({ error: "Lỗi hệ thống" }, { status: 500 });
   }
 }

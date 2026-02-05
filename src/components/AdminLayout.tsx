@@ -1,7 +1,8 @@
 "use client";
 
+import UserDropdown from "@/components/UserDropdown";
 import React, { useState, useEffect } from "react";
-import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Spin } from "antd";
+import { Layout, Menu, Button, theme, Spin } from "antd";
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -10,11 +11,16 @@ import {
   AppstoreOutlined,
   UserOutlined,
   HistoryOutlined,
-  LogoutOutlined,
   SettingOutlined,
+  SafetyCertificateOutlined, // Icon cho quản trị hệ thống
+  CloudSyncOutlined,         // Icon cho Backup
+  ApartmentOutlined,         // Icon Factory
+  BarcodeOutlined,           // Icon Item
+  PartitionOutlined,         // Icon Process
+  RobotOutlined              // Icon Machine
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -32,7 +38,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Bảo vệ route
+  // 1. Bảo vệ route
   useEffect(() => {
     if (status === "unauthenticated" && pathname !== "/login" && pathname !== "/register") {
       router.push("/login");
@@ -51,8 +57,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     );
   }
 
-  // Cấu hình Menu
-  const menuItems = [
+  // 2. Cấu hình Menu Cơ bản (Ai cũng thấy)
+  const baseMenuItems = [
     {
       key: "/",
       icon: <DashboardOutlined />,
@@ -63,10 +69,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: <DatabaseOutlined />,
       label: "Danh mục dữ liệu",
       children: [
-        { key: "/factories", label: "Nhà máy" },
-        { key: "/processes", label: "Công đoạn" },
-        { key: "/items", label: "Mặt hàng" },
-        { key: "/machines", label: "Máy móc" },
+        { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
+        { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
+        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> }, // Đã có trang quản lý mặt hàng
+        { key: "/machines", label: "Máy móc", icon: <RobotOutlined /> }, // Sắp làm
       ],
     },
     {
@@ -74,7 +80,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: <AppstoreOutlined />,
       label: "Quản lý Sản xuất",
       children: [
-        { key: "/production/assign", label: "Điều phối (Gán mặt hàng)" },
+        { key: "/production/assign", label: "Điều phối (Gán hàng)" },
         { key: "/production/daily-input", label: "Nhập sản lượng" },
         {
           key: "/production/history",
@@ -83,73 +89,69 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         },
       ],
     },
-    {
-      key: "/settings",
-      icon: <SettingOutlined />,
-      label: "Cấu hình hệ thống",
-    },
   ];
 
+  // 3. Cấu hình Menu Admin (Chỉ Admin mới thấy)
+  // Gom User và Backup vào nhóm "Quản trị hệ thống"
   if (session?.user?.role === "ADMIN") {
-    menuItems.splice(3, 0, {
-      key: "/users",
-      icon: <UserOutlined />,
-      label: "Quản lý Tài khoản",
+    baseMenuItems.push({
+      key: "sub-admin",
+      icon: <SafetyCertificateOutlined />,
+      label: "Quản trị hệ thống",
+      children: [
+        {
+          key: "/users", // Hoặc /admin/users nếu bạn đã đổi cấu trúc thư mục
+          icon: <UserOutlined />,
+          label: "Quản lý Tài khoản",
+        },
+        {
+          key: "/admin/backup",
+          icon: <CloudSyncOutlined />,
+          label: "Sao lưu & Phục hồi",
+        },
+      ],
     } as any);
   }
 
-  const userMenu = {
-    items: [
-      {
-        key: "0",
-        label: (
-          <div style={{ padding: '4px 0', cursor: 'default' }}>
-            <div style={{ fontWeight: 'bold' }}>{session?.user?.fullName}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>
-              {session?.user?.role} - {session?.user?.accessLevel}
-            </div>
-          </div>
-        ),
-      },
-      { type: 'divider' },
-      {
-        key: "2",
-        label: "Đăng xuất",
-        icon: <LogoutOutlined />,
-        danger: true,
-        onClick: () => { signOut({ callbackUrl: "/login" }); },
-      },
-    ],
-  };
+  // Thêm mục Cài đặt xuống cuối cùng
+  baseMenuItems.push({
+    key: "/settings",
+    icon: <SettingOutlined />,
+    label: "Cấu hình chung",
+  } as any);
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      {/* 1. SIDER: Đổi lại theme="dark" */}
-      <Sider trigger={null} collapsible collapsed={collapsed} width={250} theme="dark">
+      {/* SIDER */}
+      <Sider trigger={null} collapsible collapsed={collapsed} width={260} theme="dark">
         <div
           style={{
             height: 64,
             margin: 16,
-            // Đổi lại màu nền logo cho nổi bật trên nền đen
-            background: "rgba(255, 255, 255, 0.2)",
+            background: "rgba(255, 255, 255, 0.1)", // Chỉnh lại màu nền logo cho nhẹ nhàng hơn
+            border: "1px solid rgba(255, 255, 255, 0.2)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: "white", // Chữ màu trắng
+            color: "white",
             fontWeight: "bold",
             fontSize: collapsed ? 16 : 20,
-            borderRadius: 6,
+            borderRadius: 8,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            transition: "all 0.3s"
           }}
         >
           {collapsed ? "PB" : "PHU BAI ERP"}
         </div>
 
         <Menu
-          theme="dark" // 2. MENU: Đổi lại theme="dark"
+          theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2"]}
-          items={menuItems}
+          // Tự động mở menu con nếu đang ở trang con tương ứng
+          defaultOpenKeys={["sub1", "sub2", "sub-admin"]}
+          items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
               router.push(key);
@@ -158,6 +160,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         />
       </Sider>
 
+      {/* MAIN LAYOUT */}
       <Layout>
         <Header
           style={{
@@ -167,6 +170,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             justifyContent: "space-between",
             alignItems: "center",
             paddingRight: 24,
+            boxShadow: "0 1px 4px rgba(0,21,41,0.08)", // Thêm bóng đổ nhẹ cho Header tách biệt
+            zIndex: 1,
           }}
         >
           <Button
@@ -180,18 +185,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             }}
           />
 
-          <Space>
-            <span style={{ marginRight: 8 }}>
-              Xin chào, <b>{session?.user?.fullName || "User"}</b>
-            </span>
-            <Dropdown menu={userMenu} trigger={['click']}>
-              <Avatar
-                style={{ backgroundColor: "#1890ff", cursor: "pointer" }}
-                icon={<UserOutlined />}
-                src={`https://ui-avatars.com/api/?name=${session?.user?.fullName}&background=random`}
-              />
-            </Dropdown>
-          </Space>
+          {/* Component UserDropdown bạn đã tách riêng rất gọn */}
+          <UserDropdown />
         </Header>
 
         <Content
@@ -201,14 +196,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             minHeight: 280,
             background: colorBgContainer,
             borderRadius: borderRadiusLG,
-            overflow: "auto",
+            overflow: "initial", // Để nội dung dài vẫn cuộn mượt
           }}
         >
           {children}
         </Content>
 
-        <Footer style={{ textAlign: "center", color: "#888" }}>
-          Phu Bai Factory ©{new Date().getFullYear()} - Nguyễn Thiện Minh Trí
+        <Footer style={{ textAlign: "center", color: "#888", background: 'transparent' }}>
+          Sợi Phú Bài ERP ©{new Date().getFullYear()} - Developed by Minh Trí
         </Footer>
       </Layout>
     </Layout>

@@ -101,12 +101,25 @@ model Process {
 // ==========================================
 
 model Item {
-  id          Int      @id @default(autoincrement())
-  name        String   // Tên mặt hàng (Bắt buộc)
+  id           Int     @id @default(autoincrement())
   
-  // Quan hệ
-  runningOnMachines Machine[]       // Mặt hàng này đang chạy trên máy nào?
-  productionLogs    ProductionLog[] // Lịch sử sản xuất của mặt hàng này
+  // Các trường thông tin cơ bản
+  name         String  @unique // Tên đầy đủ (Không được trùng)
+  code         String? // Mã viết tắt (nếu cần sau này, tạm để optional)
+  
+  // Các thông số kỹ thuật (Optional - Không bắt buộc)
+  ne           Int?    // Chi số (Số nguyên 3 chữ số)
+  composition  String? // Thành phần
+  twist        Int?    // Độ săn (Số nguyên)
+  weavingStyle String? // Kiểu dệt
+  material     String? // Nguyên liệu
+  
+  // Quan hệ (Giữ nguyên logic cũ)
+  runningOnMachines Machine[]       // Đang chạy trên máy nào?
+  productionLogs    ProductionLog[] // Lịch sử sản xuất
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("items")
 }
@@ -155,32 +168,36 @@ model Machine {
 model ProductionLog {
   id          Int      @id @default(autoincrement())
   
-  // --- Thời gian logic ---
-  recordDate  DateTime @db.Date // Ngày sản xuất (Ca 3 đêm nay vẫn lưu là ngày hôm nay)
-  shift       Int      // Ca làm việc: 1, 2, hoặc 3
-  
-  // --- Liên kết ---
+  // 1. Thông tin Máy & Thời gian
   machineId   Int
-  machine     Machine  @relation(fields: [machineId], references: [id])
-
-  itemId      Int      // Snapshot: Tại thời điểm nhập, máy chạy hàng gì?
-  item        Item     @relation(fields: [itemId], references: [id])
-
-  // --- Số liệu nhập vào (Input) ---
-  endIndex    Float?   // Chỉ số cuối (Null nếu là máy Loại 1)
+  recordDate  DateTime @db.Date // Chỉ lưu ngày
+  shift       Int      // 1, 2, 3
   
-  // Khi lưu, giá trị này sẽ lấy từ ô nhập liệu (dù là auto-fill hay nhập tay)
-  inputNE     Float?
-
-  // --- Kết quả (Output) ---
-  finalOutput Float    // SẢN LƯỢNG CUỐI CÙNG (KG). Đã qua tính toán.
+  // 2. Thông tin Mặt hàng (Sửa lỗi quan hệ với Item)
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id]) 
   
-  // --- Audit ---
-  note        String?  // Ghi chú (nếu có)
-  createdAt   DateTime @default(now()) // Giờ nhập thực tế
-  createdById Int?     // Ai nhập?
+  // 3. Chỉ số & Sản lượng
+  startIndex  Float?   @default(0) // <--- Cột mới thêm
+  endIndex    Float?
+  inputNE     Float?   
+  finalOutput Float    
+  
+  note        String?
+
+  // 4. Quan hệ với User (Sửa lỗi createdLogs trong User)
+  // Thêm dòng này để Prisma biết ai là người tạo bản ghi
+  createdById Int?     // Có thể để null nếu chưa bắt buộc
   createdBy   User?    @relation(fields: [createdById], references: [id])
+  
+  // 5. Quan hệ với Máy
+  machine     Machine  @relation(fields: [machineId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca chỉ có 1 bản ghi
+  @@unique([machineId, recordDate, shift])
   @@map("production_logs")
 }
 
@@ -217,34 +234,145 @@ model User {
 ================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\seed.ts
 ================================================================================
-// prisma/seed.ts
-import { PrismaClient } from '@prisma/client'
-import * as bcrypt from 'bcryptjs'
+import { PrismaClient } from "@prisma/client";
+import * as bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
 
 async function main() {
-  // Tạo Admin mặc định
-  const passwordHash = await bcrypt.hash('admin123', 10) // Mật khẩu: admin123
-  
-  const admin = await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: {},
-    create: {
-      username: 'admin',
-      password: passwordHash,
-      fullName: 'Quản trị viên',
-      role: 'ADMIN',
-      accessLevel: 'MANAGER',
-      isActive: true, // Admin mặc định luôn active
+  console.log("🌱 Đang khởi tạo dữ liệu mẫu...");
+
+  // 1. TẠO NHÀ MÁY
+  const factory1 = await prisma.factory.create({
+    data: { name: "Nhà máy Sợi 1" },
+  });
+  const factory2 = await prisma.factory.create({
+    data: { name: "Nhà máy Sợi 2" },
+  });
+  const factory3 = await prisma.factory.create({
+    data: { name: "Nhà máy Sợi 3" },
+  });
+
+  // 2. TẠO CÔNG ĐOẠN
+  // Nhà máy 1
+  const procBongChai1 = await prisma.process.create({
+    data: { name: "Bông Chải NM12", factoryId: factory1.id },
+  });
+  const proGhepTho1 = await prisma.process.create({
+    data: { name: "Ghép Thô NM1", factoryId: factory1.id },
+  });
+  const proSoiCon1 = await prisma.process.create({
+    data: { name: "Sợi con NM1", factoryId: factory1.id },
+  });
+  const proDanhOng1 = await prisma.process.create({
+    data: { name: "Đánh ống NM1", factoryId: factory1.id },
+  });
+  const proDauXe = await prisma.process.create({
+    data: { name: "Đậu Xe", factoryId: factory1.id },
+  });
+  // Nhà máy 2
+  const proGhepTho2 = await prisma.process.create({
+    data: { name: "Ghép Thô NM2", factoryId: factory2.id },
+  });
+  const proSoiCon2 = await prisma.process.create({
+    data: { name: "Sợi con NM2", factoryId: factory2.id },
+  });
+  const proDanhOng2 = await prisma.process.create({
+    data: { name: "Đánh ống NM2", factoryId: factory2.id },
+  });
+  const proChaiKy2 = await prisma.process.create({
+    data: { name: "Cuộn cúi - Chải kỹ NM2", factoryId: factory2.id },
+  });
+  // Nhà máy 3
+  const procBongChai3 = await prisma.process.create({
+    data: { name: "Bông Chải NM3", factoryId: factory3.id },
+  });
+  const proGhepTho3 = await prisma.process.create({
+    data: { name: "Ghép Thô NM3", factoryId: factory3.id },
+  });
+  const proSoiCon3 = await prisma.process.create({
+    data: { name: "Sợi con NM3", factoryId: factory3.id },
+  });
+  const proDanhOng3 = await prisma.process.create({
+    data: { name: "Đánh ống NM3", factoryId: factory3.id },
+  });
+  const proChaiKy3 = await prisma.process.create({
+    data: { name: "Cuộn cúi - Chải kỹ NM3", factoryId: factory3.id },
+  });
+
+  // // 3. TẠO MẶT HÀNG (ITEMS)
+  // const itemCVC = await prisma.item.create({
+  //   data: { name: 'CVC 30', code: 'CVC30', ne: 30 },
+  // })
+  // const itemTC = await prisma.item.create({
+  //   data: { name: 'TC 40', code: 'TC40', ne: 40 },
+  // })
+
+  // // 4. TẠO MÁY MÓC (MACHINES)
+  // // Máy Thô (Loại 1 - Sản lượng trực tiếp)
+  // await prisma.machine.create({
+  //   data: {
+  //     name: 'Máy Thô 01',
+  //     processId: proctho.id,
+  //     formulaType: 1,
+  //     isActive: true,
+  //     currentNE: 0,
+  //     currentItemId: itemCVC.id // Gán luôn mặt hàng đang chạy
+  //   },
+  // })
+
+  // // Máy Ống (Loại 2 - Trừ lùi)
+  // await prisma.machine.create({
+  //   data: {
+  //     name: 'Máy Ống 01',
+  //     processId: procOng.id,
+  //     formulaType: 2,
+  //     isActive: true,
+  //     currentNE: 30,
+  //     currentItemId: itemCVC.id
+  //   },
+  // })
+
+  // // Máy Sợi Con (Loại 3 - Công thức phức tạp)
+  // await prisma.machine.create({
+  //   data: {
+  //     name: 'Máy Sợi 01',
+  //     processId: procSoiCon.id,
+  //     formulaType: 3,
+  //     isActive: true,
+  //     spindleCount: 480, // 480 cọc
+  //     currentNE: 30,
+  //     currentItemId: itemCVC.id
+  //   },
+  // })
+
+  // 5. TẠO TÀI KHOẢN ADMIN (Quan trọng nhất)
+  const hashedPassword = await bcrypt.hash("150489", 10);
+
+  await prisma.user.create({
+    data: {
+      username: "admin",
+      password: hashedPassword,
+      fullName: "Quản trị viên",
+      role: "ADMIN",
+      accessLevel: "MANAGER",
+      isActive: true, // Kích hoạt luôn
     },
-  })
-  console.log({ admin })
+  });
+
+  console.log("✅ Đã tạo xong dữ liệu mẫu!");
 }
 
 main()
-  .then(async () => { await prisma.$disconnect() })
-  .catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1) })
+  .then(async () => {
+    await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
+  });
+
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\seed.ts ---
 
@@ -269,6 +397,382 @@ export default defineConfig({
 
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma.config.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\admin\backup\page.tsx
+================================================================================
+"use client";
+
+import React, { useState } from "react";
+import { Card, Button, Upload, message, Modal, Alert, Typography, Divider, Steps } from "antd";
+import { CloudDownloadOutlined, CloudUploadOutlined, InboxOutlined, WarningOutlined } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
+
+const { Title, Text } = Typography;
+const { Dragger } = Upload;
+
+export default function BackupPage() {
+    const { data: session } = useSession();
+    const [loading, setLoading] = useState(false);
+
+    // --- XỬ LÝ BACKUP (TẢI VỀ) ---
+    const handleBackup = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/backup");
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.error);
+
+            // Tạo file JSON ảo để tải về
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            // Đặt tên file theo ngày giờ: backup-2026-02-05.json
+            a.download = `backup-phubai-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            message.success("Đã tải xuống file Backup thành công!");
+        } catch (error) {
+            console.error(error);
+            message.error("Lỗi khi tạo backup");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- XỬ LÝ RESTORE (UPLOAD) ---
+    const handleRestore = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const jsonContent = JSON.parse(e.target?.result as string);
+
+                Modal.confirm({
+                    title: "CẢNH BÁO QUAN TRỌNG",
+                    icon: <WarningOutlined style={{ color: "red" }} />,
+                    content: (
+                        <div>
+                            <p>Hành động này sẽ <b>XÓA TOÀN BỘ DỮ LIỆU HIỆN TẠI</b> và thay thế bằng dữ liệu trong file backup.</p>
+                            <p>Bạn có chắc chắn muốn tiếp tục không?</p>
+                        </div>
+                    ),
+                    okText: "Tôi đồng ý Khôi phục",
+                    okType: "danger",
+                    cancelText: "Hủy",
+                    onOk: async () => {
+                        setLoading(true);
+                        try {
+                            const res = await fetch("/api/admin/backup", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(jsonContent),
+                            });
+
+                            if (!res.ok) throw new Error("Lỗi server");
+
+                            message.success("Khôi phục dữ liệu thành công!");
+                            // Tùy chọn: Reload trang
+                            window.location.reload();
+                        } catch (err) {
+                            console.error(err);
+                            message.error("File lỗi hoặc cấu trúc không hợp lệ");
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error(err);
+                message.error("File không đúng định dạng JSON");
+            }
+        };
+        reader.readAsText(file);
+        return false; // Chặn upload mặc định của Antd
+    };
+
+    if (session?.user?.role !== "ADMIN") return <div className="p-10 text-center">Bạn không có quyền truy cập trang này</div>;
+
+    return (
+        <div className="p-6 max-w-4xl mx-auto">
+            <Title level={2}>Sao lưu & Phục hồi Dữ liệu</Title>
+            <Alert
+                message="Vùng nguy hiểm"
+                description="Chức năng này can thiệp trực tiếp vào Database. Hãy cẩn thận khi thực hiện Phục hồi (Restore)."
+                type="warning"
+                showIcon
+                style={{ marginBottom: 24 }}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* CỘT BACKUP */}
+                <Card
+                    title={<><CloudDownloadOutlined /> Sao lưu (Export)</>}
+                    bordered={false}
+                    style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                >
+                    <p>Tải xuống toàn bộ dữ liệu hiện tại (Máy móc, Mặt hàng, Nhật ký sản xuất, Tài khoản...) dưới dạng file <b>.json</b>.</p>
+                    <p className="text-gray-500 text-sm mb-4">Dùng file này để lưu trữ dự phòng hoặc chuyển dữ liệu sang máy khác.</p>
+
+                    <Button
+                        type="primary"
+                        size="large"
+                        icon={<CloudDownloadOutlined />}
+                        onClick={handleBackup}
+                        loading={loading}
+                        block
+                    >
+                        Tải xuống File Backup
+                    </Button>
+                </Card>
+
+                {/* CỘT RESTORE */}
+                <Card
+                    title={<><CloudUploadOutlined /> Phục hồi (Import)</>}
+                    bordered={false}
+                    style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                >
+                    <p>Khôi phục dữ liệu từ file <b>.json</b> đã backup trước đó.</p>
+                    <p className="text-red-500 text-sm mb-4 font-bold">Lưu ý: Dữ liệu hiện tại sẽ bị ghi đè hoàn toàn.</p>
+
+                    <Dragger
+                        name="file"
+                        multiple={false}
+                        showUploadList={false}
+                        beforeUpload={handleRestore}
+                        disabled={loading}
+                    >
+                        <p className="ant-upload-drag-icon">
+                            <InboxOutlined />
+                        </p>
+                        <p className="ant-upload-text">Kéo thả file JSON vào đây</p>
+                        <p className="ant-upload-hint">
+                            Hoặc bấm để chọn file từ máy tính
+                        </p>
+                    </Dragger>
+                </Card>
+            </div>
+
+            <Divider />
+
+            <div className="text-gray-500 text-sm">
+                <b>Quy trình khuyến nghị khi cập nhật phần mềm:</b>
+                <Steps
+                    size="small"
+                    current={-1}
+                    style={{ marginTop: 10 }}
+                    items={[
+                        { title: 'Bấm Tải xuống Backup' },
+                        { title: 'Thực hiện cập nhật Code/DB' },
+                        { title: 'Nếu mất dữ liệu -> Upload file để Restore' },
+                    ]}
+                />
+            </div>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\admin\backup\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\admin\backup\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+
+// 1. BACKUP: Tải dữ liệu về
+export async function GET() {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN")
+      return NextResponse.json(
+        { error: "Chỉ Admin mới được backup" },
+        { status: 403 },
+      );
+
+    // Lấy song song dữ liệu từ các bảng
+    const [factories, processes, items, machines, users, productionLogs] =
+      await Promise.all([
+        prisma.factory.findMany(),
+        prisma.process.findMany(),
+        prisma.item.findMany(),
+        prisma.machine.findMany(),
+        prisma.user.findMany(),
+        prisma.productionLog.findMany(),
+      ]);
+
+    // Gom lại thành 1 object JSON
+    const backupData = {
+      timestamp: new Date().toISOString(),
+      version: "1.0",
+      data: {
+        factories,
+        processes,
+        items,
+        machines,
+        users,
+        productionLogs,
+      },
+    };
+
+    return NextResponse.json(backupData);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Lỗi khi tạo backup" }, { status: 500 });
+  }
+}
+
+// 2. RESTORE: Khôi phục dữ liệu từ file
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN")
+      return NextResponse.json(
+        { error: "Chỉ Admin mới được restore" },
+        { status: 403 },
+      );
+
+    const body = await req.json();
+    const { factories, processes, items, machines, users, productionLogs } =
+      body.data;
+
+    // Sử dụng transaction để đảm bảo toàn vẹn dữ liệu (Thất bại là rollback hết)
+    await prisma.$transaction(async (tx) => {
+      // BƯỚC 1: Dọn dẹp dữ liệu cũ (Tùy chọn: Xóa hết để nạp lại cho sạch)
+      // Phải xóa theo thứ tự ngược lại của lúc tạo để tránh lỗi khóa ngoại
+      await tx.productionLog.deleteMany();
+      await tx.machine.deleteMany();
+      await tx.user.deleteMany();
+      await tx.process.deleteMany();
+      await tx.item.deleteMany();
+      await tx.factory.deleteMany();
+
+      // BƯỚC 2: Nạp dữ liệu mới (Theo đúng thứ tự phụ thuộc)
+
+      // 2.1. Nhà máy
+      if (factories?.length > 0)
+        await tx.factory.createMany({ data: factories });
+
+      // 2.2. Mặt hàng & Công đoạn
+      if (items?.length > 0) await tx.item.createMany({ data: items });
+      if (processes?.length > 0)
+        await tx.process.createMany({ data: processes });
+
+      // 2.3. User (Cần Công đoạn)
+      if (users?.length > 0) await tx.user.createMany({ data: users });
+
+      // 2.4. Máy móc (Cần Công đoạn & Mặt hàng)
+      if (machines?.length > 0) await tx.machine.createMany({ data: machines });
+
+      // 2.5. Nhật ký (Cần Máy, User, Item)
+      // Lưu ý: Nhật ký có thể rất nhiều, nếu > 5000 bản ghi có thể cần chia nhỏ (batching).
+      // Ở đây ta giả định dữ liệu chưa quá lớn.
+      if (productionLogs?.length > 0) {
+        // Format lại Date string về Date object
+        const formattedLogs = productionLogs.map((log: any) => ({
+          ...log,
+          recordDate: new Date(log.recordDate),
+          createdAt: new Date(log.createdAt),
+          updatedAt: new Date(log.updatedAt),
+        }));
+        await tx.productionLog.createMany({ data: formattedLogs });
+      }
+    });
+
+    return NextResponse.json({ message: "Khôi phục dữ liệu thành công!" });
+  } catch (error) {
+    console.error("Restore Error:", error);
+    return NextResponse.json(
+      { error: "Lỗi khôi phục dữ liệu (Có thể do sai cấu trúc file)" },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\admin\backup\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\auth\register\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import * as bcrypt from "bcryptjs";
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { username, password, fullName, processId } = body;
+
+    // 1. Kiểm tra dữ liệu đầu vào
+    if (!username || !password || !fullName || !processId) {
+      return NextResponse.json(
+        {
+          error:
+            "Vui lòng nhập đầy đủ thông tin: Tên đăng nhập, Mật khẩu, Họ tên và Bộ phận",
+        },
+        { status: 400 },
+      );
+    }
+
+    // 2. Kiểm tra xem username đã tồn tại chưa
+    const existingUser = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        {
+          error:
+            "Tên đăng nhập này đã có người sử dụng, vui lòng chọn tên khác.",
+        },
+        { status: 409 }, // 409 Conflict
+      );
+    }
+
+    // 3. Mã hóa mật khẩu
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4. Tạo User mới
+    // Lưu ý: isActive = false (Chờ duyệt), role = USER
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        fullName,
+        processId: parseInt(processId), // Chuyển processId từ chuỗi sang số
+        role: "USER", // Mặc định là nhân viên thường
+        accessLevel: "READ_ONLY", // Mặc định quyền thấp nhất
+        isActive: false, // Quan trọng: Phải chờ Admin duyệt
+      },
+    });
+
+    // 5. Trả về thông báo thành công
+    return NextResponse.json(
+      {
+        message:
+          "Đăng ký thành công! Vui lòng báo cho Quản trị viên để kích hoạt tài khoản.",
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error("Lỗi đăng ký:", error);
+    return NextResponse.json(
+      { error: "Lỗi hệ thống, không thể đăng ký lúc này." },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\auth\register\route.ts ---
 
 
 ================================================================================
@@ -412,49 +916,76 @@ FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\
 ================================================================================
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
-// Lấy danh sách sản phẩm
-export async function GET() {
+// 1. GET: Lấy danh sách (Có lọc)
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search");
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { code: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
     const items = await prisma.item.findMany({
-      orderBy: {
-        name: "asc", // Sắp xếp tên từ A - Z cho dễ tìm kiếm
+      where,
+      orderBy: { name: "asc" },
+      include: {
+        _count: { select: { productionLogs: true } },
       },
     });
+
     return NextResponse.json(items);
   } catch (error) {
     console.error(error);
-    return NextResponse.json(
-      { error: "Lỗi tải dữ liệu từ server" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Lỗi tải danh sách" }, { status: 500 });
   }
 }
 
-// Thêm sản phẩm
-export async function POST(request: Request) {
+// 2. POST: Tạo mới
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const { name } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: "Tên sản phẩm không được để trống" },
-        { status: 400 },
-      );
+    const session = await auth();
+    // Check quyền Admin hoặc Manager
+    if (
+      session?.user?.role !== "ADMIN" &&
+      session?.user?.accessLevel !== "MANAGER"
+    ) {
+      return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
     }
 
+    const body = await req.json();
+    const { name, code, ne, composition, twist, weavingStyle, material } = body;
+
+    if (!name)
+      return NextResponse.json({ error: "Tên bắt buộc" }, { status: 400 });
+
+    // Check trùng tên
+    const exists = await prisma.item.findUnique({ where: { name } });
+    if (exists)
+      return NextResponse.json({ error: "Tên đã tồn tại" }, { status: 409 });
+
     const newItem = await prisma.item.create({
-      data: { name },
+      data: {
+        name,
+        code,
+        ne: ne ? parseInt(ne) : null,
+        composition,
+        twist: twist ? parseInt(twist) : null,
+        weavingStyle,
+        material,
+      },
     });
 
     return NextResponse.json(newItem, { status: 201 });
   } catch (error) {
     console.error(error);
-    return NextResponse.json(
-      { error: "Lỗi thêm mới dữ liệu từ server" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Lỗi tạo mới" }, { status: 500 });
   }
 }
 
@@ -467,20 +998,40 @@ FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\items\
 ================================================================================
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
-// PUT: Sửa tên
+// 1. PUT: Cập nhật (Dựa vào ID trên URL)
 export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }, // Lưu ý: Next.js 15+ params là Promise
 ) {
   try {
-    const { id: idString } = await params;
-    const id = parseInt(idString);
-    const body = await request.json();
+    const session = await auth();
+    if (
+      session?.user?.role !== "ADMIN" &&
+      session?.user?.accessLevel !== "MANAGER"
+    ) {
+      return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
+    }
+
+    // Await params để lấy ID
+    const { id } = await params;
+    const itemId = parseInt(id);
+
+    const body = await req.json();
+    const { name, code, ne, composition, twist, weavingStyle, material } = body;
 
     const updatedItem = await prisma.item.update({
-      where: { id: id },
-      data: { name: body.name },
+      where: { id: itemId },
+      data: {
+        name,
+        code,
+        ne: ne ? parseInt(ne) : null,
+        composition,
+        twist: twist ? parseInt(twist) : null,
+        weavingStyle,
+        material,
+      },
     });
 
     return NextResponse.json(updatedItem);
@@ -490,23 +1041,42 @@ export async function PUT(
   }
 }
 
-// DELETE: Xóa
+// 2. DELETE: Xóa (Dựa vào ID trên URL)
 export async function DELETE(
-  request: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: idString } = await params;
-    const id = parseInt(idString);
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Chỉ Admin được xóa" },
+        { status: 403 },
+      );
+    }
 
-    await prisma.item.delete({ where: { id: id } });
-    return NextResponse.json({ message: "Đã xóa" });
+    const { id } = await params;
+    const itemId = parseInt(id);
+
+    // Kiểm tra ràng buộc
+    const item = await prisma.item.findUnique({
+      where: { id: itemId },
+      include: { _count: { select: { productionLogs: true } } },
+    });
+
+    if (item && item._count.productionLogs > 0) {
+      return NextResponse.json(
+        { error: "Mặt hàng này đã có dữ liệu sản xuất, không thể xóa!" },
+        { status: 400 },
+      );
+    }
+
+    await prisma.item.delete({ where: { id: itemId } });
+
+    return NextResponse.json({ message: "Đã xóa thành công" });
   } catch (error) {
     console.error(error);
-    return NextResponse.json(
-      { error: "Không thể xóa (Mặt hàng này đang được dùng trong sản xuất)" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Lỗi xóa dữ liệu" }, { status: 500 });
   }
 }
 
@@ -818,7 +1388,6 @@ export async function DELETE(
 ================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-input\route.ts
 ================================================================================
-// app/api/production/daily-input/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -826,81 +1395,70 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { recordDate, note } = body;
-    let { machineId, shift, itemId, endIndex, inputNE, finalOutput } = body;
+    let {
+      machineId,
+      shift,
+      itemId,
+      startIndex,
+      endIndex,
+      inputNE,
+      finalOutput,
+    } = body;
 
-    // 1. Kiểm tra dữ liệu bắt buộc
+    // Validate
     if (!machineId || !recordDate || !shift) {
       return NextResponse.json(
-        { error: "Thiếu thông tin máy, ngày hoặc ca" },
+        { error: "Thiếu thông tin bắt buộc" },
         { status: 400 },
       );
     }
 
-    // 2. Kiểm tra itemId (tên mặt hàng được gán)
-    if (!itemId) {
-      return NextResponse.json(
-        {
-          error:
-            "Máy này chưa được gán Mặt hàng. Vui lòng vào trang 'Danh mục Máy' hoặc 'điều phối'để gán mặt hàng trước khi nhập sản lượng.",
-        },
-        { status: 400 },
-      );
-    }
-
-    // 3. Ép kiểu dữ liệu sang số (Int/Float) để Prisma không báo lỗi
+    // Ép kiểu an toàn
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
+    startIndex = startIndex !== null ? parseFloat(startIndex) : 0; // Lưu 0 nếu null
     endIndex = endIndex !== null ? parseFloat(endIndex) : null;
     inputNE = inputNE ? parseFloat(inputNE) : null;
     finalOutput = parseFloat(finalOutput);
-    // --------------------
 
+    // Xử lý Date: Giữ nguyên ngày YYYY-MM-DD từ client gửi lên để tránh lệch múi giờ
     const dateObj = new Date(recordDate);
 
-    // 2. Kiểm tra xem đã có bản ghi nào trùng (Máy + Ngày + Ca) chưa?
+    // Tìm xem đã có chưa (Update hay Create)
     const existingLog = await prisma.productionLog.findFirst({
       where: {
-        machineId: machineId,
+        machineId,
         recordDate: dateObj,
-        shift: shift,
+        shift,
       },
     });
 
     let savedLog;
+    const dataToSave = {
+      machineId,
+      recordDate: dateObj,
+      shift,
+      itemId,
+      startIndex, // Đã có trong Schema
+      endIndex,
+      inputNE,
+      finalOutput,
+      note,
+    };
 
     if (existingLog) {
-      // A. Nếu có rồi -> UPDATE
       savedLog = await prisma.productionLog.update({
         where: { id: existingLog.id },
-        data: {
-          itemId,
-          endIndex,
-          inputNE,
-          finalOutput,
-          note,
-          // Cập nhật người sửa nếu bạn có hệ thống auth (createdById)
-        },
+        data: dataToSave,
       });
     } else {
-      // B. Nếu chưa có -> CREATE
       savedLog = await prisma.productionLog.create({
-        data: {
-          machineId,
-          recordDate: dateObj,
-          shift,
-          itemId,
-          endIndex,
-          inputNE,
-          finalOutput,
-          note,
-        },
+        data: dataToSave,
       });
     }
 
-    // 2. CẬP NHẬT TRẠNG THÁI MÁY (Phụ trợ)
-    // Nếu đây là bản ghi mới nhất, hãy cập nhật lại Chi số hiện tại vào bảng Machine
-    // để lần sau mở form lên nó tự điền số mới này.
+    // Update NE cho máy để lần sau tự điền
     if (inputNE) {
       await prisma.machine.update({
         where: { id: machineId },
@@ -908,13 +1466,10 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(savedLog, { status: 200 });
+    return NextResponse.json(savedLog);
   } catch (error) {
-    console.error("Lỗi lưu nhật ký:", error);
-    return NextResponse.json(
-      { error: "Lỗi hệ thống khi lưu" },
-      { status: 500 },
-    );
+    console.error("Save Error:", error);
+    return NextResponse.json({ error: "Lỗi hệ thống" }, { status: 500 });
   }
 }
 
@@ -925,7 +1480,6 @@ export async function POST(request: Request) {
 ================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\daily-status\route.ts
 ================================================================================
-// app/api/production/daily-status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -933,54 +1487,41 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const processId = searchParams.get("processId");
-    const dateStr = searchParams.get("date"); // YYYY-MM-DD
+    const dateStr = searchParams.get("date");
     const shift = searchParams.get("shift");
 
-    if (!processId || !dateStr || !shift) {
-      return NextResponse.json(
-        { error: "Thiếu thông tin lọc" },
-        { status: 400 },
-      );
-    }
+    if (!processId || !dateStr || !shift) return NextResponse.json([]);
 
-    // Convert date string sang Date object chuẩn ISO
     const targetDate = new Date(dateStr);
 
     const machines = await prisma.machine.findMany({
       where: {
         processId: parseInt(processId),
-        isActive: true, // Chỉ lấy máy đang hoạt động
+        isActive: true,
       },
       include: {
-        currentItem: true, // Lấy tên mặt hàng đang chạy để hiển thị
-        // Kỹ thuật: Lấy luôn log của ngày hôm nay (nếu có) để Frontend biết đường tô màu xanh
+        currentItem: true,
+        // Kỹ thuật: Include luôn log của Ca/Ngày đang chọn
         productionLogs: {
           where: {
             recordDate: targetDate,
             shift: parseInt(shift),
           },
-          select: {
-            id: true,
-            finalOutput: true,
-            // Lấy thêm các trường khác nếu muốn hiển thị chi tiết ngay trên card
-          },
           take: 1,
         },
       },
-      orderBy: { name: "asc" }, // Sắp xếp tên máy A->Z
+      orderBy: { id: "asc" },
     });
 
-    // Biến đổi dữ liệu cho gọn trước khi trả về Client
+    // Format lại dữ liệu cho Frontend dễ dùng
     const formattedData = machines.map((m) => ({
       ...m,
-      // Frontend đang mong đợi field tên là "todayLog" (object hoặc null)
       todayLog: m.productionLogs.length > 0 ? m.productionLogs[0] : null,
-      productionLogs: undefined, // Xóa mảng gốc đi cho nhẹ payload
+      productionLogs: undefined, // Xóa mảng gốc cho nhẹ
     }));
 
     return NextResponse.json(formattedData);
   } catch (error) {
-    console.error(error);
     return NextResponse.json({ error: "Lỗi server" }, { status: 500 });
   }
 }
@@ -992,7 +1533,6 @@ export async function GET(request: Request) {
 ================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\production\last-log\route.ts
 ================================================================================
-// app/api/production/last-log/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -1008,31 +1548,28 @@ export async function GET(request: Request) {
     const targetDate = new Date(dateStr);
     const targetShift = parseInt(shiftStr);
 
-    // LOGIC TRUY VẤN:
-    // Tìm bản ghi có (Ngày < Ngày hiện tại) HOẶC (Ngày = Ngày hiện tại NHƯNG Ca < Ca hiện tại)
+    // Logic: Tìm bản ghi có (Ngày nhỏ hơn) HOẶC (Ngày bằng nhưng Ca nhỏ hơn)
     const lastLog = await prisma.productionLog.findFirst({
       where: {
         machineId: parseInt(machineId),
         OR: [
-          { recordDate: { lt: targetDate } }, // Những ngày trước
+          { recordDate: { lt: targetDate } },
           {
             recordDate: targetDate,
-            shift: { lt: targetShift }, // Cùng ngày nhưng ca trước
+            shift: { lt: targetShift },
           },
         ],
       },
-      // Sắp xếp giảm dần để lấy cái mới nhất trong quá khứ
-      orderBy: [{ recordDate: "desc" }, { shift: "desc" }],
+      orderBy: [
+        { recordDate: "desc" }, // Ngày gần nhất
+        { shift: "desc" }, // Ca lớn nhất trong ngày đó
+      ],
     });
 
-    // Nếu tìm thấy thì trả về, không thấy (máy mới) thì trả null
     return NextResponse.json(lastLog);
   } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "Lỗi truy vấn lịch sử" },
-      { status: 500 },
-    );
+    console.error("Get Error:", error);
+    return NextResponse.json({ error: "Lỗi truy vấn" }, { status: 500 });
   }
 }
 
@@ -1041,19 +1578,112 @@ export async function GET(request: Request) {
 
 
 ================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\profile\change-password\route.ts
+================================================================================
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import * as bcrypt from "bcryptjs";
+
+export async function POST(req: Request) {
+  try {
+    // 1. Kiểm tra session
+    const session = await auth();
+
+    // --- IN RA TERMINAL ĐỂ KIỂM TRA ---
+    console.log(">>> [DEBUG] Session User:", session?.user);
+
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { error: "Bạn chưa đăng nhập" },
+        { status: 401 },
+      );
+    }
+
+    const body = await req.json();
+    const { currentPassword, newPassword } = body;
+
+    // 2. Validate input
+    if (!currentPassword || !newPassword) {
+      return NextResponse.json(
+        { error: "Thiếu thông tin mật khẩu" },
+        { status: 400 },
+      );
+    }
+
+    // 3. XỬ LÝ ID (QUAN TRỌNG NHẤT)
+    // NextAuth trả về id là string, ta phải ép kiểu về số
+    const userIdString = session.user.id;
+    const userId = parseInt(userIdString || "0"); // Ép kiểu sang số nguyên
+
+    console.log(
+      `>>> [DEBUG] Đang tìm User có ID: ${userId} (Kiểu gốc: ${typeof userIdString})`,
+    );
+
+    if (!userId || isNaN(userId)) {
+      return NextResponse.json(
+        { error: "Lỗi phiên đăng nhập (ID không hợp lệ)" },
+        { status: 401 },
+      );
+    }
+
+    // 4. Tìm User trong Database
+    const user = await prisma.user.findUnique({
+      where: { id: userId }, // Prisma cần ID là số (Int)
+    });
+
+    // --- ĐÂY LÀ CHỖ GÂY RA LỖI 404 CỦA BẠN ---
+    if (!user) {
+      console.log(">>> [LOI] Không tìm thấy user trong DB!");
+      return NextResponse.json(
+        { error: "Không tìm thấy tài khoản" },
+        { status: 404 },
+      );
+    }
+
+    // 5. Kiểm tra mật khẩu cũ
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
+    if (!isPasswordValid) {
+      return NextResponse.json(
+        { error: "Mật khẩu hiện tại không đúng" },
+        { status: 400 },
+      );
+    }
+
+    // 6. Cập nhật mật khẩu
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword },
+    });
+
+    console.log(">>> [THANH CONG] Đã đổi mật khẩu!");
+    return NextResponse.json({ message: "Đổi mật khẩu thành công!" });
+  } catch (error) {
+    console.error(">>> [LOI SERVER]:", error);
+    return NextResponse.json({ error: "Lỗi hệ thống" }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\profile\change-password\route.ts ---
+
+
+================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\users\route.ts
 ================================================================================
-// src/app/api/users/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as bcrypt from "bcryptjs";
-import { auth } from "@/auth"; // <-- Dùng auth() của v5
+import { auth } from "@/auth";
 
-// 1. GET: Lấy danh sách nhân viên
+// 1. GET: Lấy danh sách
 export async function GET() {
   try {
-    const session = await auth(); // <-- Code chuẩn v5
-
+    const session = await auth();
     if (session?.user?.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Không có quyền truy cập" },
@@ -1068,18 +1698,71 @@ export async function GET() {
 
     // Loại bỏ mật khẩu
     const safeUsers = users.map(({ password, ...rest }) => rest);
-
     return NextResponse.json(safeUsers);
   } catch (error) {
+    console.error("Get Users Error:", error);
     return NextResponse.json({ error: "Lỗi tải danh sách" }, { status: 500 });
   }
 }
 
-// 2. PUT: Cập nhật thông tin nhân viên
+// 2. POST: Tạo mới (ĐÃ SỬA: Dùng username)
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 },
+      );
+    }
+
+    const body = await req.json();
+    const { username, password, fullName, role, accessLevel, processId } = body;
+
+    // Validate
+    if (!username || !password || !fullName) {
+      return NextResponse.json(
+        { error: "Vui lòng nhập đủ: Username, Mật khẩu, Họ tên" },
+        { status: 400 },
+      );
+    }
+
+    // Kiểm tra trùng username
+    const exists = await prisma.user.findUnique({ where: { username } });
+    if (exists) {
+      return NextResponse.json(
+        { error: "Tên đăng nhập này đã tồn tại!" },
+        { status: 409 },
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await prisma.user.create({
+      data: {
+        username, // Dùng username
+        password: hashedPassword,
+        fullName,
+        role: role || "USER",
+        accessLevel: accessLevel || "READ_ONLY",
+        processId: processId ? parseInt(processId) : null,
+        isActive: true, // Admin tạo thì cho active luôn
+      },
+    });
+
+    // Trả về user không có password
+    const { password: _, ...userWithoutPass } = newUser;
+    return NextResponse.json(userWithoutPass, { status: 201 });
+  } catch (error) {
+    console.error("Create User Error:", error);
+    return NextResponse.json({ error: "Lỗi tạo user mới" }, { status: 500 });
+  }
+}
+
+// 3. PUT: Cập nhật (Giữ nguyên logic cũ, chỉ clean code)
 export async function PUT(req: Request) {
   try {
-    const session = await auth(); // <-- SỬA LỖI Ở ĐÂY (Trước là getServerSession)
-
+    const session = await auth();
     if (session?.user?.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Không có quyền truy cập" },
@@ -1116,8 +1799,10 @@ export async function PUT(req: Request) {
       data: updateData,
     });
 
-    return NextResponse.json(updatedUser);
+    const { password: _, ...safeUser } = updatedUser;
+    return NextResponse.json(safeUser);
   } catch (error) {
+    console.error("Update User Error:", error);
     return NextResponse.json({ error: "Lỗi cập nhật user" }, { status: 500 });
   }
 }
@@ -1379,178 +2064,270 @@ FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\items\page
 ================================================================================
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, message, Space, Card, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from "react";
+import { Table, Button, Modal, Form, Input, InputNumber, message, Card, Space, Popconfirm, Tag } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
 
-interface Item {
+interface ItemData {
     id: number;
     name: string;
+    code?: string;
+    ne?: number;
+    composition?: string;
+    twist?: number;
+    weavingStyle?: string;
+    material?: string;
+    _count?: { productionLogs: number };
 }
 
-export default function ItemPage() {
-    const [items, setItems] = useState<Item[]>([]);
+export default function ItemsManagementPage() {
+    const { data: session } = useSession();
+    const [items, setItems] = useState<ItemData[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingItem, setEditingItem] = useState<Item | null>(null);
+    const [editingItem, setEditingItem] = useState<ItemData | null>(null);
+    const [searchText, setSearchText] = useState("");
 
     const [form] = Form.useForm();
-    // State dùng để tìm kiếm nhanh trên bảng (Client-side search)
-    const [searchText, setSearchText] = useState('');
 
-    // --- FETCH DATA ---
+    // --- 1. Load dữ liệu ---
     const fetchItems = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/items');
-            const data = await res.json();
-            setItems(data);
-        } catch (error) {
-            message.error("Lỗi tải dữ liệu");
+            const query = searchText ? `?search=${encodeURIComponent(searchText)}` : "";
+            const res = await fetch(`/api/items${query}`);
+            if (res.ok) {
+                setItems(await res.json());
+            } else {
+                message.error("Không tải được danh sách");
+            }
+        } catch (e) {
+            message.error("Lỗi kết nối");
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { fetchItems(); }, []);
+    useEffect(() => {
+        fetchItems();
+    }, []);
 
-    // --- SAVE (ADD/EDIT) ---
+    // --- 2. Xử lý Lưu (Thêm/Sửa) ---
+    // --- 2. Xử lý Lưu (Thêm/Sửa) ---
     const handleSave = async (values: any) => {
         try {
-            let res;
-            if (editingItem) {
-                res = await fetch(`/api/items/${editingItem.id}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(values),
-                });
-            } else {
-                res = await fetch("/api/items", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(values),
-                });
-            }
+            // Nếu có editingItem -> PUT vào /api/items/[id]
+            // Nếu không -> POST vào /api/items
 
-            if (!res.ok) throw new Error("Lỗi từ server");
+            const url = editingItem
+                ? `/api/items/${editingItem.id}`
+                : "/api/items";
 
-            message.success(editingItem ? "Cập nhật thành công" : "Thêm mới thành công");
+            const method = editingItem ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Lỗi lưu dữ liệu");
+
+            message.success(editingItem ? "Cập nhật thành công!" : "Tạo mới thành công!");
             setIsModalOpen(false);
-            form.resetFields();
             setEditingItem(null);
+            form.resetFields();
             fetchItems();
-        } catch (error) {
-            message.error("Có lỗi xảy ra");
+        } catch (error: any) {
+            message.error(error.message);
         }
     };
 
-    // --- DELETE ---
+    // --- 3. Xử lý Xóa ---
     const handleDelete = async (id: number) => {
         try {
-            const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error("Không thể xóa");
-            message.success("Đã xóa");
+            // Gọi đúng chuẩn RESTful: DELETE /api/items/[id]
+            const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            message.success("Đã xóa mặt hàng");
             fetchItems();
-        } catch (error) {
-            message.error("Lỗi: Mặt hàng đang được sử dụng, không thể xóa!");
+        } catch (error: any) {
+            message.error(error.message);
         }
     };
 
-    // --- FILTER CLIENT SIDE (Tìm kiếm trong bảng) ---
-    const filteredItems = items.filter(item =>
-        item.name.toLowerCase().includes(searchText.toLowerCase())
-    );
+    // --- 4. Mở Modal ---
+    const openModal = (item?: ItemData) => {
+        if (item) {
+            setEditingItem(item);
+            form.setFieldsValue(item);
+        } else {
+            setEditingItem(null);
+            form.resetFields();
+        }
+        setIsModalOpen(true);
+    };
 
+    // --- 5. Cột bảng ---
     const columns = [
-        { title: 'ID', dataIndex: 'id', width: 80 },
         {
-            title: 'Tên Mặt Hàng',
-            dataIndex: 'name',
-            render: (t: string) => <b style={{ fontSize: 15 }}>{t}</b>
+            title: "Tên mặt hàng",
+            dataIndex: "name",
+            key: "name",
+            render: (text: string, r: ItemData) => (
+                <div>
+                    <div style={{ fontWeight: 600 }}>{text}</div>
+                    {r.code && <Tag color="blue">{r.code}</Tag>}
+                </div>
+            )
         },
         {
-            title: 'Hành động',
-            width: 120,
-            render: (_: any, record: Item) => (
-                <Space>
-                    <Button
-                        icon={<EditOutlined />}
-                        size="small"
-                        onClick={() => {
-                            setEditingItem(record);
-                            form.setFieldsValue(record);
-                            setIsModalOpen(true);
-                        }}
-                    />
-                    <Popconfirm
-                        title="Xóa mặt hàng?"
-                        description="Hành động này không thể hoàn tác"
-                        onConfirm={() => handleDelete(record.id)}
-                        okText="Xóa" cancelText="Hủy"
-                    >
-                        <Button icon={<DeleteOutlined />} danger size="small" />
-                    </Popconfirm>
+            title: "Chi số (NE)",
+            dataIndex: "ne",
+            key: "ne",
+            align: 'center' as const,
+            render: (ne: number) => ne ? <Tag color="geekblue">{ne}</Tag> : "-"
+        },
+        {
+            title: "Thành phần",
+            dataIndex: "composition",
+            key: "composition",
+        },
+        {
+            title: "Thông số khác",
+            key: "specs",
+            render: (_: any, r: ItemData) => (
+                <Space direction="vertical" size={0} style={{ fontSize: 12, color: '#666' }}>
+                    {r.material && <div>NL: {r.material}</div>}
+                    {r.twist && <div>Độ săn: {r.twist}</div>}
+                    {r.weavingStyle && <div>Kiểu: {r.weavingStyle}</div>}
                 </Space>
             )
-        }
+        },
+        {
+            title: "Trạng thái",
+            key: "status",
+            render: (_: any, r: ItemData) => {
+                const count = r._count?.productionLogs || 0;
+                return count > 0
+                    ? <Tag color="green">Đang sản xuất ({count})</Tag>
+                    : <Tag>Chưa dùng</Tag>
+            }
+        },
+        {
+            title: "Hành động",
+            key: "action",
+            align: 'right' as const,
+            render: (_: any, r: ItemData) => (
+                <Space>
+                    <Button icon={<EditOutlined />} size="small" onClick={() => openModal(r)} />
+
+                    <Popconfirm
+                        title="Xóa mặt hàng này?"
+                        description="Hành động này không thể hoàn tác."
+                        onConfirm={() => handleDelete(r.id)}
+                        okText="Xóa"
+                        cancelText="Hủy"
+                        disabled={(r._count?.productionLogs || 0) > 0} // Khóa nút xóa nếu đang dùng
+                    >
+                        <Button
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            danger
+                            disabled={(r._count?.productionLogs || 0) > 0}
+                        />
+                    </Popconfirm>
+                </Space>
+            ),
+        },
     ];
 
+    if (!session) return <div className="p-10 text-center">Vui lòng đăng nhập...</div>;
+
     return (
-        <div style={{ padding: 20 }}>
+        <div className="p-6">
             <Card
-                title="Quản lý Danh mục Mặt Hàng"
+                title="Danh mục Mặt hàng Sợi"
                 extra={
-                    <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => {
-                            setEditingItem(null);
-                            form.resetFields();
-                            setIsModalOpen(true);
-                        }}
-                    >
-                        Thêm Mặt Hàng
-                    </Button>
+                    <Space>
+                        <Input
+                            placeholder="Tìm tên hoặc mã..."
+                            prefix={<SearchOutlined />}
+                            value={searchText}
+                            onChange={e => setSearchText(e.target.value)}
+                            onPressEnter={fetchItems}
+                            style={{ width: 200 }}
+                        />
+                        <Button icon={<ReloadOutlined />} onClick={fetchItems}>Tải lại</Button>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Thêm mới</Button>
+                    </Space>
                 }
             >
-                <Input
-                    prefix={<FileTextOutlined />}
-                    placeholder="Tìm kiếm tên mặt hàng..."
-                    style={{ width: 300, marginBottom: 16 }}
-                    value={searchText}
-                    onChange={e => setSearchText(e.target.value)}
-                />
-
                 <Table
                     rowKey="id"
                     columns={columns}
-                    dataSource={filteredItems}
+                    dataSource={items}
                     loading={loading}
+                    pagination={{ pageSize: 8 }}
                     bordered
-                    pagination={{ pageSize: 10 }}
                 />
             </Card>
 
+            {/* MODAL THÊM / SỬA */}
             <Modal
-                title={editingItem ? "Sửa tên mặt hàng" : "Thêm mặt hàng mới"}
+                title={editingItem ? "Cập nhật Mặt hàng" : "Thêm Mặt hàng mới"}
                 open={isModalOpen}
                 onCancel={() => setIsModalOpen(false)}
                 footer={null}
+                width={600}
             >
                 <Form form={form} layout="vertical" onFinish={handleSave}>
-                    <Form.Item
-                        name="name"
-                        label="Tên mặt hàng"
-                        rules={[{ required: true, message: 'Vui lòng nhập tên!' }]}
-                    >
-                        <Input placeholder="Ví dụ: 20/1 CVCm (60/40) W..." />
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+                        <Form.Item
+                            name="name"
+                            label="Tên đầy đủ mặt hàng"
+                            rules={[{ required: true, message: "Vui lòng nhập tên" }]}
+                        >
+                            <Input placeholder="Ví dụ: CVC 30 Combed" />
+                        </Form.Item>
+
+                        <Form.Item name="code" label="Mã viết tắt">
+                            <Input placeholder="CVC30" />
+                        </Form.Item>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                        <Form.Item name="ne" label="Chi số (NE)">
+                            <InputNumber style={{ width: '100%' }} placeholder="30" min={1} />
+                        </Form.Item>
+
+                        <Form.Item name="twist" label="Độ săn (Twist)">
+                            <InputNumber style={{ width: '100%' }} placeholder="850" />
+                        </Form.Item>
+
+                        <Form.Item name="weavingStyle" label="Kiểu dệt">
+                            <Input placeholder="Dệt thoi / Kim" />
+                        </Form.Item>
+                    </div>
+
+                    <Form.Item name="composition" label="Thành phần">
+                        <Input placeholder="Ví dụ: 60% Cotton - 40% Poly" />
                     </Form.Item>
 
-                    <div style={{ textAlign: 'right' }}>
+                    <Form.Item name="material" label="Nguyên liệu đầu vào">
+                        <Input placeholder="Ví dụ: Bông Mỹ, Xơ Thái..." />
+                    </Form.Item>
+
+                    <div style={{ textAlign: "right", marginTop: 16 }}>
                         <Space>
-                            <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+                            <Button onClick={() => setIsModalOpen(false)}>Hủy bỏ</Button>
                             <Button type="primary" htmlType="submit">
-                                {editingItem ? 'Cập Nhật' : 'Lưu Lại'}
+                                {editingItem ? "Cập nhật" : "Thêm mới"}
                             </Button>
                         </Space>
                     </div>
@@ -1599,14 +2376,14 @@ export default function RootLayout({
               },
               components: {
                 Layout: {
-                  siderBg: "#000C75", // (1) Màu nền của thanh Sidebar tổng
+                  siderBg: "#010345", // (1) Màu nền của thanh Sidebar tổng
                 },
                 Menu: {
                   // Màu nền của các mục menu cấp 1
-                  darkItemBg: "#000C75",
+                  darkItemBg: "#010345",
 
                   // (2) QUAN TRỌNG: Màu nền của các menu con (SubMenu) khi xổ xuống
-                  darkSubMenuItemBg: "#000C75", // <-- Bạn chỉnh dòng này trùng màu với siderBg là được
+                  darkSubMenuItemBg: "#010345", // <-- Bạn chỉnh dòng này trùng màu với siderBg là được
 
                   // (3) Tùy chọn thêm: Màu nền của mục ĐANG ĐƯỢC CHỌN (Active)
                   // Nên để màu khác một chút (sáng hơn hoặc tối hơn) để người dùng biết mình đang ở đâu
@@ -2556,11 +3333,10 @@ FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Alert, Input } from 'antd';
-import { SaveOutlined, ArrowRightOutlined, HistoryOutlined, WarningOutlined } from '@ant-design/icons';
+import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Input } from 'antd';
+import { SaveOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { useSession } from "next-auth/react";
 
 // --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 interface Machine {
@@ -2568,12 +3344,10 @@ interface Machine {
     name: string;
     formulaType: number; // 1,2,3,4
     processId: number;
-    spindleCount?: number; // Cho loại 3
+    spindleCount?: number;
     currentItem?: { id: number; name: string };
-    currentNE?: number; // Cho loại 3,4
-    // Dữ liệu tạm để hiển thị trạng thái trên lưới
-    lastLog?: { endIndex: number };
-    todayLog?: { id: number; finalOutput: number }; // Nếu đã nhập hôm nay
+    currentNE?: number;
+    todayLog?: { id: number; finalOutput: number };
 }
 
 interface Factory { id: number; name: string; }
@@ -2581,115 +3355,118 @@ interface Process { id: number; name: string; factoryId: number; }
 
 export default function DailyInputPage() {
 
-    // --- 2. STATE QUẢN LÝ BỘ LỌC ---
+    // --- STATE QUẢN LÝ BỘ LỌC ---
     const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
     const [selectedShift, setSelectedShift] = useState<number>(1);
     const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
     const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null);
 
-    // --- 3. STATE DỮ LIỆU ---
+    // --- STATE DỮ LIỆU ---
     const [machines, setMachines] = useState<Machine[]>([]);
     const [factories, setFactories] = useState<Factory[]>([]);
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // --- 4. STATE MODAL NHẬP LIỆU ---
+    // --- STATE MODAL & FORM ---
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentMachine, setCurrentMachine] = useState<Machine | null>(null);
     const [form] = Form.useForm();
+    const inputRef = useRef<any>(null);
 
-    // Các biến theo dõi giá trị trong form để tính toán realtime
+    // Watch Form Values (Để tính toán realtime)
     const watchEndIndex = Form.useWatch('endIndex', form);
     const watchStartIndex = Form.useWatch('startIndex', form);
     const watchIsReset = Form.useWatch('isReset', form);
     const watchIsStopped = Form.useWatch('isStopped', form);
     const watchInputNE = Form.useWatch('inputNE', form);
 
-    // Ref để focus vào ô nhập
-    const inputRef = useRef<any>(null);
-
-    // --- 5. LOGIC KHỞI TẠO NGÀY GIỜ THÔNG MINH (SỚM 1 TIẾNG) ---
+    // --- 2. LOGIC TỰ ĐỘNG CHỌN CA & NGÀY (THÔNG MINH) ---
     useEffect(() => {
-        const hour = dayjs().hour();
-        // 05:00 - 12:59 -> Ca 3 ngày hôm qua
-        if (hour >= 5 && hour < 13) {
-            setSelectedShift(3);
-            setSelectedDate(dayjs().subtract(1, 'day'));
-        }
-        // 13:00 - 20:59 -> Ca 1 ngày hôm nay
-        else if (hour >= 13 && hour < 21) {
+        const now = dayjs();
+        const hour = now.hour();
+
+        // 13:00 - 20:59 -> Ca 1 (Hôm nay)
+        if (hour >= 13 && hour < 21) {
             setSelectedShift(1);
-            setSelectedDate(dayjs());
+            setSelectedDate(now);
         }
-        // 21:00 - 04:59 -> Ca 2 ngày hôm nay (Lưu ý: 21h-23h là hôm nay, 0h-4h là hôm nay)
-        else {
+        // 21:00 - 23:59 -> Ca 2 (Hôm nay)
+        else if (hour >= 21) {
             setSelectedShift(2);
-            setSelectedDate(dayjs()); // 21h đêm nay vẫn là ngày hôm nay
+            setSelectedDate(now);
+        }
+        // 00:00 - 04:59 -> Ca 2 (Ca đêm hôm qua)
+        else if (hour >= 0 && hour < 5) {
+            setSelectedShift(2);
+            setSelectedDate(now.subtract(1, 'day'));
+        }
+        // 05:00 - 12:59 -> Ca 3 (Ca đêm rạng sáng nay -> Thuộc ngày hôm qua)
+        else if (hour >= 5 && hour < 13) {
+            setSelectedShift(3);
+            setSelectedDate(now.subtract(1, 'day'));
         }
 
-        // Tải danh mục Factory/Process lần đầu
+        // Tải danh mục Nhà máy & Công đoạn ngay khi vào trang
         fetchMetadata();
     }, []);
 
     const fetchMetadata = async () => {
-        const [resFac, resPro] = await Promise.all([fetch('/api/factories'), fetch('/api/processes')]);
-        setFactories(await resFac.json());
-        setProcesses(await resPro.json());
+        try {
+            const [resFac, resPro] = await Promise.all([fetch('/api/factories'), fetch('/api/processes')]);
+            if (resFac.ok && resPro.ok) {
+                setFactories(await resFac.json());
+                setProcesses(await resPro.json());
+            }
+        } catch (e) { message.error("Lỗi tải danh mục nhà máy"); }
     };
 
-    // --- 6. TẢI DANH SÁCH MÁY & TRẠNG THÁI ---
+    // --- 3. TẢI DANH SÁCH MÁY (KHI CHỌN CÔNG ĐOẠN) ---
     const fetchMachines = async () => {
-        if (!selectedProcessId) return;
+        if (!selectedProcessId) return; // Chỉ tải khi đã chọn công đoạn
         setLoading(true);
         try {
-            // Gửi kèm Date & Shift để server check xem máy nào đã nhập rồi
             const dateStr = selectedDate.format('YYYY-MM-DD');
             const query = `?processId=${selectedProcessId}&date=${dateStr}&shift=${selectedShift}`;
-            const res = await fetch(`/api/production/daily-status${query}`); // API này ta sẽ viết sau
+            const res = await fetch(`/api/production/daily-status${query}`);
             const data = await res.json();
             setMachines(data);
         } catch (error) {
+            console.error("Error fetching machines:", error);
             message.error("Lỗi tải danh sách máy");
         } finally {
             setLoading(false);
         }
     };
 
-    // Tự động tải lại khi đổi bộ lọc
+    // Tự động tải lại khi đổi Ngày, Ca, hoặc Công đoạn
     useEffect(() => { fetchMachines(); }, [selectedProcessId, selectedDate, selectedShift]);
 
-    // --- 7. MỞ MODAL NHẬP LIỆU ---
+    // --- 4. MỞ MODAL & AUTO-FILL CHỈ SỐ CŨ ---
     const handleOpenMachine = async (machine: Machine) => {
-        // --- THÊM ĐOẠN NÀY ---
         if (!machine.currentItem) {
-            message.warning(`Máy ${machine.name} chưa được gán mặt hàng! Vui lòng gán mặt hàng trước.`);
-            // Tùy chọn: Có thể return luôn để không cho mở modal
-            // return; 
+            message.warning(`Máy ${machine.name} chưa được gán mặt hàng! Vui lòng gán trước.`);
+            return;
         }
-        // --------------------
 
         setCurrentMachine(machine);
         form.resetFields();
 
-        // Giá trị mặc định
         const initValues: any = {
-            startIndex: 0, // Mặc định 0, sẽ fetch sau
-            endIndex: null,
             isReset: false,
             isStopped: false,
-            // Lấy từ cấu hình máy (Auto-fill)
-            inputNE: machine.currentNE || 30, // Default tạm nếu chưa có
+            inputNE: machine.currentNE || 30,
             itemId: machine.currentItem?.id,
-            itemName: machine.currentItem?.name // Chỉ để hiện, ko submit
+            itemName: machine.currentItem?.name,
+            startIndex: 0,
+            endIndex: null
         };
 
-        // Nếu đã nhập hôm nay rồi (Sửa lại)
         if (machine.todayLog) {
-            // Logic load dữ liệu cũ để sửa... (Ta làm sau cho đơn giản)
-            message.info("Đang mở chế độ chỉnh sửa");
+            // Nếu đã nhập hôm nay -> Load lại (Logic mở rộng sau này)
+            message.info("Máy này đã nhập liệu rồi.");
+            // Nếu muốn cho sửa lại thì cần logic load detail ở đây
         } else {
-            // --- LOGIC QUAN TRỌNG: LẤY CHỈ SỐ TRƯỚC ---
-            // Gọi API lấy bản ghi gần nhất của máy này
+            // TÌM BẢN GHI CŨ NHẤT ĐỂ LẤY CHỈ SỐ CUỐI -> LÀM CHỈ SỐ ĐẦU
             try {
                 const res = await fetch(`/api/production/last-log?machineId=${machine.id}&date=${selectedDate.format('YYYY-MM-DD')}&shift=${selectedShift}`);
                 const lastLog = await res.json();
@@ -2697,93 +3474,95 @@ export default function DailyInputPage() {
                 if (lastLog && lastLog.endIndex !== undefined) {
                     initValues.startIndex = lastLog.endIndex;
                 } else {
-                    // Máy mới chưa có lịch sử -> Cho phép nhập tay startIndex
-                    // Ta dùng 1 cờ hiệu để UI biết mà mở khóa ô input
-                    initValues.isNewMachine = true;
+                    initValues.isNewMachine = true; // Máy mới tinh -> Cho nhập tay
                 }
             } catch (e) { console.error(e); }
         }
 
         form.setFieldsValue(initValues);
         setIsModalOpen(true);
-
-        // Focus vào ô endIndex sau 100ms
+        // Focus vào ô nhập sau 100ms
         setTimeout(() => inputRef.current?.focus(), 100);
     };
 
-    // --- 8. LOGIC TÍNH TOÁN SẢN LƯỢNG (REAL-TIME) ---
+    // --- 5. TÍNH TOÁN SẢN LƯỢNG REAL-TIME ---
     const calculatedOutput = useMemo(() => {
-        if (!currentMachine) return 0;
-
-        // Nếu máy dừng -> Sản lượng 0
-        if (watchIsStopped) return 0;
+        if (!currentMachine || watchIsStopped) return 0;
 
         const start = Number(watchStartIndex) || 0;
-        const end = Number(watchEndIndex) || 0;
+        const end = Number(watchEndIndex);
 
-        // Nếu chưa nhập số cuối -> 0
+        // Nếu chưa nhập số cuối hoặc để trống
         if (watchEndIndex === null || watchEndIndex === undefined) return 0;
 
-        // Logic Delta (Chênh lệch)
         let delta = 0;
-        if (watchIsReset) {
-            delta = end; // Nếu reset, coi như chạy từ 0 đến End
-        } else {
-            delta = end - start;
-        }
+        // Nếu Reset -> Tính từ 0 lên End. Nếu không -> End - Start
+        if (watchIsReset) delta = end;
+        else delta = end - start;
 
-        // Nếu âm (và không reset) -> Trả về âm để UI cảnh báo
-        if (delta < 0) return delta;
-
-        // ÁP DỤNG CÔNG THỨC
+        // Công thức
         const type = currentMachine.formulaType;
         let result = 0;
 
-        if (type === 1) {
-            result = end; // Nhập thẳng (Với loại 1, ô EndIndex chính là sản lượng)
-        } else if (type === 2) {
-            result = delta; // Trừ lùi
-        } else if (type === 3) {
-            // ((Cuối - Đầu) * Số cọc) / (Chi số * 1000 * 1.693)
+        if (type === 1) result = end; // Loại 1: Sản lượng trực tiếp
+        else if (type === 2) result = delta; // Loại 2: Trừ lùi
+        else if (type === 3) { // Loại 3: Máy sợi con
             const ne = Number(watchInputNE) || 1;
             const spindles = currentMachine.spindleCount || 1;
             const denominator = ne * 1000 * 1.693;
-            if (denominator !== 0) {
-                result = (delta * spindles) / denominator;
-            }
-        } else if (type === 4) {
-            // (Cuối - Đầu) / Chi số
+            if (denominator !== 0) result = (delta * spindles) / denominator;
+        } else if (type === 4) { // Loại 4: Chia chi số
             const ne = Number(watchInputNE) || 1;
             if (ne !== 0) result = delta / ne;
         }
 
-        return parseFloat(result.toFixed(2)); // Làm tròn 2 số thập phân
+        return parseFloat(result.toFixed(2));
     }, [watchEndIndex, watchStartIndex, watchIsReset, watchIsStopped, watchInputNE, currentMachine]);
 
-    // --- 9. LƯU DỮ LIỆU ---
+    // --- 6. XỬ LÝ LƯU (CÓ CẢNH BÁO) ---
     const handleSave = async (saveAndNext: boolean) => {
         try {
             const values = await form.validateFields();
 
-            // Kiểm tra logic an toàn
+            // A. Check SỐ ÂM
             if (calculatedOutput < 0 && !values.isReset && !values.isStopped) {
-                message.error("Sản lượng bị ÂM. Vui lòng kiểm tra lại hoặc tích 'Reset đồng hồ'");
+                Modal.error({
+                    title: 'Lỗi số liệu!',
+                    content: 'Sản lượng bị ÂM. Có phải đồng hồ đã bị Reset về 0? Hãy tích vào ô "Đã Reset/Thay đồng hồ".',
+                });
                 return;
             }
 
-            // Gửi API
+            // B. Check SỐ QUÁ LỚN (Sanity Check)
+            if (calculatedOutput > 1000) {
+                Modal.confirm({
+                    title: 'Cảnh báo số liệu lớn',
+                    content: `Sản lượng ${calculatedOutput} kg là rất lớn. Bạn có chắc chắn nhập đúng không?`,
+                    onOk: () => submitData(values, saveAndNext),
+                });
+                return;
+            }
+
+            await submitData(values, saveAndNext);
+
+        } catch (e) { /* Validate form fail */ }
+    };
+
+    const submitData = async (values: any, saveAndNext: boolean) => {
+        try {
             const payload = {
                 recordDate: selectedDate.format('YYYY-MM-DD'),
                 shift: selectedShift,
                 machineId: currentMachine?.id,
-                itemId: values.itemId, // ID mặt hàng đang chạy (lấy từ form hidden)
-                endIndex: values.endIndex,
+                itemId: values.itemId,
+                startIndex: values.startIndex, // Lưu chỉ số đầu
+                endIndex: values.endIndex,     // Lưu chỉ số cuối
                 inputNE: values.inputNE,
                 finalOutput: calculatedOutput,
                 note: values.isStopped ? "Máy dừng" : (values.isReset ? "Reset đồng hồ" : "")
             };
 
-            const res = await fetch('/api/production/daily-input', { // API Save
+            const res = await fetch('/api/production/daily-input', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -2791,73 +3570,74 @@ export default function DailyInputPage() {
 
             if (!res.ok) throw new Error('Lỗi lưu');
 
-            message.success("Đã lưu!");
+            message.success("Đã lưu thành công!");
 
-            // Cập nhật lại trạng thái máy trong list (để đổi màu xanh)
+            // Cập nhật UI ngay lập tức (Đổi màu thẻ máy)
             setMachines(prev => prev.map(m =>
-                m.id === currentMachine?.id
-                    ? { ...m, todayLog: { id: 0, finalOutput: calculatedOutput } }
-                    : m
+                m.id === currentMachine?.id ? { ...m, todayLog: { id: 0, finalOutput: calculatedOutput } } : m
             ));
 
             if (saveAndNext) {
-                // Tìm máy tiếp theo trong list
-                const currentIndex = machines.findIndex(m => m.id === currentMachine?.id);
-                if (currentIndex < machines.length - 1) {
-                    handleOpenMachine(machines[currentIndex + 1]); // Mở máy kế tiếp
-                } else {
-                    setIsModalOpen(false);
-                    message.success("Đã nhập hết danh sách!");
-                }
+                // Tìm máy tiếp theo để mở luôn
+                const idx = machines.findIndex(m => m.id === currentMachine?.id);
+                if (idx < machines.length - 1) handleOpenMachine(machines[idx + 1]);
+                else { setIsModalOpen(false); message.success("Đã nhập hết danh sách!"); }
             } else {
                 setIsModalOpen(false);
             }
-
-        } catch (e) {
-            message.error("Có lỗi xảy ra");
-        }
+        } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
     // --- GIAO DIỆN ---
     return (
         <div style={{ padding: 20 }}>
-            {/* 1. THANH CÔNG CỤ (FILTERS) */}
+            {/* 1. THANH CÔNG CỤ (FILTERS) - ĐÃ CÓ ĐẦY ĐỦ NHÀ MÁY & CÔNG ĐOẠN */}
             <Card style={{ marginBottom: 16 }} size="small">
                 <Row gutter={16} align="middle">
-                    <Col span={6}>
+                    {/* Cột 1: Chọn Nhà máy & Công đoạn */}
+                    <Col span={8}>
                         <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy & Công đoạn:</div>
                         <div style={{ display: 'flex', gap: 8 }}>
                             <Select
-                                style={{ width: '50%' }} placeholder="Nhà máy"
+                                style={{ width: '50%' }}
+                                placeholder="Chọn Nhà máy"
                                 options={factories.map(f => ({ label: f.name, value: f.id }))}
                                 onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
+                                value={selectedFactoryId}
                             />
                             <Select
-                                style={{ width: '50%' }} placeholder="Công đoạn"
+                                style={{ width: '50%' }}
+                                placeholder="Chọn Công đoạn"
                                 options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
                                 onChange={setSelectedProcessId}
                                 value={selectedProcessId}
+                                disabled={!selectedFactoryId} // Khóa nếu chưa chọn nhà máy
                             />
                         </div>
                     </Col>
-                    <Col span={6}>
+
+                    {/* Cột 2: Chọn Ngày & Ca */}
+                    <Col span={8}>
                         <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày & Ca sản xuất:</div>
                         <div style={{ display: 'flex', gap: 8 }}>
                             <DatePicker
                                 value={selectedDate}
                                 onChange={val => val && setSelectedDate(val)}
-                                format="DD/MM/YYYY" style={{ flex: 1 }}
+                                format="DD/MM/YYYY"
                                 allowClear={false}
+                                style={{ flex: 1 }}
                             />
                             <Select
                                 value={selectedShift}
                                 onChange={setSelectedShift}
-                                style={{ width: 80 }}
+                                style={{ width: 100 }}
                                 options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]}
                             />
                         </div>
                     </Col>
-                    <Col span={12} style={{ textAlign: 'right' }}>
+
+                    {/* Cột 3: Thống kê */}
+                    <Col span={8} style={{ textAlign: 'right' }}>
                         <Statistic
                             title="Tiến độ nhập liệu"
                             value={machines.filter(m => m.todayLog).length}
@@ -2870,16 +3650,20 @@ export default function DailyInputPage() {
 
             {/* 2. LƯỚI MÁY (GRID) */}
             {!selectedProcessId ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>Vui lòng chọn Công đoạn để bắt đầu</div>
+                <div style={{ textAlign: 'center', padding: 50, background: '#fff', borderRadius: 8 }}>
+                    <div style={{ color: '#999', marginBottom: 10 }}>Vui lòng chọn <b>Nhà máy</b> và <b>Công đoạn</b> để hiển thị danh sách máy.</div>
+                </div>
             ) : (
                 <Row gutter={[12, 12]}>
-                    {machines.map(machine => {
-                        const isDone = !!machine.todayLog;
+                    {machines.length === 0 && <div style={{ width: '100%', textAlign: 'center', padding: 20 }}>Không có máy nào trong công đoạn này.</div>}
+
+                    {machines.map(m => {
+                        const isDone = !!m.todayLog;
                         return (
-                            <Col xs={12} sm={8} md={6} lg={4} key={machine.id}>
+                            <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
                                 <Card
                                     hoverable
-                                    onClick={() => handleOpenMachine(machine)}
+                                    onClick={() => handleOpenMachine(m)}
                                     style={{
                                         cursor: 'pointer',
                                         border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9',
@@ -2888,19 +3672,14 @@ export default function DailyInputPage() {
                                     bodyStyle={{ padding: 12 }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <b>{machine.name}</b>
+                                        <b>{m.name}</b>
                                         {isDone && <SaveOutlined style={{ color: '#52c41a' }} />}
                                     </div>
-                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4, height: 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {machine.currentItem?.name || '-'}
+                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                                        {m.currentItem?.name || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
                                     </div>
-
-                                    <div style={{ marginTop: 8, textAlign: 'right' }}>
-                                        {isDone ? (
-                                            <b style={{ fontSize: 18, color: '#52c41a' }}>{machine.todayLog?.finalOutput} <small>kg</small></b>
-                                        ) : (
-                                            <span style={{ color: '#ccc' }}>Chưa nhập</span>
-                                        )}
+                                    <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 'bold', fontSize: 16 }}>
+                                        {isDone ? <span style={{ color: 'green' }}>{m.todayLog?.finalOutput} <small>kg</small></span> : <span style={{ color: '#ccc' }}>--</span>}
                                     </div>
                                 </Card>
                             </Col>
@@ -2909,121 +3688,65 @@ export default function DailyInputPage() {
                 </Row>
             )}
 
-            {/* 3. MODAL NHẬP LIỆU (TRÁI TIM CỦA TRANG) */}
+            {/* 3. MODAL NHẬP LIỆU */}
             <Modal
-                title={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 30 }}>
-                        <span>
-                            {currentMachine?.name}
-                            <Tag style={{ marginLeft: 8 }} color="blue">{currentMachine?.currentItem?.name}</Tag>
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 'normal', color: '#888' }}>
-                            Công thức loại: {currentMachine?.formulaType}
-                        </span>
-                    </div>
-                }
                 open={isModalOpen}
                 onCancel={() => setIsModalOpen(false)}
                 footer={null}
                 width={500}
                 centered
+                title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 30 }}>
+                        <span>{currentMachine?.name} <Tag color="blue">{currentMachine?.currentItem?.name}</Tag></span>
+                    </div>
+                }
             >
                 <Form form={form} layout="vertical">
-                    {/* Trường ẩn lưu ID mặt hàng */}
                     <Form.Item name="itemId" hidden><Input /></Form.Item>
 
-                    {/* SWITCH: Máy dừng & Reset */}
+                    {/* Switch Trạng thái */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
                         <Form.Item name="isStopped" valuePropName="checked" noStyle>
                             <Switch checkedChildren="Máy dừng" unCheckedChildren="Máy đang chạy" />
                         </Form.Item>
                         <Form.Item name="isReset" valuePropName="checked" noStyle>
-                            <Switch
-                                checkedChildren="Đã Reset/Thay đồng hồ"
-                                unCheckedChildren="Đồng hồ bình thường"
-                                style={{ background: watchIsReset ? '#faad14' : undefined }}
-                                disabled={watchIsStopped}
-                            />
+                            <Switch checkedChildren="Đã Reset/Thay đồng hồ" unCheckedChildren="Đồng hồ bình thường" disabled={watchIsStopped} style={{ background: watchIsReset ? '#faad14' : undefined }} />
                         </Form.Item>
                     </div>
 
-                    {/* Cảnh báo nếu máy dừng */}
-                    {watchIsStopped && <Alert message="Máy dừng sẽ được ghi nhận sản lượng = 0" type="warning" showIcon style={{ marginBottom: 16 }} />}
-
-                    {/* INPUTS CHÍNH */}
                     <Row gutter={16}>
-                        {/* Chỉ số TRƯỚC */}
                         <Col span={12}>
-                            <Form.Item
-                                name="startIndex"
-                                label="Chỉ số TRƯỚC (Ca trước)"
-                            >
-                                <InputNumber
-                                    style={{ width: '100%' }}
-                                    readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')}
-                                    disabled={watchIsStopped}
-                                    variant={(!watchIsReset && !form.getFieldValue('isNewMachine')) ? "filled" : "outlined"}
-                                />
+                            <Form.Item name="startIndex" label="Chỉ số TRƯỚC (Ca trước)">
+                                {/* ReadOnly trừ khi là máy mới hoặc Reset */}
+                                <InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')} variant="filled" disabled={watchIsStopped} />
                             </Form.Item>
                         </Col>
-
-                        {/* Chỉ số SAU */}
                         <Col span={12}>
-                            <Form.Item
-                                name="endIndex"
-                                label="Chỉ số SAU (Hiện tại)"
-                                rules={[{ required: !watchIsStopped, message: 'Nhập chỉ số!' }]}
-                            >
-                                <InputNumber
-                                    ref={inputRef}
-                                    style={{ width: '100%', fontWeight: 'bold', fontSize: 16 }}
-                                    disabled={watchIsStopped}
-                                    onPressEnter={() => handleSave(true)} // Enter là lưu & next luôn
-                                />
+                            <Form.Item name="endIndex" label="Chỉ số SAU (Hiện tại)" rules={[{ required: !watchIsStopped, message: 'Nhập chỉ số!' }]}>
+                                <InputNumber ref={inputRef} style={{ width: '100%', fontWeight: 'bold', fontSize: 16 }} onPressEnter={() => handleSave(true)} disabled={watchIsStopped} />
                             </Form.Item>
                         </Col>
                     </Row>
 
-                    {/* Input phụ cho loại 3, 4 (Chi số) */}
+                    {/* Nhập Chi số thực tế nếu là loại 3,4 */}
                     {(currentMachine?.formulaType === 3 || currentMachine?.formulaType === 4) && (
                         <Form.Item name="inputNE" label="Chi số (NE) thực tế">
                             <InputNumber style={{ width: '100%' }} disabled={watchIsStopped} />
                         </Form.Item>
                     )}
 
-                    {/* KẾT QUẢ TÍNH TOÁN */}
-                    <div style={{ textAlign: 'center', padding: 15, background: calculatedOutput < 0 ? '#fff1f0' : '#f6ffed', borderRadius: 8, border: calculatedOutput < 0 ? '1px solid #ffccc7' : '1px solid #b7eb8f' }}>
+                    {/* Kết quả tính toán */}
+                    <div style={{ textAlign: 'center', padding: 15, background: calculatedOutput < 0 ? '#fff1f0' : '#f6ffed', marginBottom: 20, borderRadius: 8, border: calculatedOutput < 0 ? '1px solid #ffccc7' : '1px solid #b7eb8f' }}>
                         <div style={{ color: '#666', fontSize: 12 }}>Sản lượng ước tính:</div>
                         <div style={{ fontSize: 28, fontWeight: 'bold', color: calculatedOutput < 0 ? 'red' : '#389e0d' }}>
                             {calculatedOutput} <small>kg</small>
                         </div>
-
-                        {/* Cảnh báo logic */}
-                        {calculatedOutput < 0 && !watchIsReset && !watchIsStopped && (
-                            <div style={{ color: 'red', marginTop: 5 }}>
-                                <WarningOutlined /> Chỉ số sau nhỏ hơn chỉ số trước!
-                            </div>
-                        )}
-                        {calculatedOutput > 1000 && (
-                            <div style={{ color: '#faad14', marginTop: 5 }}>
-                                <WarningOutlined /> Sản lượng quá lớn, hãy kiểm tra lại!
-                            </div>
-                        )}
                     </div>
 
-                    {/* ACTION BUTTONS */}
-                    <Row gutter={16} style={{ marginTop: 24 }}>
-                        <Col span={8}>
-                            <Button block onClick={() => setIsModalOpen(false)}>Hủy</Button>
-                        </Col>
-                        <Col span={8}>
-                            <Button block icon={<SaveOutlined />} onClick={() => handleSave(false)} disabled={watchIsStopped ? false : calculatedOutput < 0}>Lưu</Button>
-                        </Col>
-                        <Col span={8}>
-                            <Button block type="primary" icon={<ArrowRightOutlined />} onClick={() => handleSave(true)} disabled={watchIsStopped ? false : calculatedOutput < 0}>
-                                Lưu & Tiếp
-                            </Button>
-                        </Col>
+                    <Row gutter={16}>
+                        <Col span={8}><Button block onClick={() => setIsModalOpen(false)}>Hủy</Button></Col>
+                        <Col span={8}><Button block icon={<SaveOutlined />} onClick={() => handleSave(false)} disabled={!watchIsStopped && calculatedOutput < 0}>Lưu</Button></Col>
+                        <Col span={8}><Button block type="primary" icon={<ArrowRightOutlined />} onClick={() => handleSave(true)} disabled={!watchIsStopped && calculatedOutput < 0}>Lưu & Tiếp</Button></Col>
                     </Row>
                 </Form>
             </Modal>
@@ -3032,6 +3755,157 @@ export default function DailyInputPage() {
 }
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\production\daily-input\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\profile\page.tsx
+================================================================================
+"use client";
+
+import React, { useState } from "react";
+import { Card, Form, Input, Button, Tabs, message, Tag, Descriptions } from "antd";
+import { UserOutlined, LockOutlined, KeyOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+
+export default function ProfilePage() {
+    const { data: session } = useSession();
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+    const [form] = Form.useForm();
+
+    // Xử lý đổi mật khẩu
+    const handleChangePassword = async (values: any) => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/profile/change-password", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Có lỗi xảy ra");
+            }
+
+            message.success("Đổi mật khẩu thành công! Vui lòng đăng nhập lại.");
+            form.resetFields();
+
+            // Tùy chọn: Đăng xuất user sau khi đổi pass để bắt đăng nhập lại
+            // import { signOut } from "next-auth/react";
+            // signOut(); 
+
+        } catch (error: any) {
+            message.error(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Component hiển thị thông tin chung
+    const UserInfo = () => (
+        <Descriptions bordered column={1}>
+            <Descriptions.Item label="Họ và tên">
+                <span className="font-bold text-lg">{session?.user?.name || "Chưa cập nhật"}</span>
+            </Descriptions.Item>
+            {/* Nếu session bạn có lưu username/email thì hiển thị ở đây */}
+            <Descriptions.Item label="Vai trò">
+                {session?.user?.role === "ADMIN" ? (
+                    <Tag color="red">QUẢN TRỊ VIÊN</Tag>
+                ) : (
+                    <Tag color="blue">NHÂN VIÊN</Tag>
+                )}
+            </Descriptions.Item>
+            <Descriptions.Item label="Trạng thái">
+                <Tag color="green" icon={<SafetyCertificateOutlined />}>Đang hoạt động</Tag>
+            </Descriptions.Item>
+        </Descriptions>
+    );
+
+    // Component Form đổi mật khẩu
+    const ChangePasswordForm = () => (
+        <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleChangePassword}
+            style={{ maxWidth: 500, margin: "0 auto" }}
+        >
+            <Form.Item
+                name="currentPassword"
+                label="Mật khẩu hiện tại"
+                rules={[{ required: true, message: "Vui lòng nhập mật khẩu cũ" }]}
+            >
+                <Input.Password prefix={<LockOutlined />} placeholder="Nhập mật khẩu đang dùng" />
+            </Form.Item>
+
+            <Form.Item
+                name="newPassword"
+                label="Mật khẩu mới"
+                rules={[
+                    { required: true, message: "Vui lòng nhập mật khẩu mới" },
+                    { min: 6, message: "Mật khẩu phải có ít nhất 6 ký tự" }
+                ]}
+                hasFeedback
+            >
+                <Input.Password prefix={<KeyOutlined />} placeholder="Nhập mật khẩu mới" />
+            </Form.Item>
+
+            <Form.Item
+                name="confirmPassword"
+                label="Xác nhận mật khẩu mới"
+                dependencies={['newPassword']}
+                hasFeedback
+                rules={[
+                    { required: true, message: "Vui lòng xác nhận mật khẩu" },
+                    ({ getFieldValue }) => ({
+                        validator(_, value) {
+                            if (!value || getFieldValue('newPassword') === value) {
+                                return Promise.resolve();
+                            }
+                            return Promise.reject(new Error('Hai mật khẩu không khớp!'));
+                        },
+                    }),
+                ]}
+            >
+                <Input.Password prefix={<KeyOutlined />} placeholder="Nhập lại mật khẩu mới" />
+            </Form.Item>
+
+            <Form.Item>
+                <Button type="primary" htmlType="submit" loading={loading} block icon={<SafetyCertificateOutlined />}>
+                    Cập nhật mật khẩu
+                </Button>
+            </Form.Item>
+        </Form>
+    );
+
+    if (!session) return <div className="p-10 text-center">Vui lòng đăng nhập...</div>;
+
+    return (
+        <div className="p-6 max-w-4xl mx-auto">
+            <Card title={<><UserOutlined /> Hồ sơ cá nhân</>}>
+                <Tabs
+                    defaultActiveKey="info"
+                    items={[
+                        {
+                            key: "info",
+                            label: "Thông tin chung",
+                            children: <UserInfo />,
+                        },
+                        {
+                            key: "security",
+                            label: "Đổi mật khẩu",
+                            children: <ChangePasswordForm />,
+                        },
+                    ]}
+                />
+            </Card>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\profile\page.tsx ---
 
 
 ================================================================================
@@ -3052,18 +3926,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
 ================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\users\page.tsx
 ================================================================================
-
 "use client";
 
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space, Tooltip } from 'antd';
-import { EditOutlined, ReloadOutlined, SafetyCertificateOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useSession } from 'next-auth/react';
 
-// Định nghĩa kiểu dữ liệu cho User hiển thị
 interface UserType {
     id: number;
-    username: string;
+    username: string; // <-- ĐÃ SỬA: username
     fullName: string;
     isActive: boolean;
     role: string;
@@ -3075,15 +3947,14 @@ interface UserType {
 export default function UserManagementPage() {
     const { data: session } = useSession();
     const [users, setUsers] = useState<UserType[]>([]);
-    const [processes, setProcesses] = useState<any[]>([]); // List công đoạn cho dropdown
+    const [processes, setProcesses] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // State cho Modal Sửa
+    // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<UserType | null>(null);
     const [form] = Form.useForm();
 
-    // --- 1. Tải dữ liệu ---
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -3091,12 +3962,11 @@ export default function UserManagementPage() {
                 fetch('/api/users'),
                 fetch('/api/processes')
             ]);
-
             if (resUsers.ok && resProcesses.ok) {
                 setUsers(await resUsers.json());
                 setProcesses(await resProcesses.json());
             } else {
-                message.error("Không tải được dữ liệu (Có thể bạn không phải Admin)");
+                message.error("Không tải được dữ liệu");
             }
         } catch (error) {
             message.error("Lỗi kết nối");
@@ -3106,66 +3976,79 @@ export default function UserManagementPage() {
     };
 
     useEffect(() => {
-        if (session?.user?.role === 'ADMIN') {
-            fetchData();
-        }
+        if (session?.user?.role === 'ADMIN') fetchData();
     }, [session]);
 
-    // --- 2. Xử lý Lưu (Cập nhật) ---
+    // --- LOGIC LƯU (TẠO MỚI / CẬP NHẬT) ---
     const handleSave = async (values: any) => {
         try {
-            if (editingUser) {
-                const payload = { ...values, id: editingUser.id };
+            const method = editingUser ? 'PUT' : 'POST';
 
-                const res = await fetch('/api/users', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+            // Nếu Sửa: Cần ID. Nếu Tạo: password lấy từ newPassword
+            const payload = editingUser
+                ? { ...values, id: editingUser.id }
+                : { ...values, password: values.newPassword };
 
-                if (!res.ok) throw new Error("Lỗi cập nhật");
+            const res = await fetch('/api/users', {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-                message.success("Đã cập nhật thông tin thành công!");
-                setIsModalOpen(false);
-                setEditingUser(null);
-                fetchData(); // Load lại bảng
-            }
-        } catch (error) {
-            message.error("Có lỗi xảy ra khi lưu");
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Có lỗi xảy ra");
+
+            message.success(editingUser ? "Đã cập nhật!" : "Đã tạo tài khoản!");
+            setIsModalOpen(false);
+            setEditingUser(null);
+            fetchData();
+        } catch (error: any) {
+            message.error(error.message);
         }
     };
 
-    // --- 3. Mở Modal ---
+    // --- Mở Modal Tạo Mới ---
+    const openCreateModal = () => {
+        setEditingUser(null);
+        form.resetFields();
+        form.setFieldsValue({
+            isActive: true,
+            role: 'USER',
+            accessLevel: 'READ_ONLY'
+        });
+        setIsModalOpen(true);
+    };
+
+    // --- Mở Modal Sửa ---
     const openEditModal = (user: UserType) => {
         setEditingUser(user);
         form.resetFields();
-        // Điền dữ liệu cũ vào form
         form.setFieldsValue({
+            username: user.username, // <-- Bind username
             fullName: user.fullName,
             isActive: user.isActive,
             role: user.role,
             accessLevel: user.accessLevel,
             processId: user.processId,
-            newPassword: '' // Mật khẩu luôn để trống
+            newPassword: ''
         });
         setIsModalOpen(true);
     };
 
-    // --- 4. Cấu hình Cột Bảng ---
     const columns = [
         {
             title: 'Nhân viên',
             render: (_: any, r: UserType) => (
                 <div>
-                    <div style={{ fontWeight: 'bold', fontSize: 15 }}>{r.fullName}</div>
+                    <div style={{ fontWeight: 'bold' }}>{r.fullName}</div>
                     <div style={{ color: '#888', fontSize: 12 }}>@{r.username}</div>
                 </div>
             )
         },
         {
-            title: 'Thuộc Bộ phận',
+            title: 'Bộ phận',
             dataIndex: 'process',
-            render: (p: any) => p ? <Tag color="blue">{p.name}</Tag> : <Tag>Văn phòng / Chưa gán</Tag>
+            render: (p: any) => p ? <Tag color="blue">{p.name}</Tag> : <Tag>Văn phòng</Tag>
         },
         {
             title: 'Vai trò',
@@ -3176,124 +4059,114 @@ export default function UserManagementPage() {
             title: 'Quyền hạn',
             dataIndex: 'accessLevel',
             render: (level: string) => {
-                let color = 'default';
-                let text = 'Chỉ xem';
-                if (level === 'MANAGER') { color = 'gold'; text = 'Quản lý'; }
-                if (level === 'OPERATOR') { color = 'cyan'; text = 'Nhập liệu'; }
-                return <Tag color={color}>{text}</Tag>
+                const map: any = { 'MANAGER': 'gold', 'OPERATOR': 'cyan', 'READ_ONLY': 'default' };
+                return <Tag color={map[level]}>{level}</Tag>
             }
         },
         {
             title: 'Trạng thái',
             dataIndex: 'isActive',
             align: 'center' as const,
-            render: (isActive: boolean) => isActive
-                ? <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
-                : <Tooltip title="Chưa kích hoạt"><CloseCircleOutlined style={{ fontSize: 20, color: 'red' }} /></Tooltip>
+            render: (active: boolean) => active
+                ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 18 }} />
+                : <CloseCircleOutlined style={{ color: 'red', fontSize: 18 }} />
         },
         {
             title: 'Hành động',
             key: 'action',
             render: (_: any, r: UserType) => (
                 <Button type="primary" ghost size="small" icon={<EditOutlined />} onClick={() => openEditModal(r)}>
-                    Chi tiết / Duyệt
+                    Sửa
                 </Button>
             )
         }
     ];
 
-    // Bảo vệ Frontend: Nếu không phải Admin thì hiển thị thông báo
-    if (session?.user?.role !== 'ADMIN') {
-        return (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
-                <SafetyCertificateOutlined style={{ fontSize: 50, color: 'red', marginBottom: 20 }} />
-                <h2>Bạn không có quyền truy cập trang này</h2>
-                <p>Vui lòng liên hệ quản trị viên.</p>
-            </div>
-        );
-    }
+    if (session?.user?.role !== 'ADMIN') return <div className="p-10 text-center">Không có quyền truy cập</div>;
 
     return (
         <div style={{ padding: 20 }}>
             <Card
-                title="Quản trị Người dùng & Phân quyền"
-                extra={<Button icon={<ReloadOutlined />} onClick={fetchData}>Làm mới</Button>}
+                title="Quản trị Người dùng"
+                extra={
+                    <Space>
+                        <Button type="primary" icon={<UserAddOutlined />} onClick={openCreateModal}>
+                            Thêm tài khoản
+                        </Button>
+                        <Button icon={<ReloadOutlined />} onClick={fetchData}>
+                            Làm mới
+                        </Button>
+                    </Space>
+                }
             >
-                <Table
-                    rowKey="id"
-                    columns={columns}
-                    dataSource={users}
-                    loading={loading}
-                    pagination={{ pageSize: 10 }}
-                    bordered
-                />
+                <Table rowKey="id" columns={columns} dataSource={users} loading={loading} bordered pagination={{ pageSize: 8 }} />
             </Card>
 
-            {/* --- MODAL CHỈNH SỬA --- */}
             <Modal
-                title={`Cập nhật: ${editingUser?.fullName}`}
+                title={editingUser ? `Cập nhật: ${editingUser.fullName}` : "Thêm nhân viên mới"}
                 open={isModalOpen}
                 onCancel={() => setIsModalOpen(false)}
                 footer={null}
-                width={600}
             >
                 <Form form={form} layout="vertical" onFinish={handleSave}>
+                    {/* Status Switch */}
+                    <Form.Item name="isActive" valuePropName="checked">
+                        <Switch checkedChildren="ĐANG HOẠT ĐỘNG" unCheckedChildren="ĐANG KHÓA" />
+                    </Form.Item>
 
-                    {/* Khu vực trạng thái kích hoạt (Quan trọng nhất) */}
-                    <div style={{ background: '#f6ffed', padding: 15, borderRadius: 8, border: '1px solid #b7eb8f', marginBottom: 20 }}>
-                        <Form.Item name="isActive" valuePropName="checked" label="Trạng thái tài khoản" style={{ marginBottom: 0 }}>
-                            <Switch
-                                checkedChildren="ĐÃ KÍCH HOẠT (Cho phép đăng nhập)"
-                                unCheckedChildren="ĐANG KHÓA (Chờ duyệt)"
-                                style={{ width: '100%' }}
-                            />
+                    {/* FIELD: USERNAME (Đã sửa) */}
+                    <Form.Item
+                        name="username"
+                        label="Tên đăng nhập (Username)"
+                        rules={[
+                            { required: true, message: 'Vui lòng nhập tên đăng nhập' },
+                            { pattern: /^[a-zA-Z0-9_]+$/, message: 'Không được chứa dấu hoặc ký tự đặc biệt' }
+                        ]}
+                    >
+                        {/* Khi sửa thì không cho đổi username để tránh lỗi hệ thống */}
+                        <Input disabled={!!editingUser} placeholder="vd: nguyenvan_a" />
+                    </Form.Item>
+
+                    <Form.Item name="fullName" label="Họ tên hiển thị" rules={[{ required: true }]}>
+                        <Input placeholder="Nguyễn Văn A" />
+                    </Form.Item>
+
+                    <div className="grid grid-cols-2 gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                        <Form.Item name="role" label="Vai trò">
+                            <Select>
+                                <Select.Option value="USER">User</Select.Option>
+                                <Select.Option value="ADMIN">Admin</Select.Option>
+                            </Select>
+                        </Form.Item>
+                        <Form.Item name="accessLevel" label="Quyền hạn">
+                            <Select>
+                                <Select.Option value="READ_ONLY">Chỉ xem</Select.Option>
+                                <Select.Option value="OPERATOR">Nhập liệu</Select.Option>
+                                <Select.Option value="MANAGER">Quản lý</Select.Option>
+                            </Select>
                         </Form.Item>
                     </div>
 
-                    <Form.Item name="fullName" label="Họ và tên hiển thị">
-                        <Input />
-                    </Form.Item>
-
-                    <Space style={{ display: 'flex', width: '100%' }} align="start" size={16}>
-                        <Form.Item name="role" label="Vai trò hệ thống" style={{ flex: 1 }}>
-                            <Select>
-                                <Select.Option value="USER">User (Nhân viên)</Select.Option>
-                                <Select.Option value="ADMIN">Admin (Quản trị)</Select.Option>
-                            </Select>
-                        </Form.Item>
-
-                        <Form.Item name="accessLevel" label="Quyền thao tác dữ liệu" style={{ flex: 1 }}>
-                            <Select>
-                                <Select.Option value="READ_ONLY">Chỉ xem (Read Only)</Select.Option>
-                                <Select.Option value="OPERATOR">Nhập liệu (Operator)</Select.Option>
-                                <Select.Option value="MANAGER">Quản lý (Sửa/Xóa)</Select.Option>
-                            </Select>
-                        </Form.Item>
-                    </Space>
-
-                    <Form.Item name="processId" label="Thuộc công đoạn (Phòng ban)">
+                    <Form.Item name="processId" label="Thuộc công đoạn (Nếu có)">
                         <Select allowClear placeholder="Chọn công đoạn...">
                             {processes.map((p: any) => (
                                 <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
                             ))}
                         </Select>
-                        <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-                            * User chỉ được phép nhập liệu cho công đoạn này.
-                        </div>
                     </Form.Item>
 
-                    <div style={{ borderTop: '1px dashed #d9d9d9', paddingTop: 16, marginTop: 16 }}>
-                        <Form.Item name="newPassword" label="Đặt lại mật khẩu (Chỉ nhập nếu nhân viên quên mật khẩu)">
-                            <Input.Password placeholder="Nhập mật khẩu mới..." />
-                        </Form.Item>
-                    </div>
+                    <Form.Item
+                        name="newPassword"
+                        label={editingUser ? "Đổi mật khẩu (Bỏ trống nếu không đổi)" : "Mật khẩu khởi tạo"}
+                        rules={[{ required: !editingUser, message: "Bắt buộc nhập mật khẩu khi tạo mới" }]}
+                    >
+                        <Input.Password placeholder="******" />
+                    </Form.Item>
 
-                    <div style={{ textAlign: 'right', marginTop: 20 }}>
+                    <div style={{ textAlign: 'right' }}>
                         <Space>
                             <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
-                            <Button type="primary" htmlType="submit" icon={<SafetyCertificateOutlined />}>
-                                Lưu Thiết Lập
-                            </Button>
+                            <Button type="primary" htmlType="submit">Lưu</Button>
                         </Space>
                     </div>
                 </Form>
@@ -3400,6 +4273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user.isActive) throw new Error("Tài khoản chưa được kích hoạt");
 
         // Trả về user đầy đủ thông tin
+        // Lưu ý: Object này sẽ được truyền vào callback 'jwt' bên dưới
         return {
           id: user.id.toString(),
           name: user.fullName,
@@ -3412,6 +4286,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  // --- PHẦN QUAN TRỌNG VỪA ĐƯỢC THÊM VÀO ---
+  callbacks: {
+    // 1. Chuyển dữ liệu từ authorize (user) sang token
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.username = (user as any).username;
+        token.role = (user as any).role;
+        token.accessLevel = (user as any).accessLevel;
+        token.processId = (user as any).processId;
+        token.fullName = (user as any).fullName;
+      }
+      return token;
+    },
+    // 2. Chuyển dữ liệu từ token sang session (để dùng ở phía Client và API)
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string;
+        // Ép kiểu 'as any' để tránh lỗi TypeScript đỏ do chưa khai báo type mở rộng
+        (session.user as any).username = token.username;
+        (session.user as any).role = token.role;
+        (session.user as any).accessLevel = token.accessLevel;
+        (session.user as any).processId = token.processId;
+        (session.user as any).fullName = token.fullName;
+      }
+      return session;
+    },
+  },
 });
 
 
@@ -3423,8 +4325,9 @@ FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\Adm
 ================================================================================
 "use client";
 
+import UserDropdown from "@/components/UserDropdown";
 import React, { useState, useEffect } from "react";
-import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Spin } from "antd";
+import { Layout, Menu, Button, theme, Spin } from "antd";
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -3433,11 +4336,16 @@ import {
   AppstoreOutlined,
   UserOutlined,
   HistoryOutlined,
-  LogoutOutlined,
   SettingOutlined,
+  SafetyCertificateOutlined, // Icon cho quản trị hệ thống
+  CloudSyncOutlined,         // Icon cho Backup
+  ApartmentOutlined,         // Icon Factory
+  BarcodeOutlined,           // Icon Item
+  PartitionOutlined,         // Icon Process
+  RobotOutlined              // Icon Machine
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -3455,7 +4363,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Bảo vệ route
+  // 1. Bảo vệ route
   useEffect(() => {
     if (status === "unauthenticated" && pathname !== "/login" && pathname !== "/register") {
       router.push("/login");
@@ -3474,8 +4382,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     );
   }
 
-  // Cấu hình Menu
-  const menuItems = [
+  // 2. Cấu hình Menu Cơ bản (Ai cũng thấy)
+  const baseMenuItems = [
     {
       key: "/",
       icon: <DashboardOutlined />,
@@ -3486,10 +4394,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: <DatabaseOutlined />,
       label: "Danh mục dữ liệu",
       children: [
-        { key: "/factories", label: "Nhà máy" },
-        { key: "/processes", label: "Công đoạn" },
-        { key: "/items", label: "Mặt hàng" },
-        { key: "/machines", label: "Máy móc" },
+        { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
+        { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
+        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> }, // Đã có trang quản lý mặt hàng
+        { key: "/machines", label: "Máy móc", icon: <RobotOutlined /> }, // Sắp làm
       ],
     },
     {
@@ -3497,7 +4405,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: <AppstoreOutlined />,
       label: "Quản lý Sản xuất",
       children: [
-        { key: "/production/assign", label: "Điều phối (Gán mặt hàng)" },
+        { key: "/production/assign", label: "Điều phối (Gán hàng)" },
         { key: "/production/daily-input", label: "Nhập sản lượng" },
         {
           key: "/production/history",
@@ -3506,73 +4414,69 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         },
       ],
     },
-    {
-      key: "/settings",
-      icon: <SettingOutlined />,
-      label: "Cấu hình hệ thống",
-    },
   ];
 
+  // 3. Cấu hình Menu Admin (Chỉ Admin mới thấy)
+  // Gom User và Backup vào nhóm "Quản trị hệ thống"
   if (session?.user?.role === "ADMIN") {
-    menuItems.splice(3, 0, {
-      key: "/users",
-      icon: <UserOutlined />,
-      label: "Quản lý Tài khoản (Admin)",
+    baseMenuItems.push({
+      key: "sub-admin",
+      icon: <SafetyCertificateOutlined />,
+      label: "Quản trị hệ thống",
+      children: [
+        {
+          key: "/users", // Hoặc /admin/users nếu bạn đã đổi cấu trúc thư mục
+          icon: <UserOutlined />,
+          label: "Quản lý Tài khoản",
+        },
+        {
+          key: "/admin/backup",
+          icon: <CloudSyncOutlined />,
+          label: "Sao lưu & Phục hồi",
+        },
+      ],
     } as any);
   }
 
-  const userMenu = {
-    items: [
-      {
-        key: "0",
-        label: (
-          <div style={{ padding: '4px 0', cursor: 'default' }}>
-            <div style={{ fontWeight: 'bold' }}>{session?.user?.fullName}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>
-              {session?.user?.role} - {session?.user?.accessLevel}
-            </div>
-          </div>
-        ),
-      },
-      { type: 'divider' },
-      {
-        key: "2",
-        label: "Đăng xuất",
-        icon: <LogoutOutlined />,
-        danger: true,
-        onClick: () => { signOut({ callbackUrl: "/login" }); },
-      },
-    ],
-  };
+  // Thêm mục Cài đặt xuống cuối cùng
+  baseMenuItems.push({
+    key: "/settings",
+    icon: <SettingOutlined />,
+    label: "Cấu hình chung",
+  } as any);
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      {/* 1. SIDER: Đổi lại theme="dark" */}
-      <Sider trigger={null} collapsible collapsed={collapsed} width={250} theme="dark">
+      {/* SIDER */}
+      <Sider trigger={null} collapsible collapsed={collapsed} width={260} theme="dark">
         <div
           style={{
             height: 64,
             margin: 16,
-            // Đổi lại màu nền logo cho nổi bật trên nền đen
-            background: "rgba(255, 255, 255, 0.2)",
+            background: "rgba(255, 255, 255, 0.1)", // Chỉnh lại màu nền logo cho nhẹ nhàng hơn
+            border: "1px solid rgba(255, 255, 255, 0.2)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: "white", // Chữ màu trắng
+            color: "white",
             fontWeight: "bold",
             fontSize: collapsed ? 16 : 20,
-            borderRadius: 6,
+            borderRadius: 8,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            transition: "all 0.3s"
           }}
         >
           {collapsed ? "PB" : "PHU BAI ERP"}
         </div>
 
         <Menu
-          theme="dark" // 2. MENU: Đổi lại theme="dark"
+          theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2"]}
-          items={menuItems}
+          // Tự động mở menu con nếu đang ở trang con tương ứng
+          defaultOpenKeys={["sub1", "sub2", "sub-admin"]}
+          items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
               router.push(key);
@@ -3581,6 +4485,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         />
       </Sider>
 
+      {/* MAIN LAYOUT */}
       <Layout>
         <Header
           style={{
@@ -3590,6 +4495,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             justifyContent: "space-between",
             alignItems: "center",
             paddingRight: 24,
+            boxShadow: "0 1px 4px rgba(0,21,41,0.08)", // Thêm bóng đổ nhẹ cho Header tách biệt
+            zIndex: 1,
           }}
         >
           <Button
@@ -3603,18 +4510,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             }}
           />
 
-          <Space>
-            <span style={{ marginRight: 8 }}>
-              Xin chào, <b>{session?.user?.fullName || "User"}</b>
-            </span>
-            <Dropdown menu={userMenu} trigger={['click']}>
-              <Avatar
-                style={{ backgroundColor: "#1890ff", cursor: "pointer" }}
-                icon={<UserOutlined />}
-                src={`https://ui-avatars.com/api/?name=${session?.user?.fullName}&background=random`}
-              />
-            </Dropdown>
-          </Space>
+          {/* Component UserDropdown bạn đã tách riêng rất gọn */}
+          <UserDropdown />
         </Header>
 
         <Content
@@ -3624,14 +4521,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             minHeight: 280,
             background: colorBgContainer,
             borderRadius: borderRadiusLG,
-            overflow: "auto",
+            overflow: "initial", // Để nội dung dài vẫn cuộn mượt
           }}
         >
           {children}
         </Content>
 
-        <Footer style={{ textAlign: "center", color: "#888" }}>
-          Phu Bai Factory ©{new Date().getFullYear()} - ERP System
+        <Footer style={{ textAlign: "center", color: "#888", background: 'transparent' }}>
+          Sợi Phú Bài ERP ©{new Date().getFullYear()} - Developed by Minh Trí
         </Footer>
       </Layout>
     </Layout>
@@ -3660,6 +4557,84 @@ export default function SessionProviderWrapper({
 
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\SessionProviderWrapper.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\UserDropdown.tsx
+================================================================================
+"use client";
+
+import React from "react";
+import { Avatar, Dropdown, Space, Typography, Tag, MenuProps, theme } from "antd";
+import { LogoutOutlined, DownOutlined, ProfileOutlined, UserOutlined } from "@ant-design/icons";
+import { useSession, signOut } from "next-auth/react";
+import Link from "next/link";
+
+const { Text } = Typography;
+
+export default function UserDropdown() {
+    const { data: session } = useSession();
+    const { token } = theme.useToken();
+
+    // Nếu chưa có session thì không hiển thị gì
+    if (!session?.user) return null;
+
+    // Lấy dữ liệu từ session (Khớp với field 'fullName' của bạn)
+    // TypeScript có thể báo lỗi đỏ ở fullName nếu chưa khai báo type, tạm thời dùng 'as any' hoặc check null
+    const user = session.user as any;
+    const fullName = user.fullName || user.name || "User";
+    const role = user.role || "USER";
+
+    // Tạo Avatar từ UI Avatars như code cũ của bạn (nhìn đẹp hơn chữ cái đơn thuần)
+    const avatarUrl = `https://ui-avatars.com/api/?name=${fullName}&background=random&color=fff`;
+
+    const items: MenuProps['items'] = [
+        {
+            key: 'info',
+            label: (
+                <div style={{ padding: '4px 0', minWidth: 150 }}>
+                    <Text strong>{fullName}</Text>
+                    <div style={{ marginTop: 4 }}>
+                        {role === "ADMIN" ? <Tag color="red">ADMIN</Tag> : <Tag color="blue">NHÂN VIÊN</Tag>}
+                    </div>
+                </div>
+            ),
+            disabled: true,
+            style: { cursor: 'default', borderBottom: '1px solid #f0f0f0' }
+        },
+        {
+            key: 'profile',
+            icon: <ProfileOutlined />,
+            label: <Link href="/profile">Hồ sơ cá nhân</Link>,
+            style: { marginTop: 4 }
+        },
+        {
+            key: 'logout',
+            icon: <LogoutOutlined />,
+            label: 'Đăng xuất',
+            danger: true,
+            onClick: () => signOut({ callbackUrl: "/login" }),
+        },
+    ];
+
+    return (
+        <Dropdown menu={{ items }} trigger={['click']}>
+            <Space style={{ cursor: 'pointer', padding: '0 8px', borderRadius: 6, transition: 'background 0.3s' }} className="hover:bg-gray-100">
+                <span style={{ marginRight: 4, display: 'flex', flexDirection: 'column', alignItems: 'end', lineHeight: '1.2' }}>
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{fullName}</span>
+                </span>
+
+                <Avatar
+                    src={avatarUrl}
+                    icon={<UserOutlined />}
+                    style={{ border: `1px solid ${token.colorBorder}` }}
+                />
+            </Space>
+        </Dropdown>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\components\UserDropdown.tsx ---
 
 
 ================================================================================
