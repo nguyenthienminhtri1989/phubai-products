@@ -1,355 +1,287 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { Table, Button, Modal, Form, Input, message, Space, Card, Select, Tag, InputNumber, Switch, Divider } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, FilterOutlined, SettingOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from "react";
+import { Table, Card, Button, Input, Select, Tag, Space, Modal, Form, message, InputNumber, Switch, Popconfirm, Row, Col } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined, SearchOutlined } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
 
-// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
-interface Factory { id: number; name: string; }
-interface Process { id: number; name: string; factoryId: number; factory?: Factory; }
-interface Item { id: number; name: string; } // Mặt hàng
-interface Machine {
-  id: number;
-  name: string;
-  isActive: boolean;
-  processId: number;
-  process?: Process;
-  formulaType: number; // 1, 2, 3, 4
-  spindleCount?: number;
-  currentItemId?: number;
-  currentItem?: Item;
-  currentNE?: number;
+// Định nghĩa kiểu
+interface MachineData {
+    id: number;
+    name: string;
+    processId: number;
+    process?: { name: string; factory?: { name: string } };
+    currentItem?: { name: string; code: string };
+    formulaType: number;
+    spindleCount?: number;
+    isActive: boolean;
 }
 
-// --- HẰNG SỐ ---
-const FORMULA_TYPES = [
-  { value: 1, label: 'Loại 1: Nhập trực tiếp (Kg)' },
-  { value: 2, label: 'Loại 2: Counter (Cuối - Đầu)' },
-  { value: 3, label: 'Loại 3: Counter x Số cọc / (NE x Hệ số)' },
-  { value: 4, label: 'Loại 4: Counter / NE' },
-];
+export default function MachinesPage() {
+    const { data: session } = useSession();
+    const [machines, setMachines] = useState<MachineData[]>([]);
+    const [loading, setLoading] = useState(false);
 
-export default function MachinePage() {
-  // --- STATE DỮ LIỆU ---
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [factories, setFactories] = useState<Factory[]>([]);
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
+    // Data danh mục
+    const [factories, setFactories] = useState<any[]>([]);
+    const [processes, setProcesses] = useState<any[]>([]);
+    const [items, setItems] = useState<any[]>([]);
 
-  const [loading, setLoading] = useState(false);
+    // Filter state
+    const [filterFactory, setFilterFactory] = useState<number | null>(null);
+    const [filterProcess, setFilterProcess] = useState<number | null>(null);
+    const [searchText, setSearchText] = useState("");
 
-  // --- STATE BỘ LỌC (TOOLBAR) ---
-  const [filterFactoryId, setFilterFactoryId] = useState<number | null>(null);
-  const [filterProcessId, setFilterProcessId] = useState<number | null>(null);
+    // Modal Create/Edit
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingMachine, setEditingMachine] = useState<MachineData | null>(null);
+    const [form] = Form.useForm();
 
-  // --- STATE FORM & MODAL ---
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
-  const [form] = Form.useForm();
+    // Modal Dispatch (Điều phối)
+    const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+    const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [dispatchForm] = Form.useForm();
 
-  // Theo dõi giá trị form để hiển thị điều kiện (Ví dụ: Chọn Loại 3 mới hiện ô nhập Số cọc)
-  const watchFormulaType = Form.useWatch('formulaType', form);
-  const watchModalFactoryId = Form.useWatch('factoryId_temp', form); // Biến tạm để lọc dropdown trong modal
+    // 1. Load Data
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            // Lấy danh mục
+            const [fRes, pRes, iRes] = await Promise.all([
+                fetch('/api/factories'), fetch('/api/processes'), fetch('/api/items')
+            ]);
+            setFactories(await fRes.json());
+            setProcesses(await pRes.json());
+            setItems(await iRes.json());
 
-  // --- 1. FETCH ALL DATA ---
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [resMac, resFac, resPro, resItem] = await Promise.all([
-        fetch('/api/machines'),
-        fetch('/api/factories'),
-        fetch('/api/processes'),
-        fetch('/api/items'),
-      ]);
+            // Lấy Machines
+            let query = "?";
+            if (filterFactory) query += `factoryId=${filterFactory}&`;
+            if (filterProcess) query += `processId=${filterProcess}`;
 
-      setMachines(await resMac.json());
-      setFactories(await resFac.json());
-      setProcesses(await resPro.json());
-      setItems(await resItem.json());
-    } catch (error) {
-      message.error("Lỗi tải dữ liệu");
-    } finally {
-      setLoading(false);
-    }
-  };
+            const mRes = await fetch(`/api/machines${query}`);
+            const mData = await mRes.json();
 
-  useEffect(() => { fetchData(); }, []);
+            // Lọc local theo tên (nếu có search text)
+            if (searchText) {
+                setMachines(mData.filter((m: any) => m.name.toLowerCase().includes(searchText.toLowerCase())));
+            } else {
+                setMachines(mData);
+            }
+        } catch (e) { message.error("Lỗi tải dữ liệu"); }
+        finally { setLoading(false); }
+    };
 
-  // --- 2. LOGIC LỌC DỮ LIỆU BẢNG ---
-  const filteredMachines = useMemo(() => {
-    return machines.filter(m => {
-      // Lọc theo Nhà máy (thông qua Process)
-      if (filterFactoryId && m.process?.factoryId !== filterFactoryId) return false;
-      // Lọc theo Công đoạn
-      if (filterProcessId && m.processId !== filterProcessId) return false;
-      return true;
-    });
-  }, [machines, filterFactoryId, filterProcessId]);
+    useEffect(() => { fetchData(); }, [filterFactory, filterProcess]); // Reload khi đổi filter
 
-  // Danh sách công đoạn hiển thị trên Toolbar (phụ thuộc vào Nhà máy đang chọn)
-  const toolbarProcesses = useMemo(() => {
-    if (!filterFactoryId) return [];
-    return processes.filter(p => p.factoryId === filterFactoryId);
-  }, [processes, filterFactoryId]);
+    // 2. Xử lý Thêm / Sửa
+    const handleSave = async (values: any) => {
+        try {
+            const url = editingMachine ? `/api/machines/${editingMachine.id}` : "/api/machines";
+            const method = editingMachine ? "PUT" : "POST";
 
-  // --- 3. XỬ LÝ LƯU (CREATE/UPDATE) ---
-  const handleSave = async (values: any) => {
-    try {
-      const payload = { ...values };
-      // Xóa trường tạm (factoryId_temp) trước khi gửi lên server
-      delete payload.factoryId_temp;
+            const res = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values)
+            });
+            if (!res.ok) throw new Error("Lỗi lưu");
 
-      let res;
-      if (editingMachine) {
-        res = await fetch(`/api/machines/${editingMachine.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        res = await fetch("/api/machines", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
+            message.success("Thành công!");
+            setIsModalOpen(false);
+            fetchData();
+        } catch (e) { message.error("Lỗi khi lưu"); }
+    };
 
-      if (!res.ok) throw new Error("Lỗi lưu dữ liệu");
+    // 3. Xử lý Xóa
+    const handleDelete = async (id: number) => {
+        const res = await fetch(`/api/machines/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (res.ok) { message.success("Đã xóa"); fetchData(); }
+        else message.error(data.error);
+    };
 
-      message.success("Thành công");
-      setIsModalOpen(false);
-      fetchData();
-    } catch (error) {
-      message.error("Có lỗi xảy ra");
-    }
-  };
+    // 4. Xử lý ĐIỀU PHỐI (BATCH ASSIGN)
+    const handleDispatch = async (values: any) => {
+        try {
+            const res = await fetch("/api/machines/batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    machineIds: selectedRowKeys,
+                    itemId: values.itemId
+                })
+            });
+            if (!res.ok) throw new Error("Lỗi điều phối");
 
-  // --- 4. XỬ LÝ XÓA ---
-  const handleDelete = (id: number) => {
-    Modal.confirm({
-      title: 'Xóa máy này?',
-      content: 'Dữ liệu sản xuất cũ vẫn giữ nguyên, nhưng máy sẽ biến mất khỏi danh sách.',
-      onOk: async () => {
-        const res = await fetch(`/api/machines/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          message.success('Đã xóa');
-          fetchData();
-        } else {
-          message.error('Không thể xóa (Có thể do ràng buộc)');
+            message.success(`Đã gán mặt hàng cho ${selectedRowKeys.length} máy!`);
+            setIsDispatchModalOpen(false);
+            setSelectedRowKeys([]); // Clear selection
+            fetchData();
+        } catch (e) { message.error("Có lỗi xảy ra"); }
+    };
+
+    // Columns
+    const columns = [
+        {
+            title: "Tên máy", dataIndex: "name", width: 120,
+            render: (text: string, r: any) => <b style={{ color: r.isActive ? '#000' : '#ccc' }}>{text} {r.isActive ? '' : '(Dừng)'}</b>
+        },
+        {
+            title: "Công đoạn", dataIndex: ["process", "name"], width: 150,
+            render: (t: string, r: any) => (
+                <div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{r.process?.factory?.name}</div>
+                    <div>{t}</div>
+                </div>
+            )
+        },
+        {
+            title: "Mặt hàng đang chạy", key: "item",
+            render: (_: any, r: MachineData) => r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
+        },
+        {
+            title: "Cấu hình", key: "config", responsive: ['lg'] as any,
+            render: (_: any, r: MachineData) => (
+                <div style={{ fontSize: 12, color: '#666' }}>
+                    <div>Công thức: Loại {r.formulaType}</div>
+                    {r.spindleCount && <div>Số cọc: {r.spindleCount}</div>}
+                </div>
+            )
+        },
+        {
+            title: "Hành động", key: "action", width: 100, align: 'right' as const,
+            render: (_: any, r: MachineData) => (
+                <Space>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
+                    <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
+                        <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                </Space>
+            )
         }
-      }
-    });
-  };
+    ];
 
-  // --- 5. CHUẨN BỊ MODAL ---
-  const openModal = (record: Machine | null) => {
-    setEditingMachine(record);
-    if (record) {
-      // EDIT: Điền dữ liệu cũ
-      form.setFieldsValue({
-        ...record,
-        // Cần điền thêm factoryId_temp để dropdown công đoạn hiển thị đúng
-        factoryId_temp: record.process?.factoryId
-      });
-    } else {
-      // ADD NEW: Reset
-      form.resetFields();
-      form.setFieldsValue({
-        isActive: true,
-        formulaType: 1,
-        // Nếu trên Toolbar đang lọc Nhà máy/Công đoạn nào thì điền sẵn luôn (UX)
-        factoryId_temp: filterFactoryId,
-        processId: filterProcessId
-      });
-    }
-    setIsModalOpen(true);
-  };
+    // Chỉ Admin/Manager mới được vào
+    if (session?.user?.role === "USER") return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
 
-  // Danh sách công đoạn TRONG MODAL (phụ thuộc vào Nhà máy được chọn trong Modal)
-  const modalProcesses = useMemo(() => {
-    if (!watchModalFactoryId) return [];
-    return processes.filter(p => p.factoryId === watchModalFactoryId);
-  }, [processes, watchModalFactoryId]);
+    return (
+        <div style={{ padding: 20 }}>
+            <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button>}>
+                {/* TOOLBAR */}
+                <Row gutter={16} style={{ marginBottom: 16 }}>
+                    <Col span={6}>
+                        <Select
+                            style={{ width: '100%' }} placeholder="Lọc theo Nhà máy" allowClear
+                            options={factories.map(f => ({ label: f.name, value: f.id }))}
+                            onChange={setFilterFactory}
+                        />
+                    </Col>
+                    <Col span={6}>
+                        <Select
+                            style={{ width: '100%' }} placeholder="Lọc theo Công đoạn" allowClear
+                            options={processes
+                                .filter(p => !filterFactory || p.factoryId === filterFactory)
+                                .map(p => ({ label: p.name, value: p.id }))}
+                            onChange={setFilterProcess}
+                        />
+                    </Col>
+                    <Col span={6}>
+                        <Input placeholder="Tìm tên máy..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} />
+                    </Col>
+                    <Col span={6} style={{ textAlign: 'right' }}>
+                        <Button icon={<ReloadOutlined />} onClick={fetchData}>Tải lại</Button>
+                    </Col>
+                </Row>
 
+                {/* THANH ĐIỀU PHỐI (Hiện ra khi chọn dòng) */}
+                {selectedRowKeys.length > 0 && (
+                    <div style={{ marginBottom: 16, background: '#e6f7ff', padding: '10px 20px', borderRadius: 6, border: '1px solid #91d5ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#1890ff' }}><b>Đã chọn {selectedRowKeys.length} máy</b>. Bạn muốn làm gì?</span>
+                        <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => setIsDispatchModalOpen(true)}>
+                            Điều phối (Gán mặt hàng loạt)
+                        </Button>
+                    </div>
+                )}
 
-  // --- 6. CẤU HÌNH CỘT ---
-  const columns = [
-    { title: 'Tên Máy', dataIndex: 'name', width: 150, fixed: 'left' as const, render: (t: string) => <b>{t}</b> },
-    {
-      title: 'Vị trí',
-      render: (_: any, r: Machine) => (
-        <Space direction="vertical" size={0}>
-          <Tag color="blue">{r.process?.name}</Tag>
-          <small style={{ color: '#888' }}>{r.process?.factory?.name}</small>
-        </Space>
-      )
-    },
-    {
-      title: 'Công thức',
-      dataIndex: 'formulaType',
-      render: (type: number) => {
-        const f = FORMULA_TYPES.find(x => x.value === type);
-        return <Tag color={type === 1 ? 'green' : 'orange'}>{f?.label.split(':')[0]}</Tag>
-      }
-    },
-    {
-      title: 'Trạng thái hiện tại',
-      render: (_: any, r: Machine) => (
-        <div style={{ fontSize: 12 }}>
-          <div>Mặt Hàng: <b>{r.currentItem?.name || '-'}</b></div>
-          {(r.formulaType === 3 || r.formulaType === 4) &&
-            <div>Chi số: <b>{r.currentNE || '-'}</b></div>
-          }
+                <Table
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={machines}
+                    loading={loading}
+                    rowSelection={{
+                        selectedRowKeys,
+                        onChange: setSelectedRowKeys
+                    }}
+                    pagination={{ pageSize: 20 }}
+                />
+            </Card>
+
+            {/* MODAL 1: CREATE / EDIT MACHINE */}
+            <Modal
+                title={editingMachine ? "Cập nhật máy" : "Thêm máy mới"}
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+            >
+                <Form form={form} layout="vertical" onFinish={handleSave}>
+                    <Form.Item name="name" label="Tên máy" rules={[{ required: true }]}>
+                        <Input placeholder="Ví dụ: Máy 01" />
+                    </Form.Item>
+
+                    <Form.Item name="processId" label="Thuộc Công đoạn" rules={[{ required: true }]}>
+                        <Select options={processes.map(p => ({ label: `${p.name} (${p.factory?.name})`, value: p.id }))} />
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="formulaType" label="Công thức tính" rules={[{ required: true }]}>
+                                <Select options={[
+                                    { label: 'Loại 1: Sản lượng trực tiếp', value: 1 },
+                                    { label: 'Loại 2: Trừ lùi (Cuối - Đầu)', value: 2 },
+                                    { label: 'Loại 3: Dành cho máy Thô', value: 3 },
+                                    { label: 'Loại 4: (Cuối - Đầu) / Chi số', value: 4 },
+                                ]} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="spindleCount" label="Số cọc (Nếu có)">
+                                <InputNumber style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Form.Item name="isActive" valuePropName="checked" label="Trạng thái">
+                        <Switch checkedChildren="Hoạt động" unCheckedChildren="Tạm dừng" defaultChecked />
+                    </Form.Item>
+
+                    <Button type="primary" htmlType="submit" block>Lưu thông tin</Button>
+                </Form>
+            </Modal>
+
+            {/* MODAL 2: DISPATCH (ĐIỀU PHỐI) */}
+            <Modal
+                title={<span><ThunderboltOutlined /> Điều phối sản xuất</span>}
+                open={isDispatchModalOpen}
+                onCancel={() => setIsDispatchModalOpen(false)}
+                footer={null}
+            >
+                <div style={{ marginBottom: 16 }}>
+                    Bạn đang thực hiện đổi mặt hàng cho <b>{selectedRowKeys.length} máy</b> đã chọn.
+                    <br />Dữ liệu Chi số (NE) của máy sẽ tự động cập nhật theo mặt hàng mới.
+                </div>
+                <Form form={dispatchForm} layout="vertical" onFinish={handleDispatch}>
+                    <Form.Item name="itemId" label="Chọn mặt hàng muốn chạy:" rules={[{ required: true, message: 'Vui lòng chọn hàng' }]}>
+                        <Select
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="Tìm tên mặt hàng..."
+                            options={items.map(i => ({ label: `${i.name} (NE: ${i.ne})`, value: i.id }))}
+                        />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit" block size="large">Xác nhận chuyển đổi</Button>
+                </Form>
+            </Modal>
         </div>
-      )
-    },
-    {
-      title: 'Active',
-      dataIndex: 'isActive',
-      render: (active: boolean) => active ? <Tag color="success">Đang chạy</Tag> : <Tag color="error">Ngưng</Tag>
-    },
-    {
-      title: 'Hành động',
-      key: 'action',
-      width: 100,
-      fixed: 'right' as const,
-      render: (_: any, record: Machine) => (
-        <Space>
-          <Button icon={<EditOutlined />} size="small" onClick={() => openModal(record)} />
-          <Button icon={<DeleteOutlined />} danger size="small" onClick={() => handleDelete(record.id)} />
-        </Space>
-      )
-    }
-  ];
-
-  return (
-    <div style={{ padding: 20 }}>
-      <Card title="Quản lý Danh mục Máy Móc"
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openModal(null)}>Thêm Máy</Button>}
-      >
-        {/* TOOLBAR LỌC */}
-        <Space style={{ marginBottom: 16 }} wrap>
-          <FilterOutlined />
-          <Select
-            style={{ width: 200 }}
-            placeholder="Chọn Nhà máy..."
-            allowClear
-            value={filterFactoryId}
-            onChange={(val) => {
-              setFilterFactoryId(val);
-              setFilterProcessId(null); // Reset công đoạn khi đổi nhà máy
-            }}
-            options={factories.map(f => ({ label: f.name, value: f.id }))}
-          />
-          <Select
-            style={{ width: 200 }}
-            placeholder="Chọn Công đoạn..."
-            allowClear
-            value={filterProcessId}
-            onChange={setFilterProcessId}
-            options={toolbarProcesses.map(p => ({ label: p.name, value: p.id }))}
-            disabled={!filterFactoryId} // Chỉ cho chọn khi đã chọn nhà máy
-          />
-        </Space>
-
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={filteredMachines}
-          loading={loading}
-          bordered
-          scroll={{ x: 1000 }} // Cho phép cuộn ngang nếu bảng quá rộng
-        />
-      </Card>
-
-      {/* MODAL FORM */}
-      <Modal
-        title={editingMachine ? `Sửa ${editingMachine.name}` : "Thêm Máy Mới"}
-        open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
-        footer={null}
-        width={700}
-      >
-        <Form form={form} layout="vertical" onFinish={handleSave}>
-          <div style={{ display: 'flex', gap: 16 }}>
-            {/* Cột 1: Thông tin chung */}
-            <div style={{ flex: 1 }}>
-              <Divider orientation={"left" as any} style={{ marginTop: 0 }}>Vị trí & Tên</Divider>
-              {/* Chọn Nhà máy (Chỉ dùng để lọc dropdown dưới, ko lưu vào bảng Machine) */}
-              <Form.Item name="factoryId_temp" label="Nhà máy">
-                <Select
-                  placeholder="Chọn nhà máy"
-                  onChange={() => form.setFieldValue('processId', null)}
-                  options={factories.map(f => ({ label: f.name, value: f.id }))}
-                />
-              </Form.Item>
-
-              <Form.Item name="processId" label="Công đoạn" rules={[{ required: true }]}>
-                <Select
-                  placeholder="Chọn công đoạn"
-                  options={modalProcesses.map(p => ({ label: p.name, value: p.id }))}
-                  disabled={!watchModalFactoryId}
-                />
-              </Form.Item>
-
-              <Form.Item name="name" label="Tên Máy" rules={[{ required: true }]}>
-                <Input placeholder="Ví dụ: Máy 01" />
-              </Form.Item>
-
-              <Form.Item name="isActive" label="Trạng thái" valuePropName="checked">
-                <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngưng" />
-              </Form.Item>
-            </div>
-
-            {/* Cột 2: Cấu hình kỹ thuật */}
-            <div style={{ flex: 1, background: '#f5f5f5', padding: 15, borderRadius: 8 }}>
-              <Divider orientation={"left" as any} style={{ marginTop: 0 }}>Cấu hình tính toán</Divider>
-
-              <Form.Item name="formulaType" label="Công thức tính sản lượng" rules={[{ required: true }]}>
-                <Select options={FORMULA_TYPES} />
-              </Form.Item>
-
-              {/* Chỉ hiện khi chọn Loại 3 */}
-              {watchFormulaType === 3 && (
-                <Form.Item name="spindleCount" label="Số cọc (Spindles)" rules={[{ required: true }]}>
-                  <InputNumber style={{ width: '100%' }} placeholder="Nhập số cọc cố định" />
-                </Form.Item>
-              )}
-
-              <Divider orientation={"left" as any}>Trạng thái hiện tại</Divider>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
-                Dùng để tự điền khi nhập liệu hàng ngày.
-              </div>
-
-              <Form.Item name="currentItemId" label="Đang chạy mặt hàng">
-                <Select
-                  showSearch
-                  allowClear
-                  placeholder="Chọn mặt hàng..."
-                  filterOption={(input, option) =>
-                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
-                  options={items.map(i => ({ label: i.name, value: i.id }))}
-                />
-              </Form.Item>
-
-              {/* Chỉ hiện khi chọn Loại 3 hoặc 4 */}
-              {(watchFormulaType === 3 || watchFormulaType === 4) && (
-                <Form.Item name="currentNE" label="Chi số hiện tại (NE)">
-                  <InputNumber style={{ width: '100%' }} step={0.1} />
-                </Form.Item>
-              )}
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'right', marginTop: 20 }}>
-            <Space>
-              <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
-              <Button type="primary" htmlType="submit" icon={<SettingOutlined />}>Lưu Cấu Hình</Button>
-            </Space>
-          </div>
-        </Form>
-      </Modal>
-    </div>
-  );
+    );
 }

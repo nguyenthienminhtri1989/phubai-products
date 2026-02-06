@@ -71,8 +71,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       children: [
         { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
         { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
-        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> }, // Đã có trang quản lý mặt hàng
-        { key: "/machines", label: "Máy móc", icon: <RobotOutlined /> }, // Sắp làm
+        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+
       ],
     },
     {
@@ -80,7 +80,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: <AppstoreOutlined />,
       label: "Quản lý Sản xuất",
       children: [
-        { key: "/production/assign", label: "Điều phối (Gán hàng)" },
+        { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
         { key: "/production/daily-input", label: "Nhập sản lượng" },
         {
           key: "/production/history",
