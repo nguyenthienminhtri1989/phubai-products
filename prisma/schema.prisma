@@ -139,6 +139,15 @@ model ProductionLog {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // THÊM ĐOẠN NÀY VÀO CUỐI MODEL:
+  // 1. Index cho việc lọc theo khoảng thời gian (quan trọng nhất)
+  @@index([recordDate])
+  
+  // 2. Index composite: Khi lọc kết hợp Ngày + Máy + Ca (Performance cực cao)
+  @@index([recordDate, machineId])
+  @@index([machineId, shift])
+  @@index([itemId])
+
   // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca chỉ có 1 bản ghi
   @@unique([machineId, recordDate, shift])
   @@map("production_logs")

@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 export async function POST(request: Request) {
   try {
+    // 1. LẤY THÔNG TIN NGƯỜI DÙNG
+    const session = await auth();
+    if (!session || !session.user || !session.user.id) {
+      return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { recordDate, note } = body;
     let {
@@ -15,7 +22,7 @@ export async function POST(request: Request) {
       finalOutput,
     } = body;
 
-    // Validate
+    // Validate Input
     if (!machineId || !recordDate || !shift) {
       return NextResponse.json(
         { error: "Thiếu thông tin bắt buộc" },
@@ -31,6 +38,37 @@ export async function POST(request: Request) {
     endIndex = endIndex !== null ? parseFloat(endIndex) : null;
     inputNE = inputNE ? parseFloat(inputNE) : null;
     finalOutput = parseFloat(finalOutput);
+
+    // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
+    // Nếu không phải ADMIN, bắt buộc phải kiểm tra Process
+    if (session.user.role !== "ADMIN") {
+      // Lấy thông tin máy để biết nó thuộc công đoạn nào
+      const targetMachine = await prisma.machine.findUnique({
+        where: { id: machineId },
+        select: { processId: true },
+      });
+
+      if (!targetMachine) {
+        return NextResponse.json(
+          { error: "Máy không tồn tại" },
+          { status: 404 },
+        );
+      }
+
+      // So sánh công đoạn của User và công đoạn của Máy
+      // User.processId có thể là null, cần ép kiểu hoặc check kỹ
+      const userProcessId = Number(session.user.processId);
+
+      if (userProcessId !== targetMachine.processId) {
+        return NextResponse.json(
+          {
+            error:
+              "BẠN KHÔNG CÓ QUYỀN! Tài khoản của bạn không được phép nhập liệu cho máy thuộc công đoạn này.",
+          },
+          { status: 403 },
+        );
+      }
+    }
 
     // Xử lý Date: Giữ nguyên ngày YYYY-MM-DD từ client gửi lên để tránh lệch múi giờ
     const dateObj = new Date(recordDate);
@@ -55,6 +93,7 @@ export async function POST(request: Request) {
       inputNE,
       finalOutput,
       note,
+      createdById: parseInt(session.user.id), // <-- Lưu ID người nhập vào đây
     };
 
     if (existingLog) {
