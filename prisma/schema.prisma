@@ -98,6 +98,8 @@ model Machine {
   // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
   currentNE     Float?
 
+  maintenanceTasks MaintenanceTask[]
+
   // --- Dữ liệu lịch sử ---
   productionLogs ProductionLog[]
 
@@ -178,4 +180,58 @@ model User {
   createdAt   DateTime @default(now())
 
   @@map("users")
+}
+
+// Bảng Danh mục Hạng mục bảo dưỡng (Maintenance Task)
+// Lưu trữ các cấu hình định kỳ cho từng máy
+model MaintenanceTask {
+  id                String   @id @default(cuid())
+  
+  // Điều chỉnh machineId thành kiểu Int để khớp với Machine.id
+  machineId         Int      
+  
+  taskName          String   
+  description       String?  
+  intervalMonths    Float    
+  lastPerformedDate DateTime? 
+  nextDueDate       DateTime  
+  leadTimeDays      Int      @default(30) 
+  emailNotify       Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Thiết lập mối quan hệ chính thức với bảng Machine
+  // Lưu ý: Tên field là 'machine', khớp với lệnh include trong API
+  machine           Machine  @relation(fields: [machineId], references: [id])
+  
+  history           MaintenanceHistory[]
+
+  @@index([machineId])
+  @@index([nextDueDate])
+  @@map("maintenance_tasks")
+}
+
+// Cần bổ sung thêm quan hệ vào bảng Machine để Prisma nhận diện
+// (Thêm dòng này vào bên trong model Machine của bạn)
+// model Machine {
+//   ...
+//   maintenanceTasks MaintenanceTask[]
+// }
+
+// Bảng Nhật ký bảo dưỡng (Maintenance History)
+// Lưu vết mỗi lần thực hiện xong
+model MaintenanceHistory {
+  id                String   @id @default(cuid())
+  taskId            String
+  performedDate     DateTime @default(now()) // Ngày thực hiện thực tế
+  performedBy       String?  // Tên công nhân/kỹ thuật viên
+  notes             String?  // Ghi chú tình trạng lúc đó
+  cost              Float?   @default(0)
+  
+  // Quan hệ
+  task              MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([performedDate])
 }

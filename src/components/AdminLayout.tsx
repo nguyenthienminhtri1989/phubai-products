@@ -87,6 +87,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           label: "Lịch sử & Báo cáo",
           icon: <HistoryOutlined />,
         },
+        {
+          key: "/dashboard/maintenance",
+          label: "Nhật ký bảo dưỡng",
+          icon: <HistoryOutlined />,
+        },
       ],
     },
   ];
