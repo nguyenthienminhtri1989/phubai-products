@@ -20,7 +20,7 @@ const { Title, Text } = Typography;
 // ── Helpers ──────────────────────────────────────────────
 function getCurrentShiftInfo() {
   const hour = new Date().getHours();
-  if (hour >= 6 && hour < 14)  return { shift: 1, label: "Ca 1 (06:00 – 14:00)", color: "#52c41a" };
+  if (hour >= 6 && hour < 14) return { shift: 1, label: "Ca 1 (06:00 – 14:00)", color: "#52c41a" };
   if (hour >= 14 && hour < 22) return { shift: 2, label: "Ca 2 (14:00 – 22:00)", color: "#1677ff" };
   return { shift: 3, label: "Ca 3 (22:00 – 06:00)", color: "#fa8c16" };
 }
@@ -42,9 +42,9 @@ export default function Home() {
   const router = useRouter();
 
   const [now, setNow] = useState(new Date());
-  const [machineCount, setMachineCount]       = useState<number | null>(null);
+  const [machineCount, setMachineCount] = useState<number | null>(null);
   const [maintenanceCount, setMaintenanceCount] = useState<number | null>(null);
-  const [statsLoading, setStatsLoading]       = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // Cập nhật đồng hồ mỗi phút
   useEffect(() => {
@@ -83,17 +83,17 @@ export default function Home() {
     load();
   }, []);
 
-  const shiftInfo  = getCurrentShiftInfo();
-  const isAdmin    = session?.user?.role === "ADMIN";
+  const shiftInfo = getCurrentShiftInfo();
+  const isAdmin = session?.user?.role === "ADMIN";
   const accessLevel = session?.user?.accessLevel;
-  const processId  = session?.user?.processId ? Number(session.user.processId) : null;
+  const processId = session?.user?.processId ? Number(session.user.processId) : null;
   const isElectrician = processId !== null && [15, 16].includes(processId as number);
 
   const getRoleTag = () => {
-    if (isAdmin)                        return { label: "Quản trị viên", color: "#f5222d" };
-    if (accessLevel === "MANAGER")      return { label: "Quản lý",       color: "#1677ff" };
-    if (accessLevel === "OPERATOR")     return { label: "Vận hành",      color: "#52c41a" };
-    return                                     { label: "Xem dữ liệu",  color: "#8c8c8c" };
+    if (isAdmin) return { label: "Quản trị viên", color: "#f5222d" };
+    if (accessLevel === "MANAGER") return { label: "Quản lý", color: "#1677ff" };
+    if (accessLevel === "OPERATOR") return { label: "Vận hành", color: "#52c41a" };
+    return { label: "Xem dữ liệu", color: "#8c8c8c" };
   };
   const roleTag = getRoleTag();
 
@@ -153,13 +153,13 @@ export default function Home() {
     },
     ...(isAdmin || isElectrician
       ? [{
-          key: "energy",
-          title: "Điện năng",
-          desc: "Nhập chỉ số điện, theo dõi tiêu thụ & chi phí",
-          icon: <ThunderboltOutlined style={{ fontSize: 30, color: "#fa8c16" }} />,
-          path: "/dashboard/energy/daily-input",
-          bg: "#fff7e6", border: "#fa8c16",
-        }]
+        key: "energy",
+        title: "Điện năng",
+        desc: "Nhập chỉ số điện, theo dõi tiêu thụ & chi phí",
+        icon: <ThunderboltOutlined style={{ fontSize: 30, color: "#fa8c16" }} />,
+        path: "/dashboard/energy/daily-input",
+        bg: "#fff7e6", border: "#fa8c16",
+      }]
       : []),
   ];
 
