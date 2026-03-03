@@ -65,3 +65,4 @@ Thumbs.db
 # Prisma (Nếu lỡ tay tạo file SQLite hoặc backup DB)
 *.sqlite
 *.sqlite-journal
+ecosystem.config.js
