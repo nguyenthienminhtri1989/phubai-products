@@ -12,12 +12,13 @@ import {
   UserOutlined,
   HistoryOutlined,
   SettingOutlined,
-  SafetyCertificateOutlined, // Icon cho quản trị hệ thống
-  CloudSyncOutlined,         // Icon cho Backup
-  ApartmentOutlined,         // Icon Factory
-  BarcodeOutlined,           // Icon Item
-  PartitionOutlined,         // Icon Process
-  RobotOutlined              // Icon Machine
+  SafetyCertificateOutlined,
+  CloudSyncOutlined,
+  ApartmentOutlined,
+  BarcodeOutlined,
+  PartitionOutlined,
+  RobotOutlined,
+  ThunderboltOutlined, // Icon tia sét cho Module Điện năng
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -72,7 +73,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
         { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
         { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-
       ],
     },
     {
@@ -96,16 +96,45 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     },
   ];
 
-  // 3. Cấu hình Menu Admin (Chỉ Admin mới thấy)
-  // Gom User và Backup vào nhóm "Quản trị hệ thống"
-  if (session?.user?.role === "ADMIN") {
+  // ========================================================
+  // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU ĐIỆN NĂNG
+  // ========================================================
+  const userRole = session?.user?.role;
+  const userProcessId = session?.user?.processId ? Number(session.user.processId) : null;
+
+  // Danh sách ID các Tổ Điện (Nhà máy 1 và Nhà máy 2)
+  const ELECTRICAL_PROCESS_IDS = [15, 16];
+
+  const isAdmin = userRole === "ADMIN";
+
+  // Kiểm tra xem user có thuộc một trong các tổ điện không
+  const isElectrician = userProcessId !== null && ELECTRICAL_PROCESS_IDS.includes(userProcessId);
+
+  // Nếu là Admin HOẶC là nhân viên tổ điện -> Thêm menu Quản lý Điện năng
+  if (isAdmin || isElectrician) {
+    baseMenuItems.push({
+      key: "sub-energy",
+      icon: <ThunderboltOutlined />,
+      label: "Quản lý Điện năng",
+      children: [
+        { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
+        { key: "/dashboard/energy/meters", label: "Trạm & Đồng hồ" },
+        { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
+        { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
+      ],
+    } as any);
+  }
+  // ========================================================
+
+  // 4. Menu Quản trị hệ thống (Chỉ Admin mới thấy)
+  if (isAdmin) {
     baseMenuItems.push({
       key: "sub-admin",
       icon: <SafetyCertificateOutlined />,
       label: "Quản trị hệ thống",
       children: [
         {
-          key: "/users", // Hoặc /admin/users nếu bạn đã đổi cấu trúc thư mục
+          key: "/users",
           icon: <UserOutlined />,
           label: "Quản lý Tài khoản",
         },
@@ -133,7 +162,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           style={{
             height: 64,
             margin: 16,
-            background: "rgba(255, 255, 255, 0.1)", // Chỉnh lại màu nền logo cho nhẹ nhàng hơn
+            background: "rgba(255, 255, 255, 0.1)",
             border: "1px solid rgba(255, 255, 255, 0.2)",
             display: "flex",
             alignItems: "center",
@@ -154,8 +183,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          // Tự động mở menu con nếu đang ở trang con tương ứng
-          defaultOpenKeys={["sub1", "sub2", "sub-admin"]}
+          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy"]}
           items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
@@ -175,7 +203,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             justifyContent: "space-between",
             alignItems: "center",
             paddingRight: 24,
-            boxShadow: "0 1px 4px rgba(0,21,41,0.08)", // Thêm bóng đổ nhẹ cho Header tách biệt
+            boxShadow: "0 1px 4px rgba(0,21,41,0.08)",
             zIndex: 1,
           }}
         >
@@ -190,7 +218,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             }}
           />
 
-          {/* Component UserDropdown bạn đã tách riêng rất gọn */}
           <UserDropdown />
         </Header>
 
@@ -201,7 +228,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             minHeight: 280,
             background: colorBgContainer,
             borderRadius: borderRadiusLG,
-            overflow: "initial", // Để nội dung dài vẫn cuộn mượt
+            overflow: "initial",
           }}
         >
           {children}

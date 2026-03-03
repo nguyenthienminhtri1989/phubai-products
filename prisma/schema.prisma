@@ -19,6 +19,9 @@ model Factory {
   note      String?   // Ghi chú
 
   processes Process[] // 1 Nhà máy có nhiều Công đoạn
+  // 👇 THÊM 2 DÒNG NÀY VÀO ĐÂY 👇
+  substations Substation[]
+  powerMeters PowerMeter[]
 
   @@map("factories")
 }
@@ -234,4 +237,108 @@ model MaintenanceHistory {
 
   @@index([taskId])
   @@index([performedDate])
+}
+
+// ==========================================
+// MODULE QUẢN LÝ ĐIỆN NĂNG (ENERGY MANAGEMENT)
+// ==========================================
+
+// 1. Danh mục Giá điện (Có thể chỉnh sửa khi điện lực đổi giá)
+model ElectricityPrice {
+  id          Int      @id @default(autoincrement())
+  type        String   @unique // NORMAL, PEAK, OFF_PEAK
+  name        String   // Bình thường, Cao điểm, Thấp điểm
+  price       Float    // Vd: 1833, 3398, 1190
+  description String?  // Ghi chú khung giờ (Vd: 04:00 - 09:30...)
+  updatedAt   DateTime @updatedAt
+
+  @@map("electricity_prices")
+}
+
+// 2. Danh mục Trạm biến áp
+model Substation {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // Mã trạm (Vd: TBA-01)
+  name        String   // Tên trạm (Vd: Trạm biến áp Nhà máy 1)
+  
+  // Liên kết với Nhà máy
+  factoryId   Int
+  factory     Factory  @relation(fields: [factoryId], references: [id])
+  
+  // Quan hệ 1 trạm có nhiều đồng hồ hạ thế
+  meters      PowerMeter[] 
+
+  @@map("substations")
+}
+
+// 3. Danh mục Đồng hồ điện / Công tơ (Bao gồm cả Trung thế & Hạ thế)
+model PowerMeter {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // Mã đồng hồ
+  name        String   // Tên đồng hồ (Vd: Công tơ tổng NM1, Công tơ Máy chải 1)
+  description String?  // Mô tả về đồng hồ
+  
+  // 1: Đồng hồ hạ thế (Có 1 chỉ số tổng)
+  // 2: Đồng hồ trung thế (Có 3 chỉ số: BT, CĐ, TĐ)
+  type        Int      @default(1) 
+  
+  // Hệ số biến dòng/biến áp (Nếu đọc trực tiếp không qua hệ số thì để mặc định là 1)
+  tu          Float    @default(1.0)
+  ti          Float    @default(1.0)
+  
+  isActive    Boolean  @default(true) // Đang dùng hay đã tháo bỏ
+
+  // Liên kết
+  factoryId   Int      // Đồng hồ này thuộc nhà máy nào?
+  factory     Factory  @relation(fields: [factoryId], references: [id])
+
+  // Trạm biến áp (Với đồng hồ trung thế có thể không thuộc trạm nào -> nullable)
+  substationId Int?    
+  substation   Substation? @relation(fields: [substationId], references: [id])
+
+  records     PowerRecord[]
+
+  @@map("power_meters")
+}
+
+// 4. Bảng Ghi nhận Chỉ số điện Hàng ngày
+model PowerRecord {
+  id          String   @id @default(cuid())
+  recordDate  DateTime @db.Date // Ngày chốt (Ví dụ ghi lúc 8h sáng 02/01 thì lưu cho ngày 01/01)
+  
+  meterId     Int
+  meter       PowerMeter @relation(fields: [meterId], references: [id])
+
+  // Cờ báo hiệu Reset/Thay đồng hồ (Giống hệt nghiệp vụ Sản lượng)
+  isReset     Boolean  @default(false)
+
+  // --- Dành cho Đồng hồ Hạ thế (Loại 1) ---
+  prevTotal   Float?   // Chỉ số trước
+  currTotal   Float?   // Chỉ số sau
+  consTotal   Float?   // Điện năng tiêu thụ (Đã nhân hệ số TU * TY)
+
+  // --- Dành cho Đồng hồ Trung thế (Loại 2) - Ghi nhận 3 giá ---
+  prevNormal  Float?
+  currNormal  Float?
+  consNormal  Float?   // Tiêu thụ Bình thường
+
+  prevPeak    Float?
+  currPeak    Float?
+  consPeak    Float?   // Tiêu thụ Cao điểm
+
+  prevOffPeak Float?
+  currOffPeak Float?
+  consOffPeak Float?   // Tiêu thụ Thấp điểm
+
+  // Tiền điện tính toán của ngày hôm đó (Lưu cứng lại để phòng trường hợp sau này giá điện đổi thì lịch sử không bị thay đổi)
+  costTotal   Float?   @default(0)
+
+  note        String?  // Ghi chú: "Thay đồng hồ", "Mất điện"...
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Đảm bảo 1 đồng hồ chỉ được chốt 1 lần trong 1 ngày
+  @@unique([recordDate, meterId])
+  @@map("power_records")
 }

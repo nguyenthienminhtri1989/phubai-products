@@ -78,6 +78,9 @@ model Factory {
   note      String?   // Ghi chú
 
   processes Process[] // 1 Nhà máy có nhiều Công đoạn
+  // 👇 THÊM 2 DÒNG NÀY VÀO ĐÂY 👇
+  substations Substation[]
+  powerMeters PowerMeter[]
 
   @@map("factories")
 }
@@ -156,6 +159,8 @@ model Machine {
   // Dành cho máy loại 3, 4. 
   // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
   currentNE     Float?
+
+  maintenanceTasks MaintenanceTask[]
 
   // --- Dữ liệu lịch sử ---
   productionLogs ProductionLog[]
@@ -237,6 +242,164 @@ model User {
   createdAt   DateTime @default(now())
 
   @@map("users")
+}
+
+// Bảng Danh mục Hạng mục bảo dưỡng (Maintenance Task)
+// Lưu trữ các cấu hình định kỳ cho từng máy
+model MaintenanceTask {
+  id                String   @id @default(cuid())
+  
+  // Điều chỉnh machineId thành kiểu Int để khớp với Machine.id
+  machineId         Int      
+  
+  taskName          String   
+  description       String?  
+  intervalMonths    Float    
+  lastPerformedDate DateTime? 
+  nextDueDate       DateTime  
+  leadTimeDays      Int      @default(30) 
+  emailNotify       Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Thiết lập mối quan hệ chính thức với bảng Machine
+  // Lưu ý: Tên field là 'machine', khớp với lệnh include trong API
+  machine           Machine  @relation(fields: [machineId], references: [id])
+  
+  history           MaintenanceHistory[]
+
+  @@index([machineId])
+  @@index([nextDueDate])
+  @@map("maintenance_tasks")
+}
+
+// Cần bổ sung thêm quan hệ vào bảng Machine để Prisma nhận diện
+// (Thêm dòng này vào bên trong model Machine của bạn)
+// model Machine {
+//   ...
+//   maintenanceTasks MaintenanceTask[]
+// }
+
+// Bảng Nhật ký bảo dưỡng (Maintenance History)
+// Lưu vết mỗi lần thực hiện xong
+model MaintenanceHistory {
+  id                String   @id @default(cuid())
+  taskId            String
+  performedDate     DateTime @default(now()) // Ngày thực hiện thực tế
+  performedBy       String?  // Tên công nhân/kỹ thuật viên
+  notes             String?  // Ghi chú tình trạng lúc đó
+  cost              Float?   @default(0)
+  
+  // Quan hệ
+  task              MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([performedDate])
+}
+
+// ==========================================
+// MODULE QUẢN LÝ ĐIỆN NĂNG (ENERGY MANAGEMENT)
+// ==========================================
+
+// 1. Danh mục Giá điện (Có thể chỉnh sửa khi điện lực đổi giá)
+model ElectricityPrice {
+  id          Int      @id @default(autoincrement())
+  type        String   @unique // NORMAL, PEAK, OFF_PEAK
+  name        String   // Bình thường, Cao điểm, Thấp điểm
+  price       Float    // Vd: 1833, 3398, 1190
+  description String?  // Ghi chú khung giờ (Vd: 04:00 - 09:30...)
+  updatedAt   DateTime @updatedAt
+
+  @@map("electricity_prices")
+}
+
+// 2. Danh mục Trạm biến áp
+model Substation {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // Mã trạm (Vd: TBA-01)
+  name        String   // Tên trạm (Vd: Trạm biến áp Nhà máy 1)
+  
+  // Liên kết với Nhà máy
+  factoryId   Int
+  factory     Factory  @relation(fields: [factoryId], references: [id])
+  
+  // Quan hệ 1 trạm có nhiều đồng hồ hạ thế
+  meters      PowerMeter[] 
+
+  @@map("substations")
+}
+
+// 3. Danh mục Đồng hồ điện / Công tơ (Bao gồm cả Trung thế & Hạ thế)
+model PowerMeter {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // Mã đồng hồ
+  name        String   // Tên đồng hồ (Vd: Công tơ tổng NM1, Công tơ Máy chải 1)
+  description String?  // Mô tả về đồng hồ
+  
+  // 1: Đồng hồ hạ thế (Có 1 chỉ số tổng)
+  // 2: Đồng hồ trung thế (Có 3 chỉ số: BT, CĐ, TĐ)
+  type        Int      @default(1) 
+  
+  // Hệ số biến dòng/biến áp (Nếu đọc trực tiếp không qua hệ số thì để mặc định là 1)
+  tu          Float    @default(1.0)
+  ti          Float    @default(1.0)
+  
+  isActive    Boolean  @default(true) // Đang dùng hay đã tháo bỏ
+
+  // Liên kết
+  factoryId   Int      // Đồng hồ này thuộc nhà máy nào?
+  factory     Factory  @relation(fields: [factoryId], references: [id])
+
+  // Trạm biến áp (Với đồng hồ trung thế có thể không thuộc trạm nào -> nullable)
+  substationId Int?    
+  substation   Substation? @relation(fields: [substationId], references: [id])
+
+  records     PowerRecord[]
+
+  @@map("power_meters")
+}
+
+// 4. Bảng Ghi nhận Chỉ số điện Hàng ngày
+model PowerRecord {
+  id          String   @id @default(cuid())
+  recordDate  DateTime @db.Date // Ngày chốt (Ví dụ ghi lúc 8h sáng 02/01 thì lưu cho ngày 01/01)
+  
+  meterId     Int
+  meter       PowerMeter @relation(fields: [meterId], references: [id])
+
+  // Cờ báo hiệu Reset/Thay đồng hồ (Giống hệt nghiệp vụ Sản lượng)
+  isReset     Boolean  @default(false)
+
+  // --- Dành cho Đồng hồ Hạ thế (Loại 1) ---
+  prevTotal   Float?   // Chỉ số trước
+  currTotal   Float?   // Chỉ số sau
+  consTotal   Float?   // Điện năng tiêu thụ (Đã nhân hệ số TU * TY)
+
+  // --- Dành cho Đồng hồ Trung thế (Loại 2) - Ghi nhận 3 giá ---
+  prevNormal  Float?
+  currNormal  Float?
+  consNormal  Float?   // Tiêu thụ Bình thường
+
+  prevPeak    Float?
+  currPeak    Float?
+  consPeak    Float?   // Tiêu thụ Cao điểm
+
+  prevOffPeak Float?
+  currOffPeak Float?
+  consOffPeak Float?   // Tiêu thụ Thấp điểm
+
+  // Tiền điện tính toán của ngày hôm đó (Lưu cứng lại để phòng trường hợp sau này giá điện đổi thì lịch sử không bị thay đổi)
+  costTotal   Float?   @default(0)
+
+  note        String?  // Ghi chú: "Thay đồng hồ", "Mất điện"...
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Đảm bảo 1 đồng hồ chỉ được chốt 1 lần trong 1 ngày
+  @@unique([recordDate, meterId])
+  @@map("power_records")
 }
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\prisma\schema.prisma ---
@@ -798,6 +961,384 @@ export const { GET, POST } = handlers;
 
 
 ================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\daily-input\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+// Hàm hỗ trợ ép kiểu an toàn: Tránh việc biến null/undefined thành số 0 sai lệch
+const parseNum = (val: any) =>
+  val !== undefined && val !== null && val !== "" ? Number(val) : null;
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { recordDate, meterId, isReset, consTotal, costTotal, ...values } =
+      body;
+
+    const dateObj = new Date(recordDate);
+    const mId = Number(meterId);
+
+    // Đóng gói dữ liệu cần lưu
+    const dataPayload = {
+      isReset: Boolean(isReset),
+
+      // Hạ thế
+      prevTotal: parseNum(values.prevTotal),
+      currTotal: parseNum(values.currTotal),
+
+      // Trung thế
+      prevNormal: parseNum(values.prevNormal),
+      currNormal: parseNum(values.currNormal),
+
+      prevPeak: parseNum(values.prevPeak),
+      currPeak: parseNum(values.currPeak),
+
+      prevOffPeak: parseNum(values.prevOffPeak),
+      currOffPeak: parseNum(values.currOffPeak),
+
+      // Kết quả tính toán
+      consTotal: parseNum(consTotal) || 0,
+      costTotal: parseNum(costTotal) || 0,
+
+      note: isReset ? "Đã thay đồng hồ / Reset" : null,
+    };
+
+    // Dùng upsert: Nếu đã có data của ngày này -> Cập nhật. Chưa có -> Tạo mới.
+    const record = await prisma.powerRecord.upsert({
+      where: {
+        recordDate_meterId: {
+          recordDate: dateObj,
+          meterId: mId,
+        },
+      },
+      update: dataPayload,
+      create: {
+        recordDate: dateObj,
+        meterId: mId,
+        ...dataPayload,
+      },
+    });
+
+    return NextResponse.json(record, { status: 200 });
+  } catch (error: any) {
+    console.error("Lỗi lưu chỉ số điện:", error);
+    return NextResponse.json(
+      { error: "Lỗi lưu dữ liệu: " + error.message },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\daily-input\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\daily-status\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const substationId = searchParams.get("substationId");
+  const dateStr = searchParams.get("date");
+
+  if (!substationId || !dateStr) {
+    return NextResponse.json(
+      { error: "Thiếu tham số substationId hoặc date" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const targetDate = new Date(dateStr);
+
+    // Tìm tất cả đồng hồ đang hoạt động thuộc Trạm biến áp này
+    const meters = await prisma.powerMeter.findMany({
+      where: {
+        substationId: Number(substationId),
+        isActive: true,
+      },
+      include: {
+        // Kéo theo bản ghi chốt số của đúng ngày được chọn (nếu có)
+        records: {
+          where: { recordDate: targetDate },
+          take: 1,
+        },
+      },
+      orderBy: { code: "asc" }, // Sắp xếp theo mã đồng hồ
+    });
+
+    // Định dạng lại dữ liệu trả về cho Frontend dễ đọc
+    const result = meters.map((m) => {
+      const { records, ...rest } = m;
+      return {
+        ...rest,
+        todayRecord: records.length > 0 ? records[0] : null,
+      };
+    });
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("Lỗi lấy danh sách đồng hồ:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\daily-status\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\last-record\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const meterId = searchParams.get("meterId");
+  const dateStr = searchParams.get("date");
+
+  if (!meterId || !dateStr) {
+    return NextResponse.json(null);
+  }
+
+  try {
+    const targetDate = new Date(dateStr);
+
+    // Tìm bản ghi chốt điện của đồng hồ này, có ngày < ngày đang chọn
+    const lastRecord = await prisma.powerRecord.findFirst({
+      where: {
+        meterId: Number(meterId),
+        recordDate: { lt: targetDate }, // 'lt' = less than (nhỏ hơn)
+      },
+      orderBy: {
+        recordDate: "desc", // Xếp giảm dần để lấy cái gần nhất
+      },
+    });
+
+    return NextResponse.json(lastRecord);
+  } catch (error: any) {
+    console.error("Lỗi truy vết chỉ số:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\last-record\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\meters\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  try {
+    const data = await prisma.powerMeter.findMany({
+      include: { factory: true, substation: true },
+      orderBy: { factoryId: "asc" },
+    });
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const data = await request.json();
+    const newData = await prisma.powerMeter.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        description: data.description || null,
+        type: data.type,
+        tu: data.tu,
+        ti: data.ti,
+        factoryId: data.factoryId,
+        substationId: data.substationId || null,
+      },
+    });
+    return NextResponse.json(newData, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { error: "Mã đồng hồ đã tồn tại hoặc lỗi dữ liệu" },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const data = await request.json();
+    const updatedData = await prisma.powerMeter.update({
+      where: { id: Number(data.id) },
+      data: {
+        code: data.code,
+        name: data.name,
+        description: data.description || null,
+        type: data.type,
+        tu: data.tu,
+        ti: data.ti,
+        factoryId: data.factoryId,
+        substationId: data.substationId || null,
+      },
+    });
+    return NextResponse.json(updatedData);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\meters\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\prices\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+// Lấy danh sách giá điện (Tự động khởi tạo nếu chưa có)
+export async function GET() {
+  try {
+    let prices = await prisma.electricityPrice.findMany({
+      orderBy: { id: "asc" },
+    });
+
+    // AUTO-SEED: Nếu bảng trống, tự động nạp 3 mốc giá chuẩn
+    if (prices.length === 0) {
+      await prisma.electricityPrice.createMany({
+        data: [
+          {
+            type: "NORMAL",
+            name: "Bình thường",
+            price: 1833,
+            description: "04:00-09:30, 11:30-17:00, 20:00-22:00",
+          },
+          {
+            type: "PEAK",
+            name: "Cao điểm",
+            price: 3398,
+            description: "09:30-11:30, 17:00-20:00",
+          },
+          {
+            type: "OFF_PEAK",
+            name: "Thấp điểm",
+            price: 1190,
+            description: "22:00-04:00",
+          },
+        ],
+      });
+      // Lấy lại danh sách sau khi đã tạo
+      prices = await prisma.electricityPrice.findMany({
+        orderBy: { id: "asc" },
+      });
+    }
+
+    return NextResponse.json(prices);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Lỗi khi lấy giá điện: " + error.message },
+      { status: 500 },
+    );
+  }
+}
+
+// Cập nhật giá điện
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, price, description } = body;
+
+    if (!id || price === undefined) {
+      return NextResponse.json(
+        { error: "Thiếu thông tin cập nhật" },
+        { status: 400 },
+      );
+    }
+
+    const updatedPrice = await prisma.electricityPrice.update({
+      where: { id: Number(id) },
+      data: {
+        price: Number(price),
+        description: description,
+      },
+    });
+
+    return NextResponse.json(updatedPrice);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Lỗi cập nhật: " + error.message },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\prices\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\substations\route.ts
+================================================================================
+// API QUẢN LÝ TRẠM BIẾN ÁP
+// src/app/api/energy/substations/route.ts
+
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  try {
+    const data = await prisma.substation.findMany({
+      include: { factory: true },
+      orderBy: { id: "asc" },
+    });
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const { code, name, factoryId } = await request.json();
+    const newData = await prisma.substation.create({
+      data: { code, name, factoryId: Number(factoryId) },
+    });
+    return NextResponse.json(newData, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { error: "Mã trạm đã tồn tại hoặc lỗi dữ liệu" },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const { id, code, name, factoryId } = await request.json();
+    const updatedData = await prisma.substation.update({
+      where: { id: Number(id) },
+      data: { code, name, factoryId: Number(factoryId) },
+    });
+    return NextResponse.json(updatedData);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\energy\substations\route.ts ---
+
+
+================================================================================
 FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\factories\route.ts
 ================================================================================
 // src/app/api/factories/route.ts
@@ -1273,6 +1814,178 @@ export async function DELETE(
 
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\machines\[id]\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\maintenance\complete\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { taskId, performedBy, notes, cost } = body;
+
+    if (!taskId) {
+      return NextResponse.json(
+        { error: "Thiếu ID hạng mục bảo dưỡng" },
+        { status: 400 },
+      );
+    }
+
+    // Sử dụng $transaction để đảm bảo tính toàn vẹn dữ liệu
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Tìm thông tin hạng mục hiện tại để lấy chu kỳ (intervalMonths)
+      const task = await tx.maintenanceTask.findUnique({
+        where: { id: taskId },
+      });
+
+      if (!task) throw new Error("Không tìm thấy hạng mục bảo dưỡng");
+
+      // 2. Tạo bản ghi Lịch sử mới
+      const history = await tx.maintenanceHistory.create({
+        data: {
+          taskId,
+          performedDate: new Date(),
+          performedBy,
+          notes,
+          cost: parseFloat(cost) || 0,
+        },
+      });
+
+      // 3. Tính toán ngày đến hạn tiếp theo
+      // NextDueDate = Ngày hôm nay + intervalMonths
+      const nextDate = new Date();
+      nextDate.setMonth(nextDate.getMonth() + task.intervalMonths);
+
+      // 4. Cập nhật trạng thái mới nhất vào bảng Task
+      const updatedTask = await tx.maintenanceTask.update({
+        where: { id: taskId },
+        data: {
+          lastPerformedDate: new Date(),
+          nextDueDate: nextDate,
+        },
+      });
+
+      return { history, updatedTask };
+    });
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\maintenance\complete\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\maintenance\tasks\route.ts
+================================================================================
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+// 1. GET: Lấy danh sách hạng mục
+export async function GET() {
+  try {
+    const tasks = await prisma.maintenanceTask.findMany({
+      include: {
+        machine: {
+          select: {
+            id: true,
+            name: true,
+            processId: true,
+            process: {
+              select: { id: true, name: true }, // Lấy tên công đoạn để hiển thị
+            },
+          },
+        },
+      },
+      orderBy: {
+        nextDueDate: "asc", // Ưu tiên việc gấp lên đầu
+      },
+    });
+
+    return NextResponse.json(tasks);
+  } catch (error: any) {
+    console.error("GET Maintenance Error:", error);
+    return NextResponse.json(
+      { error: "Lỗi tải danh sách: " + error.message },
+      { status: 500 },
+    );
+  }
+}
+
+// 2. POST: Thêm mới hạng mục
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      machineId,
+      taskName,
+      intervalMonths,
+      nextDueDate,
+      leadTimeDays,
+      description,
+    } = body;
+
+    // --- VALIDATION & PARSING (Quan trọng cho TypeScript/Prisma) ---
+
+    // Kiểm tra thiếu trường
+    if (!machineId || !taskName || !intervalMonths || !nextDueDate) {
+      return NextResponse.json(
+        {
+          error:
+            "Vui lòng điền đầy đủ: Máy, Tên hạng mục, Chu kỳ, Ngày bắt đầu.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Ép kiểu an toàn (Frontend có thể gửi string)
+    const parsedMachineId = Number(machineId);
+    const parsedInterval = parseFloat(intervalMonths);
+    const parsedLeadTime = leadTimeDays ? parseInt(leadTimeDays) : 30;
+
+    // Kiểm tra tính hợp lệ của số
+    if (isNaN(parsedMachineId))
+      return NextResponse.json(
+        { error: "ID máy không hợp lệ" },
+        { status: 400 },
+      );
+    if (isNaN(parsedInterval))
+      return NextResponse.json(
+        { error: "Chu kỳ không hợp lệ" },
+        { status: 400 },
+      );
+
+    // Tạo bản ghi mới
+    const newTask = await prisma.maintenanceTask.create({
+      data: {
+        machineId: parsedMachineId,
+        taskName: String(taskName),
+        description: description ? String(description) : "",
+        intervalMonths: parsedInterval,
+        nextDueDate: new Date(nextDueDate), // Chuyển ISO string sang Date Object
+        leadTimeDays: parsedLeadTime,
+        emailNotify: true,
+      },
+    });
+
+    return NextResponse.json(newTask, { status: 201 });
+  } catch (error: any) {
+    console.error("POST Maintenance Error:", error);
+    return NextResponse.json(
+      { error: "Không thể lưu dữ liệu: " + error.message },
+      { status: 500 },
+    );
+  }
+}
+
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\maintenance\tasks\route.ts ---
 
 
 ================================================================================
@@ -1964,6 +2677,1217 @@ export async function PUT(req: Request) {
 
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\api\users\route.ts ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\daily-input\page.tsx
+================================================================================
+"use client";
+
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Divider, Space } from 'antd';
+import { SaveOutlined, ArrowRightOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import { useSession } from "next-auth/react";
+
+// --- TYPES ---
+interface Factory { id: number; name: string; }
+interface Substation { id: number; name: string; factoryId: number; }
+interface PowerMeter {
+    id: number;
+    code: string;
+    name: string;
+    type: number; // 1: Hạ thế, 2: Trung thế
+    tu: number;
+    ti: number;
+    todayRecord?: any; // Đã nhập hay chưa
+}
+interface ElectricityPrice {
+    type: string; // 'NORMAL', 'PEAK', 'OFF_PEAK'
+    price: number;
+}
+
+export default function EnergyDailyInputPage() {
+    const { data: session } = useSession();
+
+    // --- STATES ---
+    // Theo nghiệp vụ: 8h sáng chốt sổ -> Mặc định là ngày hôm qua
+    const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs().subtract(1, 'day'));
+    const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
+    const [selectedSubstationId, setSelectedSubstationId] = useState<number | null>(null);
+
+    const [factories, setFactories] = useState<Factory[]>([]);
+    const [substations, setSubstations] = useState<Substation[]>([]);
+    const [meters, setMeters] = useState<PowerMeter[]>([]);
+    const [prices, setPrices] = useState<ElectricityPrice[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    // Modal & Form
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentMeter, setCurrentMeter] = useState<PowerMeter | null>(null);
+    const [form] = Form.useForm();
+
+    // Refs để focus nhanh
+    const firstInputRef = useRef<any>(null);
+
+    // Phân quyền: Tổ Điện (15, 16) hoặc ADMIN mới được lưu
+    const ELECTRICAL_PROCESS_IDS = [15, 16];
+    const userProcessId = session?.user?.processId ? Number(session.user.processId) : null;
+    const canEdit = session?.user?.role === "ADMIN" || (userProcessId && ELECTRICAL_PROCESS_IDS.includes(userProcessId));
+
+    // --- LẤY DANH MỤC & GIÁ ĐIỆN ---
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            try {
+                const [facRes, subRes, priceRes] = await Promise.all([
+                    fetch('/api/factories'),
+                    fetch('/api/energy/substations'),
+                    fetch('/api/energy/prices')
+                ]);
+                if (facRes.ok) setFactories(await facRes.json());
+                if (subRes.ok) setSubstations(await subRes.json());
+                if (priceRes.ok) setPrices(await priceRes.json());
+            } catch (e) { message.error("Lỗi tải danh mục"); }
+        };
+        fetchMetadata();
+    }, []);
+
+    // --- TẢI DANH SÁCH ĐỒNG HỒ (Khi chọn Trạm & Ngày) ---
+    const fetchMeters = async () => {
+        if (!selectedSubstationId) return;
+        setLoading(true);
+        try {
+            const dateStr = selectedDate.format('YYYY-MM-DD');
+            const res = await fetch(`/api/energy/daily-status?substationId=${selectedSubstationId}&date=${dateStr}`);
+            if (res.ok) {
+                setMeters(await res.json());
+            }
+        } catch (error) { message.error("Lỗi tải danh sách đồng hồ"); }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchMeters(); }, [selectedSubstationId, selectedDate]);
+
+    // --- MỞ MODAL NHẬP LIỆU & TÌM CHỈ SỐ CŨ ---
+    const handleOpenMeter = async (meter: PowerMeter) => {
+        setCurrentMeter(meter);
+        form.resetFields();
+
+        const initValues: any = { isReset: false };
+
+        if (meter.todayRecord) {
+            message.info("Đồng hồ này đã được chốt chỉ số cho ngày này.");
+            // Nạp dữ liệu cũ lên nếu muốn sửa
+            // initValues = ... (Tùy bạn quyết định có cho sửa trực tiếp hay không)
+        } else {
+            try {
+                // Gọi API tìm chỉ số chốt gần nhất trong quá khứ
+                const res = await fetch(`/api/energy/last-record?meterId=${meter.id}&date=${selectedDate.format('YYYY-MM-DD')}`);
+                if (res.ok) {
+                    const lastRecord = await res.json();
+                    if (lastRecord) {
+                        if (meter.type === 1) {
+                            initValues.prevTotal = lastRecord.currTotal || 0;
+                        } else {
+                            initValues.prevNormal = lastRecord.currNormal || 0;
+                            initValues.prevPeak = lastRecord.currPeak || 0;
+                            initValues.prevOffPeak = lastRecord.currOffPeak || 0;
+                        }
+                    } else {
+                        // Đồng hồ mới chưa từng nhập
+                        initValues.isNewMeter = true;
+                    }
+                }
+            } catch (e) { console.error("Lỗi tìm chỉ số cũ"); }
+        }
+
+        form.setFieldsValue(initValues);
+        setIsModalOpen(true);
+        setTimeout(() => firstInputRef.current?.focus(), 100);
+    };
+
+    // --- WATCH & TÍNH TOÁN REALTIME ---
+    const watchIsReset = Form.useWatch('isReset', form);
+    // Hạ thế
+    const currTotal = Form.useWatch('currTotal', form);
+    const prevTotal = Form.useWatch('prevTotal', form);
+    // Trung thế
+    const currN = Form.useWatch('currNormal', form); const prevN = Form.useWatch('prevNormal', form);
+    const currP = Form.useWatch('currPeak', form); const prevP = Form.useWatch('prevPeak', form);
+    const currO = Form.useWatch('currOffPeak', form); const prevO = Form.useWatch('prevOffPeak', form);
+
+    const calculations = useMemo(() => {
+        if (!currentMeter) return { consTotal: 0, costTotal: 0, error: false };
+
+        const multiplier = currentMeter.tu * currentMeter.ti;
+        let consN = 0, consP = 0, consO = 0, totalCons = 0, totalCost = 0;
+        let hasError = false;
+
+        // Lấy đơn giá
+        const pNormal = prices.find(p => p.type === 'NORMAL')?.price || 0;
+        const pPeak = prices.find(p => p.type === 'PEAK')?.price || 0;
+        const pOffPeak = prices.find(p => p.type === 'OFF_PEAK')?.price || 0;
+
+        if (currentMeter.type === 1) {
+            // 1. Hạ thế
+            const curr = Number(currTotal) || 0; const prev = Number(prevTotal) || 0;
+            if (curr < prev && !watchIsReset) hasError = true;
+            const delta = watchIsReset ? curr : Math.max(0, curr - prev);
+            totalCons = delta * multiplier;
+            totalCost = totalCons * pNormal; // Giả sử hạ thế tính giá bình thường hoặc không tính tiền tùy bạn
+        } else {
+            // 2. Trung thế
+            const cN = Number(currN) || 0; const pN = Number(prevN) || 0;
+            const cP = Number(currP) || 0; const pP = Number(prevP) || 0;
+            const cO = Number(currO) || 0; const pO = Number(prevO) || 0;
+
+            if ((cN < pN || cP < pP || cO < pO) && !watchIsReset) hasError = true;
+
+            consN = (watchIsReset ? cN : Math.max(0, cN - pN)) * multiplier;
+            consP = (watchIsReset ? cP : Math.max(0, cP - pP)) * multiplier;
+            consO = (watchIsReset ? cO : Math.max(0, cO - pO)) * multiplier;
+
+            totalCons = consN + consP + consO;
+            totalCost = (consN * pNormal) + (consP * pPeak) + (consO * pOffPeak);
+        }
+
+        return { consTotal: totalCons, costTotal: totalCost, error: hasError };
+    }, [currTotal, prevTotal, currN, prevN, currP, prevP, currO, prevO, watchIsReset, currentMeter, prices]);
+
+    // --- LƯU DỮ LIỆU ---
+    const handleSave = async (saveAndNext: boolean) => {
+        if (!canEdit) { message.error("Bạn không có quyền nhập chỉ số điện"); return; }
+        try {
+            const values = await form.validateFields();
+            if (calculations.error) {
+                Modal.error({ title: 'Lỗi số liệu', content: 'Chỉ số SAU đang nhỏ hơn chỉ số TRƯỚC. Nếu đã thay đồng hồ, vui lòng bật "Reset đồng hồ".' });
+                return;
+            }
+
+            const payload = {
+                recordDate: selectedDate.format('YYYY-MM-DD'),
+                meterId: currentMeter?.id,
+                isReset: values.isReset,
+                ...values,
+                consTotal: calculations.consTotal,
+                costTotal: calculations.costTotal
+            };
+
+            const res = await fetch('/api/energy/daily-input', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Lỗi lưu');
+            message.success("Đã chốt chỉ số thành công!");
+
+            // Cập nhật UI
+            setMeters(prev => prev.map(m => m.id === currentMeter?.id ? { ...m, todayRecord: payload } : m));
+
+            if (saveAndNext) {
+                const idx = meters.findIndex(m => m.id === currentMeter?.id);
+                if (idx < meters.length - 1) handleOpenMeter(meters[idx + 1]);
+                else { setIsModalOpen(false); message.success("Đã nhập hết trạm này!"); }
+            } else { setIsModalOpen(false); }
+
+        } catch (e) { /* Validate failed or API error */ }
+    };
+
+    return (
+        <div style={{ padding: 20 }}>
+            {/* HEADER BỘ LỌC */}
+            <Card style={{ marginBottom: 16 }} size="small">
+                <Row gutter={16} align="middle">
+                    <Col span={8}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy & Trạm Biến Áp:</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <Select
+                                style={{ width: '50%' }} placeholder="Chọn Nhà máy"
+                                options={factories.map(f => ({ label: f.name, value: f.id }))}
+                                onChange={val => { setSelectedFactoryId(val); setSelectedSubstationId(null); }}
+                                value={selectedFactoryId}
+                            />
+                            <Select
+                                style={{ width: '50%' }} placeholder="Chọn Trạm"
+                                options={substations.filter(s => s.factoryId === selectedFactoryId).map(s => ({ label: s.name, value: s.id }))}
+                                onChange={setSelectedSubstationId}
+                                value={selectedSubstationId} disabled={!selectedFactoryId}
+                            />
+                        </div>
+                    </Col>
+                    <Col span={8}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày chốt số liệu (Mặc định hôm qua):</div>
+                        <DatePicker value={selectedDate} onChange={val => val && setSelectedDate(val)} format="DD/MM/YYYY" allowClear={false} style={{ width: '100%' }} />
+                    </Col>
+                    <Col span={8} style={{ textAlign: 'right' }}>
+                        <Statistic title="Tiến độ chốt sổ" value={meters.filter(m => m.todayRecord).length} suffix={`/ ${meters.length} đồng hồ`} valueStyle={{ fontSize: 20, color: '#1890ff' }} />
+                    </Col>
+                </Row>
+            </Card>
+
+            {/* DANH SÁCH ĐỒNG HỒ */}
+            {!selectedSubstationId ? (
+                <div style={{ textAlign: 'center', padding: 50, background: '#fff', borderRadius: 8 }}>Vui lòng chọn <b>Trạm biến áp</b>.</div>
+            ) : (
+                <Row gutter={[12, 12]}>
+                    {meters.map(m => {
+                        const isDone = !!m.todayRecord;
+                        return (
+                            <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
+                                <Card hoverable onClick={() => handleOpenMeter(m)} style={{ border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9', background: isDone ? '#f6ffed' : '#fff' }} bodyStyle={{ padding: 12 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <b>{m.code}</b>
+                                        {isDone && <SaveOutlined style={{ color: '#52c41a' }} />}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4, height: 36, overflow: 'hidden' }}>{m.name}</div>
+                                    <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 'bold' }}>
+                                        {isDone ? <span style={{ color: '#d48806' }}>Đã chốt</span> : <span style={{ color: '#ccc' }}>--</span>}
+                                    </div>
+                                </Card>
+                            </Col>
+                        )
+                    })}
+                </Row>
+            )}
+
+            {/* MODAL NHẬP CHỈ SỐ */}
+            <Modal open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null} width={650} centered title={<span><ThunderboltOutlined style={{ color: '#faad14' }} /> {currentMeter?.name} <Tag color="blue">{currentMeter?.code}</Tag> (Hệ số: {currentMeter?.tu * currentMeter?.ti})</span>}>
+                <Form form={form} layout="vertical">
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
+                        <Form.Item name="isReset" valuePropName="checked" noStyle>
+                            <Switch checkedChildren="Đã Reset / Thay đồng hồ" unCheckedChildren="Bình thường" style={{ background: watchIsReset ? '#faad14' : undefined }} />
+                        </Form.Item>
+                    </div>
+
+                    {/* RENDER FORM DỰA VÀO LOẠI ĐỒNG HỒ */}
+                    {currentMeter?.type === 1 ? (
+                        <Row gutter={16}>
+                            <Col span={12}>
+                                <Form.Item name="prevTotal" label="Chỉ số TRƯỚC (Tổng)">
+                                    <InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMeter')} variant="filled" />
+                                </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                                <Form.Item name="currTotal" label="Chỉ số SAU (Tổng)" rules={[{ required: true }]}>
+                                    <InputNumber ref={firstInputRef} style={{ width: '100%', fontWeight: 'bold', fontSize: 16 }} onPressEnter={() => handleSave(true)} />
+                                </Form.Item>
+                            </Col>
+                        </Row>
+                    ) : (
+                        <>
+                            <Divider titlePlacement="left" style={{ margin: '8px 0' }}>1. Giờ Bình thường</Divider>
+                            <Row gutter={16}>
+                                <Col span={12}><Form.Item name="prevNormal" label="Chỉ số Trước"><InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMeter')} variant="filled" /></Form.Item></Col>
+                                <Col span={12}><Form.Item name="currNormal" label="Chỉ số Sau" rules={[{ required: true }]}><InputNumber ref={firstInputRef} style={{ width: '100%', fontWeight: 'bold' }} /></Form.Item></Col>
+                            </Row>
+                            <Divider titlePlacement="left" style={{ margin: '8px 0' }}>2. Giờ Cao điểm</Divider>
+                            <Row gutter={16}>
+                                <Col span={12}><Form.Item name="prevPeak" label="Chỉ số Trước"><InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMeter')} variant="filled" /></Form.Item></Col>
+                                <Col span={12}><Form.Item name="currPeak" label="Chỉ số Sau" rules={[{ required: true }]}><InputNumber style={{ width: '100%', fontWeight: 'bold' }} /></Form.Item></Col>
+                            </Row>
+                            <Divider titlePlacement="left" style={{ margin: '8px 0' }}>3. Giờ Thấp điểm</Divider>
+                            <Row gutter={16}>
+                                <Col span={12}><Form.Item name="prevOffPeak" label="Chỉ số Trước"><InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMeter')} variant="filled" /></Form.Item></Col>
+                                <Col span={12}><Form.Item name="currOffPeak" label="Chỉ số Sau" rules={[{ required: true }]}><InputNumber style={{ width: '100%', fontWeight: 'bold' }} onPressEnter={() => handleSave(true)} /></Form.Item></Col>
+                            </Row>
+                        </>
+                    )}
+
+                    {/* KẾT QUẢ TÍNH TOÁN */}
+                    <div style={{ padding: 15, background: calculations.error ? '#fff1f0' : '#e6f7ff', marginBottom: 20, borderRadius: 8, border: calculations.error ? '1px solid #ffccc7' : '1px solid #91d5ff' }}>
+                        <Row gutter={16}>
+                            <Col span={12} style={{ textAlign: 'center', borderRight: '1px solid #ccc' }}>
+                                <div style={{ color: '#666', fontSize: 12 }}>Điện năng tiêu thụ trong ngày:</div>
+                                <div style={{ fontSize: 24, fontWeight: 'bold', color: calculations.error ? 'red' : '#0958d9' }}>
+                                    {calculations.consTotal.toLocaleString('en-US')} <small>kWh</small>
+                                </div>
+                            </Col>
+                            <Col span={12} style={{ textAlign: 'center' }}>
+                                <div style={{ color: '#666', fontSize: 12 }}>Thành tiền ước tính:</div>
+                                <div style={{ fontSize: 24, fontWeight: 'bold', color: calculations.error ? 'red' : '#cf1322' }}>
+                                    {calculations.costTotal.toLocaleString('en-US')} <small>VNĐ</small>
+                                </div>
+                            </Col>
+                        </Row>
+                    </div>
+
+                    <Row gutter={16}>
+                        <Col span={8}><Button block onClick={() => setIsModalOpen(false)}>Hủy</Button></Col>
+                        <Col span={8}><Button block icon={<SaveOutlined />} onClick={() => handleSave(false)} disabled={!canEdit || calculations.error}>Lưu</Button></Col>
+                        <Col span={8}><Button block type="primary" icon={<ArrowRightOutlined />} onClick={() => handleSave(true)} disabled={!canEdit || calculations.error}>Lưu & Tiếp</Button></Col>
+                    </Row>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\daily-input\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\meters\page.tsx
+================================================================================
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, message, Tabs, Tag, Space, Popconfirm } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PartitionOutlined, DashboardOutlined } from '@ant-design/icons';
+import { useSession } from "next-auth/react";
+import type { TableProps } from 'antd';
+
+const { Option } = Select;
+
+// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
+interface Factory { id: number; name: string; }
+interface Substation { id: number; code: string; name: string; factoryId: number; factory?: Factory; }
+interface PowerMeter {
+    id: number;
+    code: string;
+    name: string;
+    description: string;
+    type: number; // 1: Hạ thế, 2: Trung thế
+    tu: number;
+    ti: number;
+    factoryId: number;
+    substationId: number | null;
+    factory?: Factory;
+    substation?: Substation;
+}
+
+export default function EnergyMetersPage() {
+    const { data: session } = useSession();
+    const [activeTab, setActiveTab] = useState('1');
+    const [loading, setLoading] = useState(false);
+
+    const [factories, setFactories] = useState<Factory[]>([]);
+    const [substations, setSubstations] = useState<Substation[]>([]);
+    const [meters, setMeters] = useState<PowerMeter[]>([]);
+
+    // Quyền thao tác (Sửa số 99 thành ID Tổ Điện thực tế của bạn)
+    // Khai báo một mảng chứa ID của tất cả các Tổ Điện
+    const ELECTRICAL_PROCESS_IDS = [15, 16];
+
+    // Lấy processId của user đăng nhập
+    const userProcessId = Number(session?.user?.processId);
+
+    // Kiểm tra: Là ADMIN HOẶC processId nằm trong danh sách tổ điện
+    const canEdit = session?.user?.role === "ADMIN" || ELECTRICAL_PROCESS_IDS.includes(userProcessId);
+
+    // Modals state
+    const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+    const [isMeterModalOpen, setIsMeterModalOpen] = useState(false);
+    const [editingSub, setEditingSub] = useState<Substation | null>(null);
+    const [editingMeter, setEditingMeter] = useState<PowerMeter | null>(null);
+
+    const [subForm] = Form.useForm();
+    const [meterForm] = Form.useForm();
+
+    // --- FETCH DATA ---
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [facRes, subRes, metRes] = await Promise.all([
+                fetch('/api/factories'),
+                fetch('/api/energy/substations'),
+                fetch('/api/energy/meters')
+            ]);
+            if (facRes.ok) setFactories(await facRes.json());
+            if (subRes.ok) setSubstations(await subRes.json());
+            if (metRes.ok) setMeters(await metRes.json());
+        } catch (e) {
+            message.error("Lỗi tải dữ liệu");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchData(); }, []);
+
+    // --- XỬ LÝ TRẠM BIẾN ÁP (SUBSTATION) ---
+    const handleSaveSubstation = async (values: any) => {
+        try {
+            const method = editingSub ? 'PUT' : 'POST';
+            const payload = { ...values, id: editingSub?.id, factoryId: Number(values.factoryId) };
+
+            const res = await fetch('/api/energy/substations', {
+                method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                message.success("Đã lưu Trạm biến áp!");
+                setIsSubModalOpen(false); subForm.resetFields(); fetchData();
+            } else {
+                const err = await res.json(); message.error(err.error);
+            }
+        } catch (e) { message.error("Lỗi hệ thống"); }
+    };
+
+    const handleDeleteSubstation = async (id: number) => {
+        // Gọi API DELETE (Bạn cần viết API hỗ trợ method DELETE)
+        message.warning("Chức năng xóa đang được khóa để bảo vệ dữ liệu!");
+    };
+
+    // --- XỬ LÝ ĐỒNG HỒ (METER) ---
+    const handleSaveMeter = async (values: any) => {
+        try {
+            const method = editingMeter ? 'PUT' : 'POST';
+            const payload = {
+                ...values,
+                id: editingMeter?.id,
+                description: values.description || null,
+                factoryId: Number(values.factoryId),
+                substationId: values.substationId ? Number(values.substationId) : null,
+                tu: Number(values.tu),
+                ti: Number(values.ti)
+            };
+
+            const res = await fetch('/api/energy/meters', {
+                method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                message.success("Đã lưu Đồng hồ!");
+                setIsMeterModalOpen(false); meterForm.resetFields(); fetchData();
+            } else {
+                const err = await res.json(); message.error(err.error);
+            }
+        } catch (e) { message.error("Lỗi hệ thống"); }
+    };
+
+    // --- CỘT HIỂN THỊ (COLUMNS) ---
+    const subColumns: TableProps<Substation>['columns'] = [
+        { title: 'Mã trạm', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
+        { title: 'Tên trạm biến áp', dataIndex: 'name', key: 'name' },
+        { title: 'Nhà máy quản lý', dataIndex: ['factory', 'name'], key: 'factoryName' },
+        {
+            title: 'Thao tác', key: 'action',
+            render: (_, record) => canEdit ? (
+                <Space>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingSub(record); subForm.setFieldsValue(record); setIsSubModalOpen(true); }} />
+                    <Popconfirm title="Xóa trạm này?" onConfirm={() => handleDeleteSubstation(record.id)}>
+                        <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                </Space>
+            ) : <span style={{ color: '#ccc' }}>Chỉ xem</span>
+        }
+    ];
+
+    const meterColumns: TableProps<PowerMeter>['columns'] = [
+        { title: 'Mã đồng hồ', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
+        { title: 'Tên đồng hồ', dataIndex: 'name', key: 'name' },
+        { title: 'Khu vực đo đếm', dataIndex: 'description', key: 'description', render: t => t || <span style={{ color: '#ccc' }}>---</span> },
+        {
+            title: 'Phân loại', dataIndex: 'type', key: 'type',
+            render: (type) => type === 2 ? <Tag color="red">Trung thế (3 Giá)</Tag> : <Tag color="blue">Hạ thế</Tag>
+        },
+        { title: 'Hệ số TU', dataIndex: 'tu', key: 'tu' },
+        { title: 'Hệ số TI', dataIndex: 'ti', key: 'ti' },
+        { title: 'Nhà máy', dataIndex: ['factory', 'name'], key: 'factoryName' },
+        { title: 'Thuộc Trạm', dataIndex: ['substation', 'name'], key: 'substationName', render: t => t || '---' },
+        {
+            title: 'Thao tác', key: 'action',
+            render: (_, record) => canEdit ? (
+                <Space>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMeter(record); meterForm.setFieldsValue(record); setIsMeterModalOpen(true); }} />
+                </Space>
+            ) : <span style={{ color: '#ccc' }}>Chỉ xem</span>
+        }
+    ];
+
+    return (
+        <div style={{ padding: 24 }}>
+            <Card bordered={false}>
+                <Tabs activeKey={activeTab} onChange={setActiveTab} tabBarExtraContent={
+                    canEdit ? (
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+                            if (activeTab === '1') { setEditingSub(null); subForm.resetFields(); setIsSubModalOpen(true); }
+                            else { setEditingMeter(null); meterForm.resetFields(); meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1 }); setIsMeterModalOpen(true); }
+                        }}>
+                            Thêm mới {activeTab === '1' ? 'Trạm biến áp' : 'Đồng hồ'}
+                        </Button>
+                    ) : null
+                }>
+                    <Tabs.TabPane tab={<span><PartitionOutlined /> Danh mục Trạm Biến Áp</span>} key="1">
+                        <Table columns={subColumns} dataSource={substations} rowKey="id" loading={loading} />
+                    </Tabs.TabPane>
+                    <Tabs.TabPane tab={<span><DashboardOutlined /> Danh mục Đồng hồ (Công tơ)</span>} key="2">
+                        <Table columns={meterColumns} dataSource={meters} rowKey="id" loading={loading} />
+                    </Tabs.TabPane>
+                </Tabs>
+            </Card>
+
+            {/* Modal Trạm Biến Áp */}
+            <Modal title={editingSub ? "Sửa Trạm Biến Áp" : "Thêm Trạm Biến Áp"} open={isSubModalOpen} onOk={() => subForm.submit()} onCancel={() => setIsSubModalOpen(false)}>
+                <Form form={subForm} layout="vertical" onFinish={handleSaveSubstation}>
+                    <Form.Item name="code" label="Mã Trạm (Vd: TBA-01)" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Form.Item name="name" label="Tên Trạm" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Form.Item name="factoryId" label="Nhà máy" rules={[{ required: true }]}>
+                        <Select>{factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}</Select>
+                    </Form.Item>
+                </Form>
+            </Modal>
+
+            {/* Modal Đồng Hồ */}
+            <Modal title={editingMeter ? "Sửa Đồng hồ" : "Thêm Đồng hồ"} open={isMeterModalOpen} onOk={() => meterForm.submit()} onCancel={() => setIsMeterModalOpen(false)}>
+                <Form form={meterForm} layout="vertical" onFinish={handleSaveMeter}>
+                    <Space align="baseline">
+                        <Form.Item name="code" label="Mã đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
+                        <Form.Item name="type" label="Loại đồng hồ">
+                            <Select style={{ width: 150 }}>
+                                <Option value={1}>Hạ thế</Option>
+                                <Option value={2}>Trung thế</Option>
+                            </Select>
+                        </Form.Item>
+                    </Space>
+                    <Form.Item name="name" label="Tên đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
+
+                    <Form.Item name="description" label="Mô tả / Đo cho các máy nào?">
+                        <Input.TextArea rows={2} placeholder="Vd: Đo đếm cho máy sợi con, máy ống..." />
+                    </Form.Item>
+
+                    <Space align="baseline">
+                        <Form.Item name="tu" label="Hệ số biến điện áp (TU)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+                        <Form.Item name="ti" label="Hệ số biến dòng điện (TI)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+                    </Space>
+
+                    <Form.Item name="factoryId" label="Nhà máy quản lý" rules={[{ required: true }]}>
+                        <Select>{factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}</Select>
+                    </Form.Item>
+
+                    <Form.Item
+                        shouldUpdate={(prev, curr) => prev.type !== curr.type || prev.factoryId !== curr.factoryId}
+                        noStyle
+                    >
+                        {({ getFieldValue }) => {
+                            const isTrungThe = getFieldValue('type') === 2;
+                            const selectedFac = getFieldValue('factoryId');
+                            return (
+                                <Form.Item name="substationId" label="Thuộc trạm biến áp (Không bắt buộc với Trung thế)">
+                                    <Select allowClear placeholder="Chọn trạm biến áp..." disabled={!selectedFac}>
+                                        {substations.filter(s => s.factoryId === selectedFac).map(s => (
+                                            <Option key={s.id} value={s.id}>{s.name}</Option>
+                                        ))}
+                                    </Select>
+                                </Form.Item>
+                            );
+                        }}
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\meters\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\prices\page.tsx
+================================================================================
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { Card, Table, Button, Modal, Form, InputNumber, Input, message, Tag, Typography } from 'antd';
+import { EditOutlined, DollarOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import type { TableProps } from 'antd';
+
+const { Title } = Typography;
+
+// Định nghĩa Type
+interface ElectricityPrice {
+    id: number;
+    type: string;
+    name: string;
+    price: number;
+    description: string;
+    updatedAt: string;
+}
+
+export default function ElectricityPricePage() {
+    const [data, setData] = useState<ElectricityPrice[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingRecord, setEditingRecord] = useState<ElectricityPrice | null>(null);
+
+    const [form] = Form.useForm();
+
+    const fetchPrices = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/energy/prices');
+            if (res.ok) {
+                setData(await res.json());
+            } else {
+                message.error("Không thể tải cấu hình giá điện");
+            }
+        } catch (e) {
+            message.error("Lỗi kết nối");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPrices();
+    }, []);
+
+    // Xử lý khi bấm nút Cập nhật
+    const handleEdit = (record: ElectricityPrice) => {
+        setEditingRecord(record);
+        form.setFieldsValue({
+            price: record.price,
+            description: record.description,
+        });
+        setIsModalOpen(true);
+    };
+
+    // Lưu dữ liệu
+    const handleSave = async (values: any) => {
+        if (!editingRecord) return;
+        try {
+            const res = await fetch('/api/energy/prices', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: editingRecord.id,
+                    price: values.price,
+                    description: values.description,
+                }),
+            });
+
+            if (res.ok) {
+                message.success(`Đã cập nhật giá điện ${editingRecord.name}`);
+                setIsModalOpen(false);
+                fetchPrices();
+            } else {
+                message.error("Cập nhật thất bại");
+            }
+        } catch (e) {
+            message.error("Lỗi hệ thống");
+        }
+    };
+
+    // Cấu hình cột hiển thị
+    const columns: TableProps<ElectricityPrice>['columns'] = [
+        {
+            title: 'Loại điện / Khung giờ',
+            dataIndex: 'name',
+            key: 'name',
+            render: (text, record) => {
+                let color = 'blue';
+                if (record.type === 'PEAK') color = 'red';
+                if (record.type === 'OFF_PEAK') color = 'green';
+                return <Tag color={color} style={{ fontSize: 14, padding: '4px 8px' }}>{text}</Tag>;
+            }
+        },
+        {
+            title: 'Đơn giá (VNĐ/kWh)',
+            dataIndex: 'price',
+            key: 'price',
+            render: (val) => (
+                <strong style={{ fontSize: 16, color: '#cf1322' }}>
+                    {val.toLocaleString('vi-VN')} đ
+                </strong>
+            )
+        },
+        {
+            title: 'Quy định giờ',
+            dataIndex: 'description',
+            key: 'description',
+        },
+        {
+            title: 'Cập nhật lần cuối',
+            dataIndex: 'updatedAt',
+            key: 'updatedAt',
+            render: (date) => dayjs(date).format('DD/MM/YYYY HH:mm')
+        },
+        {
+            title: 'Thao tác',
+            key: 'action',
+            render: (_, record) => (
+                <Button
+                    type="primary"
+                    icon={<EditOutlined />}
+                    onClick={() => handleEdit(record)}
+                >
+                    Cập nhật
+                </Button>
+            )
+        }
+    ];
+
+    return (
+        <div style={{ padding: 24 }}>
+            <Card
+                title={<Title level={4}><DollarOutlined /> Cấu hình đơn giá điện trung thế</Title>}
+                bordered={false}
+            >
+                <Table
+                    columns={columns}
+                    dataSource={data}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={false}
+                />
+            </Card>
+
+            <Modal
+                title={`Cập nhật giá điện: ${editingRecord?.name}`}
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                onOk={() => form.submit()}
+                okText="Lưu thay đổi"
+                cancelText="Hủy"
+            >
+                <div style={{ marginBottom: 20, padding: 10, background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 4 }}>
+                    Lưu ý: Đơn giá mới sẽ chỉ áp dụng cho việc tính toán tiền điện từ ngày cập nhật trở đi, không làm thay đổi lịch sử các ngày trước đó.
+                </div>
+
+                <Form form={form} layout="vertical" onFinish={handleSave}>
+                    <Form.Item
+                        name="price"
+                        label="Đơn giá mới (VNĐ)"
+                        rules={[{ required: true, message: 'Vui lòng nhập đơn giá' }]}
+                    >
+                        <InputNumber
+                            style={{ width: '100%', fontSize: 18, fontWeight: 'bold' }}
+                            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            parser={value => value?.replace(/\$\s?|(,*)/g, '') as unknown as number}
+                            addonAfter="VNĐ"
+                        />
+                    </Form.Item>
+                    <Form.Item
+                        name="description"
+                        label="Ghi chú khung giờ"
+                    >
+                        <Input.TextArea rows={2} />
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\energy\prices\page.tsx ---
+
+
+================================================================================
+FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\maintenance\page.tsx
+================================================================================
+"use client";
+
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+    Table, Tag, Button, Space, Card, Typography, Modal, Form,
+    DatePicker, Input, InputNumber, message, Row, Col,
+    Statistic, Select, Divider
+} from 'antd';
+import type { TableProps } from 'antd';
+import {
+    ToolOutlined, HistoryOutlined, CheckCircleOutlined,
+    WarningOutlined, AlertOutlined, PlusOutlined, FilterOutlined
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { useSession } from "next-auth/react"; // 1. IMPORT SESSION
+
+const { Title } = Typography;
+const { Option } = Select;
+
+// --- DEFINITIONS TYPE ---
+interface Factory { id: number; name: string; }
+interface Process { id: number; name: string; factoryId: number; }
+
+interface Machine {
+    id: number;
+    name: string;
+    processId: number;
+    process?: Process | null;
+}
+
+interface MaintenanceTask {
+    id: string;
+    machineId: number;
+    taskName: string;
+    description?: string | null;
+    intervalMonths: number;
+    lastPerformedDate?: string | Date | null;
+    nextDueDate: string | Date;
+    leadTimeDays: number;
+    machine: Machine;
+}
+
+export default function MaintenancePage() {
+    // 2. LẤY THÔNG TIN USER
+    const { data: session } = useSession();
+
+    // 3. STATE QUẢN LÝ DỮ LIỆU & BỘ LỌC
+    const [data, setData] = useState<MaintenanceTask[]>([]);
+    const [machines, setMachines] = useState<Machine[]>([]);
+
+    // State danh mục (Lấy từ DB thay vì cứng)
+    const [factories, setFactories] = useState<Factory[]>([]);
+    const [processes, setProcesses] = useState<Process[]>([]);
+
+    // State lựa chọn lọc (Áp dụng logic DailyInput)
+    const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
+    const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null);
+    const [filterStatus, setFilterStatus] = useState<string | null>(null);
+
+    const [loading, setLoading] = useState(false);
+
+    // Modals
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+
+    const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(null);
+
+    const [taskForm] = Form.useForm();
+    const [completeForm] = Form.useForm();
+
+    // 4. FETCH DATA & METADATA
+    const fetchMetadata = async () => {
+        try {
+            const [resFac, resPro, resMac, resTasks] = await Promise.all([
+                fetch('/api/factories'),
+                fetch('/api/processes'),
+                fetch('/api/machines'),
+                fetch('/api/maintenance/tasks', { cache: 'no-store' })
+            ]);
+
+            if (resFac.ok) setFactories(await resFac.json());
+            if (resPro.ok) setProcesses(await resPro.json());
+            if (resMac.ok) setMachines(await resMac.json());
+            if (resTasks.ok) setData(await resTasks.json());
+
+        } catch (e) { message.error("Lỗi tải dữ liệu hệ thống"); }
+    };
+
+    useEffect(() => { fetchMetadata(); }, []);
+
+    // 5. LOGIC TỰ ĐỘNG CHỌN & PHÂN QUYỀN (GIỐNG TRANG NHẬP SẢN LƯỢNG)
+    useEffect(() => {
+        // Chỉ chạy khi đã tải xong danh mục VÀ đã có session
+        if (processes.length > 0 && session?.user?.processId) {
+            const userProcessId = Number(session.user.processId);
+            const targetProcess = processes.find(p => p.id === userProcessId);
+
+            if (targetProcess) {
+                setSelectedFactoryId(targetProcess.factoryId);
+                setSelectedProcessId(targetProcess.id);
+            }
+        }
+    }, [processes, session]);
+
+    // Xác định user có bị giới hạn quyền không? (Nếu không phải ADMIN và có processId)
+    const isRestrictedUser = session?.user?.role !== "ADMIN" && !!session?.user?.processId;
+
+    // 6. LOGIC LỌC DỮ LIỆU (Updated)
+    const filteredData = useMemo(() => {
+        return data.filter((item) => {
+            // Lọc theo Nhà máy (Dựa vào process của máy)
+            // Tìm process của máy hiện tại trong danh sách process đã load để biết nó thuộc Factory nào
+            const machineProcess = processes.find(p => p.id === item.machine.processId);
+            const matchFactory = !selectedFactoryId || (machineProcess && machineProcess.factoryId === selectedFactoryId);
+
+            // Lọc theo Công đoạn
+            const matchProcess = !selectedProcessId || item.machine.processId === selectedProcessId;
+
+            // Lọc theo Trạng thái
+            const today = dayjs();
+            const dueDate = dayjs(item.nextDueDate);
+            const diff = dueDate.diff(today, 'day');
+            let status = 'safe';
+            if (diff < 0) status = 'overdue';
+            else if (diff <= (item.leadTimeDays || 30)) status = 'warning';
+
+            const matchStatus = !filterStatus || status === filterStatus;
+
+            return matchFactory && matchProcess && matchStatus;
+        });
+    }, [data, selectedFactoryId, selectedProcessId, filterStatus, processes]);
+
+    // 7. LỌC DANH SÁCH MÁY (Dùng cho Modal Thêm Mới)
+    // Chỉ hiện những máy thuộc công đoạn đang chọn
+    const filteredMachinesForSelect = useMemo(() => {
+        if (!selectedProcessId) return machines;
+        return machines.filter(m => m.processId === selectedProcessId);
+    }, [machines, selectedProcessId]);
+
+    // LOGIC THỐNG KÊ (Tính trên tập dữ liệu ĐÃ LỌC để phản ánh đúng view của user)
+    const stats = useMemo(() => {
+        const today = dayjs();
+        let overdue = 0, upcoming = 0;
+
+        filteredData.forEach(item => {
+            const d = dayjs(item.nextDueDate);
+            const diff = d.diff(today, 'day');
+            if (diff < 0) overdue++;
+            else if (diff <= (item.leadTimeDays || 30)) upcoming++;
+        });
+
+        return { overdue, upcoming, total: filteredData.length };
+    }, [filteredData]);
+
+    // --- HANDLERS ---
+    const handleAddTask = async (values: any) => {
+        try {
+            const payload = {
+                ...values,
+                machineId: Number(values.machineId),
+                intervalMonths: Number(values.intervalMonths),
+                leadTimeDays: Number(values.leadTimeDays || 30),
+                nextDueDate: values.nextDueDate.toISOString()
+            };
+
+            const res = await fetch('/api/maintenance/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (res.ok) {
+                message.success("Đã thêm hạng mục thành công");
+                setIsTaskModalOpen(false);
+                taskForm.resetFields();
+                fetchMetadata(); // Reload data
+            } else {
+                message.error("Có lỗi xảy ra");
+            }
+        } catch (err) { message.error("Lỗi kết nối server"); }
+    };
+
+    const handleComplete = async (values: any) => {
+        if (!selectedTask) return;
+        try {
+            const res = await fetch('/api/maintenance/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taskId: selectedTask.id,
+                    performedBy: values.performedBy,
+                    notes: values.notes,
+                    cost: values.cost ? Number(values.cost) : 0,
+                    performedDate: values.performedDate.toISOString(),
+                }),
+            });
+
+            if (res.ok) {
+                message.success("Cập nhật bảo dưỡng thành công!");
+                setIsCompleteModalOpen(false);
+                completeForm.resetFields();
+                fetchMetadata();
+            }
+        } catch (err) { message.error("Lỗi hệ thống"); }
+    };
+
+    // COLUMNS DEFINITION
+    const columns: TableProps<MaintenanceTask>['columns'] = [
+        {
+            title: 'Máy / Thiết bị',
+            dataIndex: ['machine', 'name'],
+            key: 'machine',
+            render: (_, record) => (
+                <div>
+                    <b style={{ color: '#1890ff' }}>{record.machine.name}</b>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
+                        {record.machine.process?.name || '---'}
+                    </div>
+                </div>
+            )
+        },
+        { title: 'Hạng mục', dataIndex: 'taskName', key: 'taskName' },
+        {
+            title: 'Hạn bảo dưỡng',
+            dataIndex: 'nextDueDate',
+            key: 'nextDueDate',
+            render: (date) => <b>{dayjs(date).format('DD/MM/YYYY')}</b>,
+            sorter: (a, b) => dayjs(a.nextDueDate).unix() - dayjs(b.nextDueDate).unix()
+        },
+        {
+            title: 'Trạng thái',
+            key: 'status',
+            render: (_, record) => {
+                const diff = dayjs(record.nextDueDate).diff(dayjs(), 'day');
+                if (diff < 0) return <Tag color="error" icon={<WarningOutlined />}>QUÁ HẠN ({Math.abs(diff)} ngày)</Tag>;
+                if (diff <= (record.leadTimeDays || 30)) return <Tag color="warning" icon={<HistoryOutlined />}>SẮP ĐẾN HẠN</Tag>;
+                return <Tag color="success" icon={<CheckCircleOutlined />}>AN TOÀN</Tag>;
+            }
+        },
+        {
+            title: 'Thao tác',
+            key: 'action',
+            render: (_, record) => (
+                <Button
+                    size="small"
+                    type="primary"
+                    icon={<ToolOutlined />}
+                    onClick={() => { setSelectedTask(record); setIsCompleteModalOpen(true); }}
+                >
+                    Bảo trì
+                </Button>
+            )
+        }
+    ];
+
+    return (
+        <div style={{ padding: 20 }}>
+            {/* --- PHẦN BỘ LỌC THÔNG MINH (UPDATED) --- */}
+            <Card style={{ marginBottom: 16 }} size="small" title="Bộ lọc dữ liệu">
+                <Row gutter={16} align="middle">
+                    <Col span={8}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy & Công đoạn:</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <Select
+                                style={{ width: '50%' }}
+                                placeholder="Chọn Nhà máy"
+                                options={factories.map(f => ({ label: f.name, value: f.id }))}
+                                onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
+                                value={selectedFactoryId}
+                                disabled={isRestrictedUser} // Khóa nếu user bị giới hạn
+                            />
+                            <Select
+                                style={{ width: '50%' }}
+                                placeholder="Chọn Công đoạn"
+                                options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
+                                onChange={setSelectedProcessId}
+                                value={selectedProcessId}
+                                disabled={!selectedFactoryId || isRestrictedUser} // Khóa
+                            />
+                        </div>
+                    </Col>
+                    <Col span={6}>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Trạng thái:</div>
+                        <Select
+                            placeholder="Tất cả trạng thái"
+                            style={{ width: '100%' }}
+                            allowClear
+                            onChange={setFilterStatus}
+                        >
+                            <Option value="overdue">🔴 Quá hạn</Option>
+                            <Option value="warning">🟡 Sắp đến hạn</Option>
+                            <Option value="safe">🟢 An toàn</Option>
+                        </Select>
+                    </Col>
+                    <Col span={10} style={{ textAlign: 'right', display: 'flex', alignItems: 'end', justifyContent: 'flex-end', height: '100%' }}>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsTaskModalOpen(true)} size="large">
+                            Thêm lịch bảo trì
+                        </Button>
+                    </Col>
+                </Row>
+            </Card>
+
+            {/* --- DASHBOARD STATS --- */}
+            <Row gutter={16} style={{ marginBottom: 24 }}>
+                <Col span={8}>
+                    <Card bordered={false}><Statistic title="Tổng hạng mục (Đang lọc)" value={stats.total} prefix={<ToolOutlined />} /></Card>
+                </Col>
+                <Col span={8}>
+                    <Card bordered={false} style={{ borderLeft: '4px solid #cf1322' }}>
+                        <Statistic title="Cần xử lý ngay" value={stats.overdue} valueStyle={{ color: '#cf1322' }} prefix={<AlertOutlined />} />
+                    </Card>
+                </Col>
+                <Col span={8}>
+                    <Card bordered={false} style={{ borderLeft: '4px solid #faad14' }}>
+                        <Statistic title="Sắp đến hạn" value={stats.upcoming} valueStyle={{ color: '#faad14' }} prefix={<HistoryOutlined />} />
+                    </Card>
+                </Col>
+            </Row>
+
+            {/* --- DATA TABLE --- */}
+            <Table
+                columns={columns}
+                dataSource={filteredData}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: 10, showSizeChanger: true }}
+            />
+
+            {/* --- MODAL 1: THÊM MỚI --- */}
+            <Modal
+                title="Thêm hạng mục bảo dưỡng định kỳ"
+                open={isTaskModalOpen}
+                onOk={() => taskForm.submit()}
+                onCancel={() => setIsTaskModalOpen(false)}
+                okText="Lưu lại" cancelText="Hủy"
+                width={600}
+            >
+                <Form form={taskForm} layout="vertical" onFinish={handleAddTask}>
+                    {/* CẢNH BÁO NẾU CHƯA CHỌN CÔNG ĐOẠN */}
+                    {!selectedProcessId && (
+                        <div style={{ marginBottom: 16, color: '#faad14', border: '1px dashed #faad14', padding: 8, borderRadius: 4 }}>
+                            <WarningOutlined /> Vui lòng chọn <b>Công đoạn</b> ở bộ lọc bên ngoài để hiển thị đúng danh sách máy.
+                        </div>
+                    )}
+
+                    <Form.Item name="machineId" label="Chọn máy / thiết bị" rules={[{ required: true, message: 'Vui lòng chọn máy' }]}>
+                        <Select
+                            showSearch
+                            placeholder={selectedProcessId ? "Nhập tên máy để tìm..." : "Chọn công đoạn trước..."}
+                            optionFilterProp="children"
+                            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                            // Chỉ hiển thị máy thuộc công đoạn đang chọn (tránh chọn nhầm máy xưởng khác)
+                            options={filteredMachinesForSelect.map(m => ({ value: m.id, label: m.name }))}
+                            disabled={!selectedProcessId}
+                        />
+                    </Form.Item>
+
+                    <Form.Item name="taskName" label="Tên hạng mục (Vd: Thay dầu, tra mỡ)" rules={[{ required: true }]}><Input /></Form.Item>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="intervalMonths" label="Chu kỳ (Tháng)" rules={[{ required: true }]}>
+                                <InputNumber style={{ width: '100%' }} min={0.5} step={0.5} placeholder="Vd: 6 hoặc 1.5" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="nextDueDate" label="Ngày bắt đầu tính" rules={[{ required: true }]} initialValue={dayjs()}>
+                                <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Form.Item name="leadTimeDays" label="Cảnh báo trước (Ngày)" initialValue={30} help="Hệ thống sẽ báo vàng khi còn lại số ngày này">
+                        <InputNumber style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="description" label="Mô tả chi tiết"><Input.TextArea rows={2} /></Form.Item>
+                </Form>
+            </Modal>
+
+            {/* --- MODAL 2: HOÀN THÀNH (Giữ nguyên) --- */}
+            <Modal
+                title={`Xác nhận hoàn tất: ${selectedTask?.taskName}`}
+                open={isCompleteModalOpen}
+                onOk={() => completeForm.submit()}
+                onCancel={() => setIsCompleteModalOpen(false)}
+                okText="Xác nhận & Cập nhật" cancelText="Đóng"
+            >
+                <Form form={completeForm} layout="vertical" onFinish={handleComplete}>
+                    <Form.Item name="performedDate" label="Ngày thực hiện" initialValue={dayjs()} rules={[{ required: true }]}>
+                        <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                    </Form.Item>
+                    <Form.Item name="performedBy" label="Người thực hiện" rules={[{ required: true }]}>
+                        <Input placeholder="Vd: Nguyễn Văn A" />
+                    </Form.Item>
+                    <Form.Item name="cost" label="Chi phí vật tư (nếu có)">
+                        <InputNumber
+                            style={{ width: '100%' }}
+                            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            parser={value => value?.replace(/\$\s?|(,*)/g, '') as unknown as number}
+                            addonAfter="VND"
+                        />
+                    </Form.Item>
+                    <Form.Item name="notes" label="Ghi chú kỹ thuật">
+                        <Input.TextArea placeholder="Tình trạng máy sau bảo dưỡng..." />
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
+}
+
+--- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\app\dashboard\maintenance\page.tsx ---
 
 
 ================================================================================
@@ -4514,12 +6438,13 @@ import {
   UserOutlined,
   HistoryOutlined,
   SettingOutlined,
-  SafetyCertificateOutlined, // Icon cho quản trị hệ thống
-  CloudSyncOutlined,         // Icon cho Backup
-  ApartmentOutlined,         // Icon Factory
-  BarcodeOutlined,           // Icon Item
-  PartitionOutlined,         // Icon Process
-  RobotOutlined              // Icon Machine
+  SafetyCertificateOutlined,
+  CloudSyncOutlined,
+  ApartmentOutlined,
+  BarcodeOutlined,
+  PartitionOutlined,
+  RobotOutlined,
+  ThunderboltOutlined, // Icon tia sét cho Module Điện năng
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -4574,7 +6499,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
         { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
         { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-
       ],
     },
     {
@@ -4589,20 +6513,54 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           label: "Lịch sử & Báo cáo",
           icon: <HistoryOutlined />,
         },
+        {
+          key: "/dashboard/maintenance",
+          label: "Nhật ký bảo dưỡng",
+          icon: <HistoryOutlined />,
+        },
       ],
     },
   ];
 
-  // 3. Cấu hình Menu Admin (Chỉ Admin mới thấy)
-  // Gom User và Backup vào nhóm "Quản trị hệ thống"
-  if (session?.user?.role === "ADMIN") {
+  // ========================================================
+  // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU ĐIỆN NĂNG
+  // ========================================================
+  const userRole = session?.user?.role;
+  const userProcessId = session?.user?.processId ? Number(session.user.processId) : null;
+
+  // Danh sách ID các Tổ Điện (Nhà máy 1 và Nhà máy 2)
+  const ELECTRICAL_PROCESS_IDS = [15, 16];
+
+  const isAdmin = userRole === "ADMIN";
+
+  // Kiểm tra xem user có thuộc một trong các tổ điện không
+  const isElectrician = userProcessId !== null && ELECTRICAL_PROCESS_IDS.includes(userProcessId);
+
+  // Nếu là Admin HOẶC là nhân viên tổ điện -> Thêm menu Quản lý Điện năng
+  if (isAdmin || isElectrician) {
+    baseMenuItems.push({
+      key: "sub-energy",
+      icon: <ThunderboltOutlined />,
+      label: "Quản lý Điện năng",
+      children: [
+        { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
+        { key: "/dashboard/energy/meters", label: "Trạm & Đồng hồ" },
+        { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
+        { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
+      ],
+    } as any);
+  }
+  // ========================================================
+
+  // 4. Menu Quản trị hệ thống (Chỉ Admin mới thấy)
+  if (isAdmin) {
     baseMenuItems.push({
       key: "sub-admin",
       icon: <SafetyCertificateOutlined />,
       label: "Quản trị hệ thống",
       children: [
         {
-          key: "/users", // Hoặc /admin/users nếu bạn đã đổi cấu trúc thư mục
+          key: "/users",
           icon: <UserOutlined />,
           label: "Quản lý Tài khoản",
         },
@@ -4630,7 +6588,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           style={{
             height: 64,
             margin: 16,
-            background: "rgba(255, 255, 255, 0.1)", // Chỉnh lại màu nền logo cho nhẹ nhàng hơn
+            background: "rgba(255, 255, 255, 0.1)",
             border: "1px solid rgba(255, 255, 255, 0.2)",
             display: "flex",
             alignItems: "center",
@@ -4651,8 +6609,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          // Tự động mở menu con nếu đang ở trang con tương ứng
-          defaultOpenKeys={["sub1", "sub2", "sub-admin"]}
+          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy"]}
           items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
@@ -4672,7 +6629,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             justifyContent: "space-between",
             alignItems: "center",
             paddingRight: 24,
-            boxShadow: "0 1px 4px rgba(0,21,41,0.08)", // Thêm bóng đổ nhẹ cho Header tách biệt
+            boxShadow: "0 1px 4px rgba(0,21,41,0.08)",
             zIndex: 1,
           }}
         >
@@ -4687,7 +6644,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             }}
           />
 
-          {/* Component UserDropdown bạn đã tách riêng rất gọn */}
           <UserDropdown />
         </Header>
 
@@ -4698,7 +6654,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             minHeight: 280,
             background: colorBgContainer,
             borderRadius: borderRadiusLG,
-            overflow: "initial", // Để nội dung dài vẫn cuộn mượt
+            overflow: "initial",
           }}
         >
           {children}
@@ -4840,26 +6796,6 @@ export default StyledComponentsRegistry;
 
 
 --- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\AntdRegistry.tsx ---
-
-
-================================================================================
-FILE START: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\prisma.ts
-================================================================================
-// lib/prisma.ts
-
-// Tác dụng: Đảm bảo chỉ có DUY NHẤT 1 kết nối đến Database được tạo ra trong suốt quá trình chạy app.
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-
---- FILE END: D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products\src\lib\prisma.ts ---
 
 
 ================================================================================
