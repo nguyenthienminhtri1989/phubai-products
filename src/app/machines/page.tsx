@@ -14,6 +14,7 @@ interface MachineData {
     currentItem?: { name: string; code: string };
     formulaType: number;
     spindleCount?: number;
+    currentNE?: number;
     isActive: boolean;
 }
 
@@ -146,6 +147,7 @@ export default function MachinesPage() {
                 <div style={{ fontSize: 12, color: '#666' }}>
                     <div>Công thức: Loại {r.formulaType}</div>
                     {r.spindleCount && <div>Số cọc: {r.spindleCount}</div>}
+                    {r.currentNE != null && <div>Chi số (NE): <b style={{ color: '#1677ff' }}>{r.currentNE}</b></div>}
                 </div>
             )
         },
@@ -251,6 +253,14 @@ export default function MachinesPage() {
                         </Col>
                     </Row>
 
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="currentNE" label="Chi số hiện tại (NE)" tooltip="Dùng cho công thức Loại 3 và 4. Giá trị này sẽ được dùng mặc định khi nhập liệu sản lượng.">
+                                <InputNumber style={{ width: '100%' }} min={0} placeholder="Ví dụ: 30" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
                     <Form.Item name="isActive" valuePropName="checked" label="Trạng thái">
                         <Switch checkedChildren="Hoạt động" unCheckedChildren="Tạm dừng" defaultChecked />
                     </Form.Item>
@@ -268,7 +278,7 @@ export default function MachinesPage() {
             >
                 <div style={{ marginBottom: 16 }}>
                     Bạn đang thực hiện đổi mặt hàng cho <b>{selectedRowKeys.length} máy</b> đã chọn.
-                    <br />Dữ liệu Chi số (NE) của máy sẽ tự động cập nhật theo mặt hàng mới.
+                    <br />Chi số (NE) của từng máy sẽ <b>giữ nguyên</b>. Hãy cập nhật thủ công trong mục Sửa máy nếu cần.
                 </div>
                 <Form form={dispatchForm} layout="vertical" onFinish={handleDispatch}>
                     <Form.Item name="itemId" label="Chọn mặt hàng muốn chạy:" rules={[{ required: true, message: 'Vui lòng chọn hàng' }]}>

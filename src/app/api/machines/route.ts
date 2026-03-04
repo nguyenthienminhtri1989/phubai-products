@@ -31,10 +31,9 @@ export async function POST(req: Request) {
         name: body.name,
         processId: parseInt(body.processId),
         formulaType: parseInt(body.formulaType),
-        spindleCount: body.spindleCount
-          ? parseInt(body.spindleCount)
-          : undefined,
+        spindleCount: body.spindleCount ? parseInt(body.spindleCount) : undefined,
         isActive: body.isActive !== false,
+        currentNE: body.currentNE !== undefined && body.currentNE !== null && body.currentNE !== '' ? parseFloat(body.currentNE) : undefined,
       },
     });
     return NextResponse.json(newMachine);

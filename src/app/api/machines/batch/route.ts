@@ -37,14 +37,13 @@ export async function POST(req: Request) {
       );
 
     // 2. Cập nhật hàng loạt (Batch Update)
-    // Cập nhật cả currentItemId và currentNE (lấy theo NE của mặt hàng)
+    // Chỉ cập nhật currentItemId, không tự động thay đổi currentNE
     await prisma.machine.updateMany({
       where: {
         id: { in: machineIds },
       },
       data: {
         currentItemId: item.id,
-        currentNE: item.ne || 0, // Tự động set NE theo mặt hàng để công nhân đỡ phải nhập
       },
     });
 

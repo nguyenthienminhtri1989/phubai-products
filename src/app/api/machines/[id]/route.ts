@@ -18,6 +18,7 @@ export async function PUT(
         formulaType: parseInt(body.formulaType),
         spindleCount: body.spindleCount,
         isActive: body.isActive,
+        currentNE: body.currentNE !== undefined ? (body.currentNE === null || body.currentNE === '' ? null : parseFloat(body.currentNE)) : undefined,
         // Không update currentItemId ở đây, dùng API Batch kia chuyên nghiệp hơn
       },
     });
