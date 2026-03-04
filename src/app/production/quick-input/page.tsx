@@ -156,7 +156,7 @@ function QuickInputContent() {
             const ne = Number(watchInputNE) || 1;
             if (ne !== 0) result = delta / ne;
         }
-        return parseFloat(result.toFixed(2));
+        return Math.round(result);
     }, [watchEndIndex, watchStartIndex, watchIsReset, watchIsStopped, watchInputNE, machine]);
 
     // Luu du lieu

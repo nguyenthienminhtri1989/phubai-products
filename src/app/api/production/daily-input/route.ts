@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     startIndex = startIndex !== null ? parseFloat(startIndex) : 0; // Lưu 0 nếu null
     endIndex = endIndex !== null ? parseFloat(endIndex) : null;
     inputNE = inputNE ? parseFloat(inputNE) : null;
-    finalOutput = parseFloat(finalOutput);
+    finalOutput = Math.round(parseFloat(finalOutput));
 
     // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
     // Nếu không phải ADMIN, bắt buộc phải kiểm tra Process
