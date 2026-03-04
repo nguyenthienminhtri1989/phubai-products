@@ -15,7 +15,7 @@ interface Machine {
     spindleCount?: number;
     currentItem?: { id: number; name: string };
     currentNE?: number;
-    todayLog?: { id: number; finalOutput: number };
+    todayLog?: { id: number; finalOutput: number; startIndex?: number; endIndex?: number; inputNE?: number; note?: string };
 }
 
 interface Factory { id: number; name: string; }
@@ -133,7 +133,14 @@ export default function DailyInputPage() {
         };
 
         if (machine.todayLog) {
-            message.info("Máy này đã nhập liệu rồi.");
+            // Chế độ sửa: điền lại giá trị đã nhập trước đó
+            const log = machine.todayLog;
+            initValues.startIndex = log.startIndex ?? 0;
+            initValues.endIndex = log.endIndex ?? null;
+            initValues.inputNE = log.inputNE ?? machine.currentNE ?? 30;
+            initValues.isStopped = log.note === "Máy dừng";
+            initValues.isReset = log.note === "Reset đồng hồ";
+            message.info("Đang sửa dữ liệu đã nhập. Lưu lại để cập nhật.");
         } else {
             try {
                 const res = await fetch(`/api/production/last-log?machineId=${machine.id}&date=${selectedDate.format('YYYY-MM-DD')}&shift=${selectedShift}`);
@@ -217,7 +224,17 @@ export default function DailyInputPage() {
             });
             if (!res.ok) throw new Error('Lỗi lưu');
             message.success("Đã lưu thành công!");
-            setMachines(prev => prev.map(m => m.id === currentMachine?.id ? { ...m, todayLog: { id: 0, finalOutput: calculatedOutput } } : m));
+            setMachines(prev => prev.map(m => m.id === currentMachine?.id ? {
+                ...m,
+                todayLog: {
+                    id: m.todayLog?.id ?? 0,
+                    finalOutput: calculatedOutput,
+                    startIndex: payload.startIndex,
+                    endIndex: payload.endIndex,
+                    inputNE: payload.inputNE,
+                    note: payload.note,
+                }
+            } : m));
 
             if (saveAndNext) {
                 const idx = machines.findIndex(m => m.id === currentMachine?.id);
