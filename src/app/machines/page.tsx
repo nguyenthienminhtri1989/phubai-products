@@ -153,23 +153,26 @@ export default function MachinesPage() {
         },
         {
             title: "Hành động", key: "action", width: 100, align: 'right' as const,
-            render: (_: any, r: MachineData) => (
+            render: (_: any, r: MachineData) => isAdmin ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
                     <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
                         <Button size="small" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
                 </Space>
-            )
+            ) : null
         }
     ];
 
-    // Chỉ Admin/Manager mới được vào
-    if (session?.user?.role === "USER") return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
+    const isAdmin = session?.user?.role === "ADMIN";
+    const isManager = session?.user?.accessLevel === "MANAGER";
+
+    // Chỉ Admin và Manager mới được vào
+    if (!isAdmin && !isManager) return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
 
     return (
         <div style={{ padding: 20 }}>
-            <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button>}>
+            <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={isAdmin ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button> : null}>
                 {/* TOOLBAR */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                     <Col span={6}>
