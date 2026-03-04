@@ -1,0 +1,106 @@
+Dưới đây là tài liệu tổng hợp toàn bộ quy trình nghiệp vụ, logic tính toán và kiến trúc hệ thống được biên soạn dưới dạng **"Nguồn chân lý duy nhất" (Single Source of Truth)**. Bạn có thể lưu trực tiếp nội dung này thành một file (ví dụ: `BUSINESS_LOGIC_CONTEXT.md`) để cung cấp cho bất kỳ AI hoặc Lập trình viên nào đọc hiểu trước khi code.
+
+---
+
+# 📘 HỒ SƠ NGHIỆP VỤ & KIẾN TRÚC HỆ THỐNG - PHU BAI ERP
+
+## 1. TỔNG QUAN HỆ THỐNG
+
+- **Tên dự án:** Phần mềm quản lý sản xuất ERP Sợi Phú Bài.
+- **Công nghệ (Tech Stack):** Next.js 16 (App Router), PostgreSQL + Prisma ORM, Ant Design (UI), NextAuth.js v5 (Authentication).
+- **Mục tiêu:** Quản lý sản lượng máy móc, điện năng tiêu thụ và bảo dưỡng thiết bị một cách tự động, chính xác, chống thất thoát dữ liệu.
+
+## 2. CẤU TRÚC TỔ CHỨC DỮ LIỆU (DATA HIERARCHY)
+
+Dữ liệu được tổ chức theo cây phân cấp chặt chẽ: **Nhà máy (Factory) -> Công đoạn (Process) -> Máy móc (Machine) / Trạm biến áp (Substation)**.
+
+- Một Nhà máy có nhiều Công đoạn.
+- Các Công đoạn ở các nhà máy khác nhau có thể trùng tên (cần phân biệt bằng `factoryId`).
+- Mỗi máy chỉ thuộc về một Công đoạn duy nhất.
+
+## 3. PHÂN QUYỀN NGƯỜI DÙNG (AUTHORIZATION & DATA SCOPE)
+
+Phân quyền không chỉ theo Role (Vai trò) mà còn theo Data Scope (Phạm vi dữ liệu).
+
+- **Tài khoản & Quản lý:** Có đăng ký tài khoản, Admin duyệt kích hoạt. User tự đổi mật khẩu, Admin đổi được mật khẩu mọi User.
+- **Admin:** Toàn quyền hệ thống, không bị giới hạn dữ liệu. Chỉ Admin mới được quyền xóa máy móc.
+- **Manager / Operator (User thường):** Mỗi User được gán cố định vào **1 Công đoạn (`processId`)**.
+  - Chỉ được nhập liệu/sửa/xóa dữ liệu _trong công đoạn của mình_.
+  - Chỉ có thể xem (Read-only) dữ liệu của công đoạn khác.
+  - Không được xóa máy, chỉ được sửa cấu hình máy (mặt hàng, chi số, số cọc).
+
+## 4. MODULE 1: QUẢN LÝ SẢN LƯỢNG (CORE PRODUCTION)
+
+Đây là module cốt lõi, yêu cầu tính toán real-time và truy vết dữ liệu liên tục như Odometer (Công tơ mét).
+
+### 4.1. Quy tắc Ngày và Ca sản xuất
+
+- **Định nghĩa Ca:** Một ngày có 3 ca.
+  - Ca 1: 06:00 - 14:00 (Thuộc ngày hiện tại).
+  - Ca 2: 14:00 - 22:00 (Thuộc ngày hiện tại).
+  - Ca 3: 22:00 - 06:00 sáng hôm sau (**BẤT BIẾN: Luôn thuộc về ngày sản xuất hôm nay, không phụ thuộc lịch thực tế**).
+- **Logic Tự động chọn Ca/Ngày (Smart Date - Cho phép chốt sớm 1 tiếng):**
+  - `13:00 - 20:59`: Gợi ý **Ca 1** - Ngày hiện tại (T).
+  - `21:00 - 23:59`: Gợi ý **Ca 2** - Ngày hiện tại (T).
+  - `00:00 - 04:59`: Gợi ý **Ca 2** - **Ngày hôm qua (T-1)**.
+  - `05:00 - 12:59`: Gợi ý **Ca 3** - **Ngày hôm qua (T-1)**.
+
+### 4.2. Phân loại máy & Công thức tính toán
+
+Được lưu ở trường `formulaType` trong bảng Machine.
+
+- **Loại 1 (Máy nén/thô - Nhập trực tiếp):** Nhập thẳng sản lượng ca. `Sản lượng = Chỉ số sau`.
+- **Loại 2 (Trừ lùi - Máy cũ):** `Sản lượng = Chỉ số sau - Chỉ số trước`.
+- **Loại 3 (Có số cọc & NE):** `Sản lượng = ((Chỉ số sau - Chỉ số trước) * Số cọc) / (Chi số NE * 1000 * 1.693)`.
+- **Loại 4 (Chia NE):** `Sản lượng = (Chỉ số sau - Chỉ số trước) / Chi số NE`.
+
+### 4.3. Logic truy vết "Chỉ số trước" (Traceability)
+
+Phần mềm **tự động** lục tìm bản ghi gần nhất của máy đó trong quá khứ để lấy "Chỉ số cuối" của ca trước làm "Chỉ số trước" cho ca này.
+
+- **Thuật toán tìm kiếm (Backend):** Tìm bản ghi có `Cùng MachineID` VÀ `(Ngày < Ngày hiện tại HOẶC (Ngày = Ngày hiện tại AND Ca < Ca hiện tại))` -> Sắp xếp giảm dần -> Lấy Top 1.
+- Nếu không tìm thấy (máy mới), cho phép User nhập tay "Chỉ số trước" lần đầu.
+
+### 4.4. Xử lý sự cố & Ngoại lệ (Bắt buộc tuân thủ)
+
+- **Máy dừng/Nghỉ:** Vẫn **PHẢI** lưu bản ghi (Sản lượng = 0, Chỉ số sau = Chỉ số trước) để chuỗi chỉ số không bị đứt đoạn.
+- **Đồng hồ tua về 0 / Thay mới (Reset):** Có Checkbox "Reset/Thay đồng hồ". Khi bật, mở khóa ô "Chỉ số trước" cho nhập tay, bỏ qua logic liên tục. `Sản lượng = Chỉ số sau` (hoặc tính dựa trên số nhập tay).
+- **Validation cấm lưu (Error):** Nếu (Chỉ số sau < Chỉ số trước) mà KHÔNG bật Reset -> Cảnh báo đỏ, **Khóa nút Lưu** (chống âm).
+- **Validation bất thường (Warning):** Nếu tính ra > 1000kg do thừa số 0 -> Cảnh báo vàng, nhưng vẫn cho Lưu.
+
+## 5. MODULE 2: QUẢN LÝ ĐIỆN NĂNG (ENERGY MANAGEMENT)
+
+Tương tự tính sản lượng nhưng thêm hệ số và khung giờ.
+
+- **Danh mục giá điện:** Bình thường (1,833 đ/kWh), Cao điểm (3,398 đ/kWh), Thấp điểm (1,190 đ/kWh).
+- **Tổ chức thiết bị:** Nhà máy -> Trạm biến áp -> Đồng hồ điện (Công tơ).
+- **Phân loại đồng hồ:**
+  - _Loại 1 (Hạ thế):_ Có 1 chỉ số tổng. Điện năng = `(Chỉ số sau - Chỉ số trước) * TU * TY`.
+  - _Loại 2 (Trung thế):_ Đo 3 chỉ số riêng biệt (Bình thường, Cao điểm, Thấp điểm). Tự động phân dải theo đồng hồ điện tử nhà nước.
+- **Logic chốt:** Chốt vào 8:00 sáng mỗi ngày, dữ liệu được ghi nhận cho ngày **hôm trước**. Cũng áp dụng logic Reset thay đồng hồ như module Sản lượng.
+
+## 6. MODULE 3: BẢO DƯỠNG THIẾT BỊ (MAINTENANCE)
+
+- **Dữ liệu:** Gồm bảng `MaintenanceTask` (Hạng mục định kỳ) và `MaintenanceHistory` (Lịch sử thực hiện).
+- **Logic tính chu kỳ:** `Next Due Date = Last Performed Date + Interval (tháng)`.
+- **Cảnh báo:** Quét tự động bằng Cron Job. Hiển thị UI màu sắc (Đỏ: Quá hạn, Cam: Sắp đến hạn, Xanh: An toàn) và gửi Email theo `leadTimeDays` (số ngày báo trước).
+
+## 7. UX / UI & TRẢI NGHIỆM NGƯỜI DÙNG
+
+Thiết kế tối ưu cho tốc độ của công nhân nhà máy.
+
+- **Tự động điền (Auto-fill):** Khi đăng nhập, tự động chọn Công đoạn theo User. Khi chọn máy, tự động điền Mặt hàng, Chi số (NE), Số cọc, Chỉ số trước.
+- **Layout Lưới (Grid):** Hiển thị sơ đồ máy thay vì Dropdown dài. Máy chưa nhập màu trắng, đã nhập màu xanh.
+- **Lưu & Tiếp tục (Save & Next):** Bấm 1 nút để lưu máy hiện tại và tự động chuyển form sang máy tiếp theo, không cần đóng/mở cửa sổ.
+- **Tính toán Real-time:** Nhập số xong tự động nảy ra con số Sản lượng (kg) để công nhân kiểm tra trước khi bấm Lưu.
+
+## 8. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
+
+1. **Tuyệt đối không phá vỡ chuỗi liên tục của Chỉ số.** Không được để khoảng trống dữ liệu.
+2. **Backend là nguồn chân lý (Source of Truth).** Mọi tính toán logic, tìm chỉ số phải nằm ở Backend. Frontend chỉ gửi yêu cầu và render.
+3. **Cấu hình động, không hard-code.** Công thức tính toán phụ thuộc vào `formulaType` của máy, không fix cứng logic cho từng tên máy.
+4. **Không tự suy diễn nghiệp vụ.** Mọi đề xuất thay đổi database/schema phải giải thích lý do và có migration an toàn.
+
+---
+
+_Lưu ý cho AI: Khi nhận được file này, hãy đóng vai trò là Senior Backend/Software Architect, chỉ phát triển tính năng mới dựa trên nền tảng kiến trúc đã có, không thiết kế lại hệ thống._
