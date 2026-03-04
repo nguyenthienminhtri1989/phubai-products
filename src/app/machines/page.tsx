@@ -43,6 +43,10 @@ export default function MachinesPage() {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [dispatchForm] = Form.useForm();
 
+    const isAdmin = session?.user?.role === "ADMIN";
+    const isManager = (session?.user as any)?.accessLevel === "MANAGER";
+    const userProcessId = (session?.user as any)?.processId;
+
     // 1. Load Data
     const fetchData = async () => {
         setLoading(true);
@@ -55,10 +59,14 @@ export default function MachinesPage() {
             setProcesses(await pRes.json());
             setItems(await iRes.json());
 
-            // Lấy Machines
+            // Lấy Machines: Manager chỉ thấy máy thuộc công đoạn của mình
             let query = "?";
-            if (filterFactory) query += `factoryId=${filterFactory}&`;
-            if (filterProcess) query += `processId=${filterProcess}`;
+            if (!isAdmin && isManager && userProcessId) {
+                query += `processId=${userProcessId}`;
+            } else {
+                if (filterFactory) query += `factoryId=${filterFactory}&`;
+                if (filterProcess) query += `processId=${filterProcess}`;
+            }
 
             const mRes = await fetch(`/api/machines${query}`);
             const mData = await mRes.json();
@@ -73,7 +81,7 @@ export default function MachinesPage() {
         finally { setLoading(false); }
     };
 
-    useEffect(() => { fetchData(); }, [filterFactory, filterProcess]); // Reload khi đổi filter
+    useEffect(() => { fetchData(); }, [filterFactory, filterProcess, session]); // Reload khi đổi filter hoặc session load xong
 
     // 2. Xử lý Thêm / Sửa
     const handleSave = async (values: any) => {
@@ -166,9 +174,6 @@ export default function MachinesPage() {
         }
     ];
 
-    const isAdmin = session?.user?.role === "ADMIN";
-    const isManager = session?.user?.accessLevel === "MANAGER";
-
     // Chỉ Admin và Manager mới được vào
     if (!isAdmin && !isManager) return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
 
@@ -177,23 +182,27 @@ export default function MachinesPage() {
             <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={isAdmin ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button> : null}>
                 {/* TOOLBAR */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
-                    <Col span={6}>
-                        <Select
-                            style={{ width: '100%' }} placeholder="Lọc theo Nhà máy" allowClear
-                            options={factories.map(f => ({ label: f.name, value: f.id }))}
-                            onChange={setFilterFactory}
-                        />
-                    </Col>
-                    <Col span={6}>
-                        <Select
-                            style={{ width: '100%' }} placeholder="Lọc theo Công đoạn" allowClear
-                            options={processes
-                                .filter(p => !filterFactory || p.factoryId === filterFactory)
-                                .map(p => ({ label: p.name, value: p.id }))}
-                            onChange={setFilterProcess}
-                        />
-                    </Col>
-                    <Col span={6}>
+                    {isAdmin && (
+                        <>
+                            <Col span={6}>
+                                <Select
+                                    style={{ width: '100%' }} placeholder="Lọc theo Nhà máy" allowClear
+                                    options={factories.map(f => ({ label: f.name, value: f.id }))}
+                                    onChange={setFilterFactory}
+                                />
+                            </Col>
+                            <Col span={6}>
+                                <Select
+                                    style={{ width: '100%' }} placeholder="Lọc theo Công đoạn" allowClear
+                                    options={processes
+                                        .filter(p => !filterFactory || p.factoryId === filterFactory)
+                                        .map(p => ({ label: p.name, value: p.id }))}
+                                    onChange={setFilterProcess}
+                                />
+                            </Col>
+                        </>
+                    )}
+                    <Col span={isAdmin ? 6 : 18}>
                         <Input placeholder="Tìm tên máy..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} />
                     </Col>
                     <Col span={6} style={{ textAlign: 'right' }}>
