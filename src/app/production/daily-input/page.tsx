@@ -5,7 +5,7 @@ import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, S
 import { SaveOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { useSession } from "next-auth/react"; // 1. IMPORT SESSION
+import { useSession } from "next-auth/react";
 
 interface Machine {
     id: number;
@@ -22,7 +22,6 @@ interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
 
 export default function DailyInputPage() {
-    // 2. LẤY THÔNG TIN USER
     const { data: session } = useSession();
 
     // --- STATE ---
@@ -35,6 +34,7 @@ export default function DailyInputPage() {
     const [factories, setFactories] = useState<Factory[]>([]);
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
 
     // Modal & Form
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,6 +47,14 @@ export default function DailyInputPage() {
     const watchIsReset = Form.useWatch('isReset', form);
     const watchIsStopped = Form.useWatch('isStopped', form);
     const watchInputNE = Form.useWatch('inputNE', form);
+
+    // --- DETECT MOBILE ---
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768);
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, []);
 
     // --- LOGIC CHỌN CA & NGÀY ---
     useEffect(() => {
@@ -80,23 +88,17 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi tải danh mục"); }
     };
 
-    // --- 3. LOGIC TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER ---
+    // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER ---
     useEffect(() => {
-        // Chỉ chạy khi đã tải xong danh mục VÀ đã có session
         if (processes.length > 0 && session?.user?.processId) {
             const userProcessId = Number(session.user.processId);
-
-            // Tìm công đoạn của user trong danh sách
             const targetProcess = processes.find(p => p.id === userProcessId);
-
             if (targetProcess) {
-                // Tự động set Factory trước
                 setSelectedFactoryId(targetProcess.factoryId);
-                // Sau đó set Process
                 setSelectedProcessId(targetProcess.id);
             }
         }
-    }, [processes, session]); // Chạy lại khi processes hoặc session thay đổi
+    }, [processes, session]);
 
     // --- TẢI MÁY ---
     const fetchMachines = async () => {
@@ -106,18 +108,13 @@ export default function DailyInputPage() {
             const dateStr = selectedDate.format('YYYY-MM-DD');
             const query = `?processId=${selectedProcessId}&date=${dateStr}&shift=${selectedShift}`;
             const res = await fetch(`/api/production/daily-status${query}`);
-            const data = await res.json();
-            setMachines(data);
-        } catch (error) {
-            message.error("Lỗi tải máy");
-        } finally {
-            setLoading(false);
-        }
+            setMachines(await res.json());
+        } catch { message.error("Lỗi tải máy"); }
+        finally { setLoading(false); }
     };
 
     useEffect(() => { fetchMachines(); }, [selectedProcessId, selectedDate, selectedShift]);
 
-    // --- CÁC HÀM XỬ LÝ KHÁC GIỮ NGUYÊN ---
     const handleOpenMachine = async (machine: Machine) => {
         if (!machine.currentItem) {
             message.warning(`Máy ${machine.name} chưa gán mặt hàng!`);
@@ -230,119 +227,246 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
-    // 1. Xác định xem có nên khóa hay không?
     const isRestrictedUser = session?.user?.role !== "ADMIN" && !!session?.user?.processId;
+    const doneMachines = machines.filter(m => m.todayLog).length;
 
     // --- GIAO DIỆN ---
     return (
-        <div style={{ padding: 20 }}>
-            <Card style={{ marginBottom: 16 }} size="small">
-                <Row gutter={16} align="middle">
-                    <Col span={8}>
-                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy & Công đoạn:</div>
-                        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ padding: isMobile ? 8 : 20 }}>
+
+            {/* THANH BỘ LỌC */}
+            <Card style={{ marginBottom: 10 }} size="small">
+                <Row gutter={[8, 8]} align="middle">
+
+                    {/* Nhà máy + Công đoạn */}
+                    <Col xs={24} md={8}>
+                        {!isMobile && <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12, color: '#888' }}>Nhà máy & Công đoạn</div>}
+                        <div style={{ display: 'flex', gap: 6 }}>
                             <Select
-                                style={{ width: '50%' }}
-                                placeholder="Chọn Nhà máy"
+                                style={{ flex: 1, minWidth: 0 }}
+                                placeholder="Nhà máy"
                                 options={factories.map(f => ({ label: f.name, value: f.id }))}
                                 onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
                                 value={selectedFactoryId}
-                                // KHÓA NHÀ MÁY NẾU USER BỊ GIỚI HẠN
                                 disabled={isRestrictedUser}
                             />
                             <Select
-                                style={{ width: '50%' }}
-                                placeholder="Chọn Công đoạn"
+                                style={{ flex: 1, minWidth: 0 }}
+                                placeholder="Công đoạn"
                                 options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
                                 onChange={setSelectedProcessId}
-                                // KHÓA CÔNG ĐOẠN NẾU USER BỊ GIỚI HẠN (Hoặc chưa chọn nhà máy)
+                                value={selectedProcessId}
                                 disabled={!selectedFactoryId || isRestrictedUser}
                             />
                         </div>
                     </Col>
-                    <Col span={8}>
-                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày & Ca sản xuất:</div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <DatePicker value={selectedDate} onChange={val => val && setSelectedDate(val)} format="DD/MM/YYYY" allowClear={false} style={{ flex: 1 }} />
-                            <Select value={selectedShift} onChange={setSelectedShift} style={{ width: 100 }} options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]} />
+
+                    {/* Ngày + Ca */}
+                    <Col xs={24} md={8}>
+                        {!isMobile && <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12, color: '#888' }}>Ngày & Ca sản xuất</div>}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            <DatePicker
+                                value={selectedDate}
+                                onChange={val => val && setSelectedDate(val)}
+                                format="DD/MM/YYYY"
+                                allowClear={false}
+                                style={{ flex: 1 }}
+                            />
+                            <Select
+                                value={selectedShift}
+                                onChange={setSelectedShift}
+                                style={{ width: 80 }}
+                                options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]}
+                            />
                         </div>
                     </Col>
-                    <Col span={8}>
-                        <Row justify="end" gutter={32}>
+
+                    {/* Thống kê */}
+                    <Col xs={24} md={8}>
+                        <Row
+                            justify={isMobile ? 'space-around' : 'end'}
+                            gutter={isMobile ? 0 : 32}
+                            style={isMobile ? { borderTop: '1px solid #f0f0f0', paddingTop: 8 } : {}}
+                        >
                             <Col>
-                                <Statistic title="Tiến độ nhập liệu" value={machines.filter(m => m.todayLog).length} suffix={`/ ${machines.length} máy`} valueStyle={{ fontSize: 20, color: '#1890ff' }} />
+                                <Statistic
+                                    title="Tiến độ nhập liệu"
+                                    value={doneMachines}
+                                    suffix={`/ ${machines.length} máy`}
+                                    valueStyle={{ fontSize: isMobile ? 16 : 20, color: '#1890ff' }}
+                                />
                             </Col>
                             <Col>
-                                <Statistic title="Tổng sản lượng" value={totalOutput} suffix="kg" valueStyle={{ fontSize: 20, color: '#389e0d' }} />
+                                <Statistic
+                                    title="Tổng sản lượng"
+                                    value={totalOutput}
+                                    suffix="kg"
+                                    valueStyle={{ fontSize: isMobile ? 16 : 20, color: '#389e0d' }}
+                                />
                             </Col>
                         </Row>
                     </Col>
                 </Row>
             </Card>
 
+            {/* LƯỚI MÁY */}
             {!selectedProcessId ? (
-                <div style={{ textAlign: 'center', padding: 50, background: '#fff', borderRadius: 8 }}>
-                    <div style={{ color: '#999', marginBottom: 10 }}>Vui lòng chọn <b>Nhà máy</b> và <b>Công đoạn</b> để hiển thị danh sách máy.</div>
+                <div style={{ textAlign: 'center', padding: 40, background: '#fff', borderRadius: 8 }}>
+                    <div style={{ color: '#999' }}>Vui lòng chọn <b>Nhà máy</b> và <b>Công đoạn</b> để hiển thị danh sách máy.</div>
                 </div>
             ) : (
-                <Row gutter={[12, 12]}>
-                    {machines.length === 0 && <div style={{ width: '100%', textAlign: 'center', padding: 20 }}>Không có máy nào trong công đoạn này.</div>}
+                <Row gutter={[8, 8]}>
+                    {machines.length === 0 && !loading && (
+                        <div style={{ width: '100%', textAlign: 'center', padding: 20 }}>Không có máy nào trong công đoạn này.</div>
+                    )}
                     {machines.map(m => {
                         const isDone = !!m.todayLog;
                         return (
                             <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
-                                <Card hoverable onClick={() => handleOpenMachine(m)} style={{ cursor: 'pointer', border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9', background: isDone ? '#f6ffed' : '#fff' }} bodyStyle={{ padding: 12 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <b>{m.name}</b>
-                                        {isDone && <SaveOutlined style={{ color: '#52c41a' }} />}
+                                <Card
+                                    hoverable
+                                    onClick={() => handleOpenMachine(m)}
+                                    style={{
+                                        cursor: 'pointer',
+                                        border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9',
+                                        background: isDone ? '#f6ffed' : '#fff',
+                                    }}
+                                    bodyStyle={{ padding: isMobile ? 10 : 12 }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <b style={{ fontSize: isMobile ? 13 : 14 }}>{m.name}</b>
+                                        {isDone && <SaveOutlined style={{ color: '#52c41a', flexShrink: 0 }} />}
                                     </div>
-                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                                    <div style={{ fontSize: 11, color: '#666', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {m.currentItem?.name || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
                                     </div>
-                                    <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 'bold', fontSize: 16 }}>
-                                        {isDone ? <span style={{ color: 'green' }}>{m.todayLog?.finalOutput} <small>kg</small></span> : <span style={{ color: '#ccc' }}>--</span>}
+                                    <div style={{ marginTop: 6, textAlign: 'right', fontWeight: 'bold', fontSize: isMobile ? 15 : 16 }}>
+                                        {isDone
+                                            ? <span style={{ color: 'green' }}>{m.todayLog?.finalOutput} <small>kg</small></span>
+                                            : <span style={{ color: '#ccc' }}>--</span>
+                                        }
                                     </div>
                                 </Card>
                             </Col>
-                        )
+                        );
                     })}
                 </Row>
             )}
 
-            <Modal open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null} width={500} centered title={<span>{currentMachine?.name} <Tag color="blue">{currentMachine?.currentItem?.name}</Tag></span>}>
+            {/* MODAL NHẬP LIỆU */}
+            <Modal
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+                width={isMobile ? '96vw' : 500}
+                style={isMobile ? { top: 8 } : undefined}
+                centered={!isMobile}
+                title={
+                    <span style={{ fontSize: isMobile ? 14 : 16 }}>
+                        {currentMachine?.name} <Tag color="blue">{currentMachine?.currentItem?.name}</Tag>
+                    </span>
+                }
+            >
                 <Form form={form} layout="vertical">
                     <Form.Item name="itemId" hidden><Input /></Form.Item>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
-                        <Form.Item name="isStopped" valuePropName="checked" noStyle><Switch checkedChildren="Máy dừng" unCheckedChildren="Máy đang chạy" /></Form.Item>
-                        <Form.Item name="isReset" valuePropName="checked" noStyle><Switch checkedChildren="Đã Reset" unCheckedChildren="Bình thường" disabled={watchIsStopped} style={{ background: watchIsReset ? '#faad14' : undefined }} /></Form.Item>
+
+                    {/* Switches trạng thái máy */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, background: '#f5f5f5', padding: '10px 14px', borderRadius: 8 }}>
+                        <Form.Item name="isStopped" valuePropName="checked" noStyle>
+                            <Switch checkedChildren="Máy dừng" unCheckedChildren="Máy đang chạy" />
+                        </Form.Item>
+                        <Form.Item name="isReset" valuePropName="checked" noStyle>
+                            <Switch
+                                checkedChildren="Đã Reset"
+                                unCheckedChildren="Bình thường"
+                                disabled={watchIsStopped}
+                                style={{ background: watchIsReset ? '#faad14' : undefined }}
+                            />
+                        </Form.Item>
                     </div>
-                    <Row gutter={16}>
+
+                    {/* Chỉ số */}
+                    <Row gutter={12}>
                         <Col span={12}>
                             <Form.Item name="startIndex" label="Chỉ số TRƯỚC">
-                                <InputNumber style={{ width: '100%' }} readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')} variant="filled" disabled={watchIsStopped} />
+                                <InputNumber
+                                    style={{ width: '100%', fontSize: isMobile ? 18 : 14 }}
+                                    readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')}
+                                    variant="filled"
+                                    disabled={watchIsStopped}
+                                    controls={false}
+                                />
                             </Form.Item>
                         </Col>
                         <Col span={12}>
                             <Form.Item name="endIndex" label="Chỉ số SAU" rules={[{ required: !watchIsStopped, message: 'Nhập chỉ số!' }]}>
-                                <InputNumber ref={inputRef} style={{ width: '100%', fontWeight: 'bold', fontSize: 16 }} onPressEnter={() => handleSave(true)} disabled={watchIsStopped} />
+                                <InputNumber
+                                    ref={inputRef}
+                                    style={{ width: '100%', fontWeight: 'bold', fontSize: isMobile ? 22 : 16 }}
+                                    onPressEnter={() => handleSave(true)}
+                                    disabled={watchIsStopped}
+                                    controls={false}
+                                />
                             </Form.Item>
                         </Col>
                     </Row>
+
+                    {/* NE */}
                     {(currentMachine?.formulaType === 3 || currentMachine?.formulaType === 4) && (
                         <Form.Item name="inputNE" label="Chi số (NE) thực tế">
-                            <InputNumber style={{ width: '100%' }} disabled={watchIsStopped} />
+                            <InputNumber
+                                style={{ width: '100%', fontSize: isMobile ? 18 : 14 }}
+                                disabled={watchIsStopped}
+                                controls={false}
+                            />
                         </Form.Item>
                     )}
-                    <div style={{ textAlign: 'center', padding: 15, background: calculatedOutput < 0 ? '#fff1f0' : '#f6ffed', marginBottom: 20, borderRadius: 8, border: calculatedOutput < 0 ? '1px solid #ffccc7' : '1px solid #b7eb8f' }}>
-                        <div style={{ color: '#666', fontSize: 12 }}>Sản lượng ước tính:</div>
-                        <div style={{ fontSize: 28, fontWeight: 'bold', color: calculatedOutput < 0 ? 'red' : '#389e0d' }}>
-                            {calculatedOutput} <small>kg</small>
+
+                    {/* Kết quả tính toán */}
+                    <div style={{
+                        textAlign: 'center',
+                        padding: isMobile ? '14px 12px' : 15,
+                        background: calculatedOutput < 0 ? '#fff1f0' : '#f6ffed',
+                        marginBottom: isMobile ? 14 : 20,
+                        borderRadius: 10,
+                        border: calculatedOutput < 0 ? '1px solid #ffccc7' : '1px solid #b7eb8f',
+                    }}>
+                        <div style={{ color: '#888', fontSize: 12 }}>Sản lượng ước tính</div>
+                        <div style={{ fontSize: isMobile ? 38 : 28, fontWeight: 'bold', color: calculatedOutput < 0 ? 'red' : '#389e0d', lineHeight: 1.2 }}>
+                            {calculatedOutput} <small style={{ fontSize: '45%', fontWeight: 'normal' }}>kg</small>
                         </div>
                     </div>
-                    <Row gutter={16}>
-                        <Col span={8}><Button block onClick={() => setIsModalOpen(false)}>Hủy</Button></Col>
-                        <Col span={8}><Button block icon={<SaveOutlined />} onClick={() => handleSave(false)} disabled={!watchIsStopped && calculatedOutput < 0}>Lưu</Button></Col>
-                        <Col span={8}><Button block type="primary" icon={<ArrowRightOutlined />} onClick={() => handleSave(true)} disabled={!watchIsStopped && calculatedOutput < 0}>Lưu & Tiếp</Button></Col>
+
+                    {/* Nút hành động */}
+                    <Row gutter={8}>
+                        <Col span={8}>
+                            <Button block style={{ height: isMobile ? 48 : undefined }} onClick={() => setIsModalOpen(false)}>
+                                Hủy
+                            </Button>
+                        </Col>
+                        <Col span={8}>
+                            <Button
+                                block
+                                icon={<SaveOutlined />}
+                                style={{ height: isMobile ? 48 : undefined }}
+                                onClick={() => handleSave(false)}
+                                disabled={!watchIsStopped && calculatedOutput < 0}
+                            >
+                                Lưu
+                            </Button>
+                        </Col>
+                        <Col span={8}>
+                            <Button
+                                block
+                                type="primary"
+                                icon={<ArrowRightOutlined />}
+                                style={{ height: isMobile ? 48 : undefined }}
+                                onClick={() => handleSave(true)}
+                                disabled={!watchIsStopped && calculatedOutput < 0}
+                            >
+                                Lưu & Tiếp
+                            </Button>
+                        </Col>
                     </Row>
                 </Form>
             </Modal>
