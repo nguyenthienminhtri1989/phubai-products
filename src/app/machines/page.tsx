@@ -153,12 +153,14 @@ export default function MachinesPage() {
         },
         {
             title: "Hành động", key: "action", width: 100, align: 'right' as const,
-            render: (_: any, r: MachineData) => isAdmin ? (
+            render: (_: any, r: MachineData) => (isAdmin || isManager) ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
-                    <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
-                        <Button size="small" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
+                    {isAdmin && (
+                        <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
+                            <Button size="small" danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                    )}
                 </Space>
             ) : null
         }
