@@ -153,6 +153,10 @@ export default function DailyInputPage() {
         setTimeout(() => inputRef.current?.focus(), 100);
     };
 
+    const totalOutput = useMemo(() =>
+        machines.reduce((sum, m) => sum + (m.todayLog?.finalOutput ?? 0), 0),
+    [machines]);
+
     const calculatedOutput = useMemo(() => {
         if (!currentMachine || watchIsStopped) return 0;
         const start = Number(watchStartIndex) || 0;
@@ -263,8 +267,15 @@ export default function DailyInputPage() {
                             <Select value={selectedShift} onChange={setSelectedShift} style={{ width: 100 }} options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]} />
                         </div>
                     </Col>
-                    <Col span={8} style={{ textAlign: 'right' }}>
-                        <Statistic title="Tiến độ nhập liệu" value={machines.filter(m => m.todayLog).length} suffix={`/ ${machines.length} máy`} valueStyle={{ fontSize: 20, color: '#1890ff' }} />
+                    <Col span={8}>
+                        <Row justify="end" gutter={32}>
+                            <Col>
+                                <Statistic title="Tiến độ nhập liệu" value={machines.filter(m => m.todayLog).length} suffix={`/ ${machines.length} máy`} valueStyle={{ fontSize: 20, color: '#1890ff' }} />
+                            </Col>
+                            <Col>
+                                <Statistic title="Tổng sản lượng" value={totalOutput} suffix="kg" valueStyle={{ fontSize: 20, color: '#389e0d' }} />
+                            </Col>
+                        </Row>
                     </Col>
                 </Row>
             </Card>
