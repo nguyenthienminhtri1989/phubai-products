@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { Table, Button, Modal, Form, Input, message, Space, Card } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
 
 // Định nghĩa kiểu dữ liệu nhà máy (khớp với Prisma)
 interface Factory {
@@ -13,6 +14,9 @@ interface Factory {
 }
 
 export default function FactoryPage() {
+  const { data: session } = useSession();
+  const canEdit = (session?.user as any)?.role === "ADMIN";
+
   // Khai báo State
   const [factories, setFactories] = useState<Factory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -118,7 +122,7 @@ export default function FactoryPage() {
       dataIndex: "note",
       key: "note",
     },
-    {
+    ...(canEdit ? [{
       title: "Hành Động",
       key: "action",
       width: 150,
@@ -128,9 +132,9 @@ export default function FactoryPage() {
             icon={<EditOutlined />}
             size="small"
             onClick={() => {
-              setEditingFactory(record); // gán bản ghi cần xóa vào State
-              form.setFieldsValue(record); // Điền dữ liệu cũ vào form
-              setIsModalOpen(true); // Mở modal để sửa
+              setEditingFactory(record);
+              form.setFieldsValue(record);
+              setIsModalOpen(true);
             }}
           />
           <Button
@@ -141,26 +145,26 @@ export default function FactoryPage() {
           />
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 20 }}>
       <Card
         title="Quản lý danh mục Nhà Máy"
-        extra={
+        extra={canEdit ? (
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => {
-              setEditingFactory(null); // Đánh dấu là thêm mới
-              form.resetFields(); // Xóa trắng form để điền dữ liệu mới
-              setIsModalOpen(true); // Mở ô modal nhập liệu
+              setEditingFactory(null);
+              form.resetFields();
+              setIsModalOpen(true);
             }}
           >
             Thêm Nhà Máy
           </Button>
-        }
+        ) : null}
       >
         <Table
           rowKey="id"

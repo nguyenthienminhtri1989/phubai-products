@@ -109,6 +109,9 @@ export default function ItemsManagementPage() {
         setIsModalOpen(true);
     };
 
+    const canEdit = (session?.user as any)?.role === "ADMIN" ||
+        ["OPERATOR", "MANAGER"].includes((session?.user as any)?.accessLevel);
+
     // --- 5. Cột bảng ---
     const columns = [
         {
@@ -155,7 +158,7 @@ export default function ItemsManagementPage() {
                     : <Tag>Chưa dùng</Tag>
             }
         },
-        {
+        ...(canEdit ? [{
             title: "Hành động",
             key: "action",
             align: 'right' as const,
@@ -169,7 +172,7 @@ export default function ItemsManagementPage() {
                         onConfirm={() => handleDelete(r.id)}
                         okText="Xóa"
                         cancelText="Hủy"
-                        disabled={(r._count?.productionLogs || 0) > 0} // Khóa nút xóa nếu đang dùng
+                        disabled={(r._count?.productionLogs || 0) > 0}
                     >
                         <Button
                             icon={<DeleteOutlined />}
@@ -180,7 +183,7 @@ export default function ItemsManagementPage() {
                     </Popconfirm>
                 </Space>
             ),
-        },
+        }] : []),
     ];
 
     if (!session) return <div className="p-10 text-center">Vui lòng đăng nhập...</div>;
@@ -200,7 +203,7 @@ export default function ItemsManagementPage() {
                             style={{ width: 200 }}
                         />
                         <Button icon={<ReloadOutlined />} onClick={fetchItems}>Tải lại</Button>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Thêm mới</Button>
+                        {canEdit && <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Thêm mới</Button>}
                     </Space>
                 }
             >

@@ -19,6 +19,7 @@ import {
   DeleteOutlined,
   FilterOutlined,
 } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
 
 // Định nghĩa kiểu dữ liệu
 interface Factory {
@@ -34,6 +35,9 @@ interface Process {
 }
 
 export default function ProcessPage() {
+  const { data: session } = useSession();
+  const canEdit = (session?.user as any)?.role === "ADMIN";
+
   // --- STATE ---
   const [processes, setProcesses] = useState<Process[]>([]); // Dữ liệu gốc
   const [filteredProcesses, setFilteredProcesses] = useState<Process[]>([]); // Dữ liệu hiển thị (sau khi lọc)
@@ -156,7 +160,7 @@ export default function ProcessPage() {
         <Tag color="blue">{factory?.name || "N/A"}</Tag>
       ),
     },
-    {
+    ...(canEdit ? [{
       title: "Hành động",
       key: "action",
       width: 120,
@@ -169,7 +173,7 @@ export default function ProcessPage() {
               setEditingProcess(record);
               form.setFieldsValue({
                 name: record.name,
-                factoryId: record.factoryId, // Điền ID nhà máy vào dropdown
+                factoryId: record.factoryId,
               });
               setIsModalOpen(true);
             }}
@@ -182,21 +186,20 @@ export default function ProcessPage() {
           />
         </Space>
       ),
-    },
+    }] : []),
   ];
 
   return (
     <div style={{ padding: 20 }}>
       <Card
         title="Quản lý Công Đoạn Sản Xuất"
-        extra={
+        extra={canEdit ? (
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => {
               setEditingProcess(null);
               form.resetFields();
-              // Nếu đang lọc theo nhà máy nào, tự động điền nhà máy đó vào form thêm mới luôn (UX tốt)
               if (filterFactoryId) {
                 form.setFieldValue("factoryId", filterFactoryId);
               }
@@ -205,7 +208,7 @@ export default function ProcessPage() {
           >
             Thêm Công Đoạn
           </Button>
-        }
+        ) : null}
       >
         {/* --- THANH CÔNG CỤ LỌC --- */}
         <div
