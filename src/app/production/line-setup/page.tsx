@@ -21,7 +21,7 @@ interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
 interface Item { id: number; name: string; ne?: number; }
 interface Machine {
-    id: number; name: string; processId: number;
+    id: number; name: string; processId: number; isActive?: boolean;
     process?: { name: string }; currentItem?: { name: string };
 }
 interface LineLink {
