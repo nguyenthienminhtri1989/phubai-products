@@ -42,28 +42,36 @@ const PROCESS_ORDER: Record<string, number> = {
     "chai ky": 4, "tho": 5, "soi con": 6, "soi": 6, "danh ong": 7, "ong": 7,
 };
 
+function normalizeStr(str: string): string {
+    return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[đĐ]/g, "d")
+        .toLowerCase();
+}
+
 function getProcessOrder(name: string): number {
-    const lower = name.toLowerCase();
+    const normalized = normalizeStr(name);
     for (const [key, order] of Object.entries(PROCESS_ORDER)) {
-        if (lower.includes(key)) return order;
+        if (normalized.includes(key)) return order;
     }
     return 99;
 }
 
 // Mau sac theo cong doan
-const PROCESS_COLORS: Record<number, { bg: string; border: string; text: string }> = {
-    1: { bg: "#e6f7ff", border: "#69c0ff", text: "#096dd9" },   // Chai Tho - xanh duong
-    2: { bg: "#f6ffed", border: "#95de64", text: "#389e0d" },   // Ghep - xanh la
-    3: { bg: "#fff7e6", border: "#ffc53d", text: "#d48806" },   // Cuon Cui - vang
-    4: { bg: "#fff0f6", border: "#ff85c0", text: "#c41d7f" },   // Chai Ky - hong
-    5: { bg: "#f9f0ff", border: "#b37feb", text: "#531dab" },   // Tho - tim
-    6: { bg: "#e6fffb", border: "#5cdbd3", text: "#08979c" },   // Soi Con - cyan
-    7: { bg: "#fff1f0", border: "#ff7875", text: "#cf1322" },   // Danh Ong - do
+const PROCESS_COLORS: Record<number, { bg: string; border: string; text: string; header: string; headerText: string }> = {
+    1: { bg: "#dbeafe", border: "#3b82f6", text: "#1e40af", header: "#3b82f6", headerText: "#ffffff" },   // Chai Tho - xanh duong
+    2: { bg: "#dcfce7", border: "#22c55e", text: "#166534", header: "#22c55e", headerText: "#ffffff" },   // Ghep - xanh la
+    3: { bg: "#fef9c3", border: "#ca8a04", text: "#713f12", header: "#eab308", headerText: "#ffffff" },   // Cuon Cui - vang
+    4: { bg: "#fce7f3", border: "#ec4899", text: "#831843", header: "#ec4899", headerText: "#ffffff" },   // Chai Ky - hong
+    5: { bg: "#ede9fe", border: "#8b5cf6", text: "#4c1d95", header: "#8b5cf6", headerText: "#ffffff" },   // Tho - tim
+    6: { bg: "#ccfbf1", border: "#14b8a6", text: "#134e4a", header: "#14b8a6", headerText: "#ffffff" },   // Soi Con - teal
+    7: { bg: "#fee2e2", border: "#ef4444", text: "#7f1d1d", header: "#ef4444", headerText: "#ffffff" },   // Danh Ong - do
 };
 
 function getColor(processName: string) {
     const order = getProcessOrder(processName);
-    return PROCESS_COLORS[order] || { bg: "#f5f5f5", border: "#d9d9d9", text: "#333" };
+    return PROCESS_COLORS[order] || { bg: "#f3f4f6", border: "#9ca3af", text: "#374151", header: "#6b7280", headerText: "#ffffff" };
 }
 
 // ============================
@@ -149,9 +157,9 @@ function LineDiagramSVG({ line }: { line: ProductionLine }) {
                         <g key={col.name}>
                             {/* Header cong doan */}
                             <rect x={x - 5} y={paddingY - 5} width={colWidth + 10} height={30}
-                                rx={6} fill={color.bg} stroke={color.border} strokeWidth={1.5} />
+                                rx={6} fill={color.header} stroke={color.header} strokeWidth={1.5} />
                             <text x={x + colWidth / 2} y={paddingY + 14} textAnchor="middle"
-                                fontSize={12} fontWeight="bold" fill={color.text}>
+                                fontSize={12} fontWeight="bold" fill={color.headerText}>
                                 {col.name}
                             </text>
 
@@ -162,10 +170,10 @@ function LineDiagramSVG({ line }: { line: ProductionLine }) {
                                 return (
                                     <g key={m.id}>
                                         <rect x={pos.x} y={pos.y} width={colWidth} height={nodeHeight}
-                                            rx={6} fill="#fff" stroke={color.border} strokeWidth={1.5}
+                                            rx={6} fill={color.bg} stroke={color.border} strokeWidth={1.5}
                                             style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))" }} />
                                         <text x={pos.x + colWidth / 2} y={pos.y + nodeHeight / 2 + 4}
-                                            textAnchor="middle" fontSize={13} fontWeight="500" fill="#333">
+                                            textAnchor="middle" fontSize={13} fontWeight="500" fill={color.text}>
                                             {m.name}
                                         </text>
                                     </g>
@@ -365,9 +373,10 @@ export default function LineDiagramPage() {
                             const c = PROCESS_COLORS[order];
                             if (!c) return null;
                             return (
-                                <div key={order} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <div key={order} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <div style={{ width: 14, height: 14, borderRadius: 3, background: c.header }} />
                                     <div style={{ width: 14, height: 14, borderRadius: 3, background: c.bg, border: `2px solid ${c.border}` }} />
-                                    <span style={{ fontSize: 12, color: "#666", textTransform: "capitalize" }}>{name}</span>
+                                    <span style={{ fontSize: 12, color: "#555", textTransform: "capitalize" }}>{name}</span>
                                 </div>
                             );
                         })}
