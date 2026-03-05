@@ -245,7 +245,14 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
-    const isRestrictedUser = session?.user?.role !== "ADMIN" && ((session?.user as any)?.processIds?.length > 0);
+    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const isAdmin = session?.user?.role === "ADMIN";
+    // Lock selectors only when user has exactly 1 process (auto-assigned). Multi-process users can switch between their own.
+    const isLocked = !isAdmin && userProcessIds.length === 1;
+    // Filter options for non-admin users to only their allowed factories & processes
+    const visibleProcesses = isAdmin ? processes : processes.filter(p => userProcessIds.includes(p.id));
+    const allowedFactoryIds = isAdmin ? null : [...new Set(visibleProcesses.map(p => p.factoryId))];
+    const visibleFactories = isAdmin ? factories : factories.filter(f => allowedFactoryIds!.includes(f.id));
     const doneMachines = machines.filter(m => m.todayLog).length;
 
     // --- GIAO DIỆN ---
@@ -263,18 +270,18 @@ export default function DailyInputPage() {
                             <Select
                                 style={{ flex: 1, minWidth: 0 }}
                                 placeholder="Nhà máy"
-                                options={factories.map(f => ({ label: f.name, value: f.id }))}
+                                options={visibleFactories.map(f => ({ label: f.name, value: f.id }))}
                                 onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
                                 value={selectedFactoryId}
-                                disabled={isRestrictedUser}
+                                disabled={isLocked}
                             />
                             <Select
                                 style={{ flex: 1, minWidth: 0 }}
                                 placeholder="Công đoạn"
-                                options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
+                                options={visibleProcesses.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
                                 onChange={setSelectedProcessId}
                                 value={selectedProcessId}
-                                disabled={!selectedFactoryId || isRestrictedUser}
+                                disabled={!selectedFactoryId || isLocked}
                             />
                         </div>
                     </Col>

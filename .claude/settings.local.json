@@ -5,7 +5,10 @@
       "Bash(powershell:*)",
       "Bash(npm install:*)",
       "Bash(npx prisma:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(pg_isready:*)",
+      "Bash(psql:*)",
+      "Bash(PGPASSWORD=123456 psql:*)"
     ]
   }
 }
