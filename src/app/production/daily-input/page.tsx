@@ -90,8 +90,9 @@ export default function DailyInputPage() {
 
     // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER ---
     useEffect(() => {
-        if (processes.length > 0 && session?.user?.processId) {
-            const userProcessId = Number(session.user.processId);
+        const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+        if (processes.length > 0 && userProcessIds.length > 0) {
+            const userProcessId = userProcessIds[0];
             const targetProcess = processes.find(p => p.id === userProcessId);
             if (targetProcess) {
                 setSelectedFactoryId(targetProcess.factoryId);
@@ -244,7 +245,7 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
-    const isRestrictedUser = session?.user?.role !== "ADMIN" && !!session?.user?.processId;
+    const isRestrictedUser = session?.user?.role !== "ADMIN" && ((session?.user as any)?.processIds?.length > 0);
     const doneMachines = machines.filter(m => m.todayLog).length;
 
     // --- GIAO DIỆN ---

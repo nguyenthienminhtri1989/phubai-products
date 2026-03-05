@@ -16,7 +16,7 @@ export async function GET() {
 
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
-      include: { process: true },
+      include: { userProcesses: { include: { process: true } } },
     });
 
     // Loại bỏ mật khẩu
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { username, password, fullName, role, accessLevel, processId } = body;
+    const { username, password, fullName, role, accessLevel, processIds } = body;
 
     // Validate
     if (!username || !password || !fullName) {
@@ -60,20 +60,22 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
 
     const newUser = await prisma.user.create({
       data: {
-        username, // Dùng username
+        username,
         password: hashedPassword,
         fullName,
         role: role || "USER",
         accessLevel: accessLevel || "READ_ONLY",
-        processId: processId ? parseInt(processId) : null,
-        isActive: true, // Admin tạo thì cho active luôn
+        isActive: true,
+        userProcesses: {
+          create: pIds.map((pid) => ({ processId: pid })),
+        },
       },
     });
 
-    // Trả về user không có password
     const { password: _, ...userWithoutPass } = newUser;
     return NextResponse.json(userWithoutPass, { status: 201 });
   } catch (error) {
@@ -94,32 +96,26 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const {
-      id,
-      isActive,
-      role,
-      accessLevel,
-      processId,
-      newPassword,
-      fullName,
-    } = body;
+    const { id, isActive, role, accessLevel, processIds, newPassword, fullName } = body;
+    const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
 
-    const updateData: any = {
-      isActive,
-      role,
-      accessLevel,
-      fullName,
-      processId: processId ? parseInt(processId) : null,
-    };
+    const updateData: any = { isActive, role, accessLevel, fullName };
 
     if (newPassword && newPassword.trim() !== "") {
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      updateData.password = hashedPassword;
+      updateData.password = await bcrypt.hash(newPassword, 10);
     }
+
+    // Xóa toàn bộ quan hệ cũ rồi tạo lại
+    await prisma.userProcess.deleteMany({ where: { userId: parseInt(id) } });
 
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(id) },
-      data: updateData,
+      data: {
+        ...updateData,
+        userProcesses: {
+          create: pIds.map((pid) => ({ processId: pid })),
+        },
+      },
     });
 
     const { password: _, ...safeUser } = updatedUser;

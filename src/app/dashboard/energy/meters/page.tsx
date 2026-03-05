@@ -38,11 +38,8 @@ export default function EnergyMetersPage() {
     // Khai báo một mảng chứa ID của tất cả các Tổ Điện
     const ELECTRICAL_PROCESS_IDS = [15, 16];
 
-    // Lấy processId của user đăng nhập
-    const userProcessId = Number(session?.user?.processId);
-
-    // Kiểm tra: Là ADMIN HOẶC processId nằm trong danh sách tổ điện
-    const canEdit = session?.user?.role === "ADMIN" || ELECTRICAL_PROCESS_IDS.includes(userProcessId);
+    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const canEdit = session?.user?.role === "ADMIN" || userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
 
     // Modals state
     const [isSubModalOpen, setIsSubModalOpen] = useState(false);

@@ -37,8 +37,8 @@ model Process {
   factoryId Int
   factory   Factory   @relation(fields: [factoryId], references: [id])
 
-  machines  Machine[] // 1 Công đoạn quản lý nhiều Máy
-  users     User[]    // Phân quyền: User nào thuộc công đoạn nào
+  machines      Machine[]     // 1 Công đoạn quản lý nhiều Máy
+  userProcesses UserProcess[] // Phân quyền: User nào thuộc công đoạn nào
 
   @@map("processes")
 }
@@ -181,14 +181,24 @@ model User {
   isActive    Boolean  @default(false)  // false: Chờ duyệt, true: Được dùng
 
   // --- PHẠM VI CÔNG VIỆC ---
-  processId   Int?     // User thuộc công đoạn nào?
-  process     Process? @relation(fields: [processId], references: [id])
+  userProcesses UserProcess[] // User thuộc các công đoạn nào?
 
   createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
   createdAt   DateTime @default(now())
   createdLines ProductionLine[]
 
   @@map("users")
+}
+
+// Bảng trung gian: User <-> Process (nhiều-nhiều)
+model UserProcess {
+  userId    Int
+  processId Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  process   Process @relation(fields: [processId], references: [id])
+
+  @@id([userId, processId])
+  @@map("user_processes")
 }
 
 // Bảng Danh mục Hạng mục bảo dưỡng (Maintenance Task)

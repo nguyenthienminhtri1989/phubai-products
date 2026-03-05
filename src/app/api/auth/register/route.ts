@@ -43,10 +43,12 @@ export async function POST(req: Request) {
         username,
         password: hashedPassword,
         fullName,
-        processId: parseInt(processId), // Chuyển processId từ chuỗi sang số
-        role: "USER", // Mặc định là nhân viên thường
-        accessLevel: "READ_ONLY", // Mặc định quyền thấp nhất
-        isActive: false, // Quan trọng: Phải chờ Admin duyệt
+        role: "USER",
+        accessLevel: "READ_ONLY",
+        isActive: false,
+        userProcesses: {
+          create: [{ processId: parseInt(processId) }],
+        },
       },
     });
 

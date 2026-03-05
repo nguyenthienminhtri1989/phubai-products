@@ -18,6 +18,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Tìm user trong DB
         const user = await prisma.user.findUnique({
           where: { username },
+          include: { userProcesses: true },
         });
 
         if (!user) return null; // Không tìm thấy user
@@ -36,10 +37,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.fullName,
           username: user.username,
           role: user.role,
-          processId: user.processId,
+          processIds: user.userProcesses.map((up) => up.processId),
           accessLevel: user.accessLevel,
           fullName: user.fullName,
-        };
+        } as any;
       },
     }),
   ],
@@ -52,7 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.username = (user as any).username;
         token.role = (user as any).role;
         token.accessLevel = (user as any).accessLevel;
-        token.processId = (user as any).processId;
+        token.processIds = (user as any).processIds;
         token.fullName = (user as any).fullName;
       }
       return token;
@@ -65,7 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).username = token.username;
         (session.user as any).role = token.role;
         (session.user as any).accessLevel = token.accessLevel;
-        (session.user as any).processId = token.processId;
+        (session.user as any).processIds = token.processIds;
         (session.user as any).fullName = token.fullName;
       }
       return session;

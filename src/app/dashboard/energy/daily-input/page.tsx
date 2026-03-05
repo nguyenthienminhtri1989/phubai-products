@@ -49,8 +49,8 @@ export default function EnergyDailyInputPage() {
 
     // Phân quyền: Tổ Điện (15, 16) hoặc ADMIN mới được lưu
     const ELECTRICAL_PROCESS_IDS = [15, 16];
-    const userProcessId = session?.user?.processId ? Number(session.user.processId) : null;
-    const canEdit = session?.user?.role === "ADMIN" || (userProcessId && ELECTRICAL_PROCESS_IDS.includes(userProcessId));
+    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const canEdit = session?.user?.role === "ADMIN" || userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
 
     // --- LẤY DANH MỤC & GIÁ ĐIỆN ---
     useEffect(() => {

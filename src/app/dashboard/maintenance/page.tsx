@@ -91,8 +91,9 @@ export default function MaintenancePage() {
     // 5. LOGIC TỰ ĐỘNG CHỌN & PHÂN QUYỀN (GIỐNG TRANG NHẬP SẢN LƯỢNG)
     useEffect(() => {
         // Chỉ chạy khi đã tải xong danh mục VÀ đã có session
-        if (processes.length > 0 && session?.user?.processId) {
-            const userProcessId = Number(session.user.processId);
+        const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+        if (processes.length > 0 && userProcessIds.length > 0) {
+            const userProcessId = userProcessIds[0];
             const targetProcess = processes.find(p => p.id === userProcessId);
 
             if (targetProcess) {
@@ -103,7 +104,7 @@ export default function MaintenancePage() {
     }, [processes, session]);
 
     // Xác định user có bị giới hạn quyền không? (Nếu không phải ADMIN và có processId)
-    const isRestrictedUser = session?.user?.role !== "ADMIN" && !!session?.user?.processId;
+    const isRestrictedUser = session?.user?.role !== "ADMIN" && ((session?.user as any)?.processIds?.length > 0);
 
     // 6. LOGIC LỌC DỮ LIỆU (Updated)
     const filteredData = useMemo(() => {

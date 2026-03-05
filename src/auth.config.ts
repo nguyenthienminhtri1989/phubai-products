@@ -24,11 +24,11 @@ export const authConfig = {
     // 2. Tùy biến JWT để lưu thêm thông tin
     jwt({ token, user, trigger, session }) {
       if (user) {
-        token.role = user.role;
-        token.processId = user.processId;
-        token.accessLevel = user.accessLevel;
-        token.username = user.username;
-        token.fullName = user.fullName;
+        token.role = (user as any).role;
+        token.processIds = (user as any).processIds;
+        token.accessLevel = (user as any).accessLevel;
+        token.username = (user as any).username;
+        token.fullName = (user as any).fullName;
       }
       if (trigger === "update" && session) {
         return { ...token, ...session.user };
@@ -40,7 +40,7 @@ export const authConfig = {
       if (session.user && token) {
         session.user.id = token.sub as string;
         session.user.role = token.role as string;
-        session.user.processId = token.processId as number | null;
+        (session.user as any).processIds = token.processIds as number[];
         session.user.accessLevel = token.accessLevel as string;
         session.user.username = token.username as string;
         session.user.fullName = token.fullName as string;

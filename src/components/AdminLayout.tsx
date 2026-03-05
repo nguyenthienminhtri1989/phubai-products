@@ -117,7 +117,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU ĐIỆN NĂNG
   // ========================================================
   const userRole = session?.user?.role;
-  const userProcessId = session?.user?.processId ? Number(session.user.processId) : null;
+  const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+  const userProcessId = userProcessIds[0] ?? null;
 
   // Danh sách ID các Tổ Điện (Nhà máy 1 và Nhà máy 2)
   const ELECTRICAL_PROCESS_IDS = [15, 16];
@@ -125,7 +126,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const isAdmin = userRole === "ADMIN";
 
   // Kiểm tra xem user có thuộc một trong các tổ điện không
-  const isElectrician = userProcessId !== null && ELECTRICAL_PROCESS_IDS.includes(userProcessId);
+  const isElectrician = userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
 
   // Nếu là Admin HOẶC là nhân viên tổ điện -> Thêm menu Quản lý Điện năng
   if (isAdmin || isElectrician) {

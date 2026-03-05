@@ -7,13 +7,12 @@ import { useSession } from 'next-auth/react';
 
 interface UserType {
     id: number;
-    username: string; // <-- ĐÃ SỬA: username
+    username: string;
     fullName: string;
     isActive: boolean;
     role: string;
     accessLevel: string;
-    process?: { id: number; name: string };
-    processId: number | null;
+    userProcesses: { processId: number; process: { name: string } }[];
 }
 
 export default function UserManagementPage() {
@@ -60,6 +59,8 @@ export default function UserManagementPage() {
             const payload = editingUser
                 ? { ...values, id: editingUser.id }
                 : { ...values, password: values.newPassword };
+            // Đảm bảo processIds luôn là mảng
+            if (!payload.processIds) payload.processIds = [];
 
             const res = await fetch('/api/users', {
                 method: method,
@@ -96,12 +97,12 @@ export default function UserManagementPage() {
         setEditingUser(user);
         form.resetFields();
         form.setFieldsValue({
-            username: user.username, // <-- Bind username
+            username: user.username,
             fullName: user.fullName,
             isActive: user.isActive,
             role: user.role,
             accessLevel: user.accessLevel,
-            processId: user.processId,
+            processIds: user.userProcesses.map(up => up.processId),
             newPassword: ''
         });
         setIsModalOpen(true);
@@ -119,8 +120,11 @@ export default function UserManagementPage() {
         },
         {
             title: 'Bộ phận',
-            dataIndex: 'process',
-            render: (p: any) => p ? <Tag color="blue">{p.name}</Tag> : <Tag>Văn phòng</Tag>
+            dataIndex: 'userProcesses',
+            render: (ups: UserType['userProcesses']) =>
+                ups && ups.length > 0
+                    ? ups.map(up => <Tag key={up.processId} color="blue">{up.process.name}</Tag>)
+                    : <Tag>Văn phòng</Tag>
         },
         {
             title: 'Vai trò',
@@ -219,8 +223,8 @@ export default function UserManagementPage() {
                         </Form.Item>
                     </div>
 
-                    <Form.Item name="processId" label="Thuộc công đoạn (Nếu có)">
-                        <Select allowClear placeholder="Chọn công đoạn...">
+                    <Form.Item name="processIds" label="Thuộc công đoạn (Có thể chọn nhiều)">
+                        <Select mode="multiple" allowClear placeholder="Chọn công đoạn...">
                             {processes.map((p: any) => (
                                 <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
                             ))}

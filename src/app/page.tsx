@@ -86,8 +86,8 @@ export default function Home() {
   const shiftInfo = getCurrentShiftInfo();
   const isAdmin = session?.user?.role === "ADMIN";
   const accessLevel = session?.user?.accessLevel;
-  const processId = session?.user?.processId ? Number(session.user.processId) : null;
-  const isElectrician = processId !== null && [15, 16].includes(processId as number);
+  const processIds: number[] = (session?.user as any)?.processIds || [];
+  const isElectrician = processIds.some(id => [15, 16].includes(id));
 
   const getRoleTag = () => {
     if (isAdmin) return { label: "Quản trị viên", color: "#f5222d" };

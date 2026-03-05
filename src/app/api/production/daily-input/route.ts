@@ -56,10 +56,9 @@ export async function POST(request: Request) {
       }
 
       // So sánh công đoạn của User và công đoạn của Máy
-      // User.processId có thể là null, cần ép kiểu hoặc check kỹ
-      const userProcessId = Number(session.user.processId);
+      const userProcessIds: number[] = (session.user as any).processIds || [];
 
-      if (userProcessId !== targetMachine.processId) {
+      if (!userProcessIds.includes(targetMachine.processId)) {
         return NextResponse.json(
           {
             error:
