@@ -19,7 +19,8 @@ import {
   PartitionOutlined,
   RobotOutlined,
   ThunderboltOutlined, // Icon tia sét cho Module Điện năng
-  QrcodeOutlined
+  QrcodeOutlined,
+  NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -97,6 +98,16 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           key: "/machines/qr-machines",
           label: "QR Code máy",
           icon: <QrcodeOutlined />
+        },
+        {
+          key: "/production/line-setup",
+          label: "Thiết lập line SX",
+          icon: <ApartmentOutlined />
+        },
+        {
+          key: "/production/line-diagram",
+          label: "Sơ đồ line SX",
+          icon: <NodeIndexOutlined />
         },
       ],
     },

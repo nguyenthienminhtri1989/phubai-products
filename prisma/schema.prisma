@@ -22,6 +22,7 @@ model Factory {
   // 👇 THÊM 2 DÒNG NÀY VÀO ĐÂY 👇
   substations Substation[]
   powerMeters PowerMeter[]
+  productionLines ProductionLine[]
 
   @@map("factories")
 }
@@ -67,6 +68,8 @@ model Item {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  productionLines ProductionLine[]
+
   @@map("items")
 }
 
@@ -105,6 +108,8 @@ model Machine {
 
   // --- Dữ liệu lịch sử ---
   productionLogs ProductionLog[]
+  linksFrom ProductionLineLink[] @relation("LinkFrom")
+  linksTo   ProductionLineLink[] @relation("LinkTo")
 
   @@map("machines")
 }
@@ -181,6 +186,7 @@ model User {
 
   createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
   createdAt   DateTime @default(now())
+  createdLines ProductionLine[]
 
   @@map("users")
 }
@@ -342,3 +348,88 @@ model PowerRecord {
   @@unique([recordDate, meterId])
   @@map("power_records")
 }
+
+// ==========================================
+// THEM VAO CUOI FILE schema.prisma
+// ==========================================
+
+// MODULE SO DO LINE SAN XUAT (Production Line Routing)
+
+// 1. Bang chinh: Luu thong tin dot line san xuat
+model ProductionLine {
+  id          Int       @id @default(autoincrement())
+  name        String    // Ten line (VD: "Line CVC30 - NM1")
+  
+  // Mat hang dang chay tren line nay
+  itemId      Int
+  item        Item      @relation(fields: [itemId], references: [id])
+  
+  // Thuoc nha may nao
+  factoryId   Int
+  factory     Factory   @relation(fields: [factoryId], references: [id])
+  
+  // Loai tuyen: 1 = Khong chai ky, 2 = Co chai ky
+  routeType   Int       @default(1)
+  
+  // Thoi gian hieu luc (Luu theo dot)
+  startDate   DateTime  @db.Date
+  endDate     DateTime? @db.Date  // null = dang hieu luc
+  
+  // Ai tao
+  createdById Int?
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Quan he: 1 line co nhieu lien ket may
+  links       ProductionLineLink[]
+
+  @@index([factoryId])
+  @@index([itemId])
+  @@index([startDate])
+  @@map("production_lines")
+}
+
+// 2. Bang chi tiet: Luu tung lien ket may-sang-may
+model ProductionLineLink {
+  id            Int     @id @default(autoincrement())
+  
+  // Thuoc line nao
+  lineId        Int
+  line          ProductionLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  
+  // May nguon (VD: Chai Tho 01)
+  fromMachineId Int
+  fromMachine   Machine @relation("LinkFrom", fields: [fromMachineId], references: [id])
+  
+  // May dich (VD: Ghep A1)
+  toMachineId   Int
+  toMachine     Machine @relation("LinkTo", fields: [toMachineId], references: [id])
+  
+  // Thu tu cong doan (1 = Chai Tho->Ghep, 2 = Ghep A->Ghep B, ...)
+  stepOrder     Int
+
+  @@index([lineId])
+  @@index([fromMachineId])
+  @@index([toMachineId])
+  @@unique([lineId, fromMachineId, toMachineId]) // Khong trung lien ket trong 1 line
+  @@map("production_line_links")
+}
+
+// ==========================================
+// CAN BO SUNG QUAN HE VAO CAC MODEL DA CO:
+// ==========================================
+
+// Them vao model Item:
+//   productionLines ProductionLine[]
+
+// Them vao model Factory:
+//   productionLines ProductionLine[]
+
+// Them vao model User:
+//   createdLines ProductionLine[]
+
+// Them vao model Machine:
+//   linksFrom ProductionLineLink[] @relation("LinkFrom")
+//   linksTo   ProductionLineLink[] @relation("LinkTo")
