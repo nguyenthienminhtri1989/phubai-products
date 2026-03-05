@@ -32,13 +32,14 @@ export async function POST(request: Request) {
     if (itemIds?.length > 0) where.itemId = { in: itemIds };
 
     // Lọc theo Công đoạn/Nhà máy nếu chưa chọn Máy cụ thể
-    if (
-      (!machineIds || machineIds.length === 0) &&
-      (processIds?.length > 0 || factoryIds?.length > 0)
-    ) {
-      where.machine = {};
-      if (processIds?.length > 0) where.machine.processId = { in: processIds };
-      // Nếu cần lọc theo factory mà chưa chọn process (Logic nâng cao)
+    if ((!machineIds || machineIds.length === 0) && (processIds?.length > 0 || factoryIds?.length > 0)) {
+      if (processIds?.length > 0) {
+        // Lọc theo công đoạn (ưu tiên hơn nhà máy)
+        where.machine = { processId: { in: processIds } };
+      } else if (factoryIds?.length > 0) {
+        // Lọc theo nhà máy khi chưa chọn công đoạn
+        where.machine = { process: { factoryId: { in: factoryIds } } };
+      }
     }
 
     // 2. CHẠY SONG SONG 3 TRUY VẤN (TRANSACTION)

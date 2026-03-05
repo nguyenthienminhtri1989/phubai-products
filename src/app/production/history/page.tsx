@@ -41,7 +41,7 @@ export default function ProductionHistoryPage() {
                     fetch("/api/factories").then(r => r.json()),
                     fetch("/api/processes").then(r => r.json()),
                     // Tạm dùng endpoint backup để lấy list máy, hoặc bạn có thể tạo endpoint /api/machines riêng
-                    fetch("/api/admin/backup").then(r => r.json().then(d => d.data.machines || [])),
+                    fetch("/api/machines").then(r => r.json()),
                     fetch("/api/items").then(r => r.json())
                 ]);
                 setFactories(f); setProcesses(p); setMachines(m); setItems(i);

@@ -88,55 +88,52 @@ export default function MaintenancePage() {
 
     useEffect(() => { fetchMetadata(); }, []);
 
-    // 5. LOGIC TỰ ĐỘNG CHỌN & PHÂN QUYỀN (GIỐNG TRANG NHẬP SẢN LƯỢNG)
-    useEffect(() => {
-        // Chỉ chạy khi đã tải xong danh mục VÀ đã có session
-        const userProcessIds: number[] = (session?.user as any)?.processIds || [];
-        if (processes.length > 0 && userProcessIds.length > 0) {
-            const userProcessId = userProcessIds[0];
-            const targetProcess = processes.find(p => p.id === userProcessId);
+    // 5. THÔNG TIN PHÂN QUYỀN
+    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const isAdmin = session?.user?.role === "ADMIN";
 
-            if (targetProcess) {
-                setSelectedFactoryId(targetProcess.factoryId);
-                setSelectedProcessId(targetProcess.id);
-            }
-        }
-    }, [processes, session]);
+    // Danh sách factory/process mà user được phép xem (admin = tất cả)
+    const visibleFactories = useMemo(() => {
+        if (isAdmin) return factories;
+        return factories.filter(f => processes.some(p => userProcessIds.includes(p.id) && p.factoryId === f.id));
+    }, [isAdmin, factories, processes, userProcessIds]);
 
-    // Xác định user có bị giới hạn quyền không? (Nếu không phải ADMIN và có processId)
-    const isRestrictedUser = session?.user?.role !== "ADMIN" && ((session?.user as any)?.processIds?.length > 0);
+    const visibleProcesses = useMemo(() => {
+        return processes
+            .filter(p => !selectedFactoryId || p.factoryId === selectedFactoryId)
+            .filter(p => isAdmin || userProcessIds.includes(p.id));
+    }, [isAdmin, processes, selectedFactoryId, userProcessIds]);
 
-    // 6. LOGIC LỌC DỮ LIỆU (Updated)
+    // 6. LOGIC LỌC DỮ LIỆU
     const filteredData = useMemo(() => {
         return data.filter((item) => {
-            // Lọc theo Nhà máy (Dựa vào process của máy)
-            // Tìm process của máy hiện tại trong danh sách process đã load để biết nó thuộc Factory nào
+            // Giới hạn phạm vi theo quyền (non-admin chỉ thấy máy thuộc công đoạn của mình)
+            const matchScope = isAdmin || userProcessIds.includes(item.machine.processId);
+
+            // Lọc theo Nhà máy
             const machineProcess = processes.find(p => p.id === item.machine.processId);
-            const matchFactory = !selectedFactoryId || (machineProcess && machineProcess.factoryId === selectedFactoryId);
+            const matchFactory = !selectedFactoryId || (machineProcess?.factoryId === selectedFactoryId);
 
             // Lọc theo Công đoạn
             const matchProcess = !selectedProcessId || item.machine.processId === selectedProcessId;
 
             // Lọc theo Trạng thái
-            const today = dayjs();
-            const dueDate = dayjs(item.nextDueDate);
-            const diff = dueDate.diff(today, 'day');
+            const diff = dayjs(item.nextDueDate).diff(dayjs(), 'day');
             let status = 'safe';
             if (diff < 0) status = 'overdue';
             else if (diff <= (item.leadTimeDays || 30)) status = 'warning';
-
             const matchStatus = !filterStatus || status === filterStatus;
 
-            return matchFactory && matchProcess && matchStatus;
+            return matchScope && matchFactory && matchProcess && matchStatus;
         });
-    }, [data, selectedFactoryId, selectedProcessId, filterStatus, processes]);
+    }, [data, isAdmin, userProcessIds, selectedFactoryId, selectedProcessId, filterStatus, processes]);
 
     // 7. LỌC DANH SÁCH MÁY (Dùng cho Modal Thêm Mới)
-    // Chỉ hiện những máy thuộc công đoạn đang chọn
     const filteredMachinesForSelect = useMemo(() => {
-        if (!selectedProcessId) return machines;
-        return machines.filter(m => m.processId === selectedProcessId);
-    }, [machines, selectedProcessId]);
+        return machines
+            .filter(m => isAdmin || userProcessIds.includes(m.processId))
+            .filter(m => !selectedProcessId || m.processId === selectedProcessId);
+    }, [machines, isAdmin, userProcessIds, selectedProcessId]);
 
     // LOGIC THỐNG KÊ (Tính trên tập dữ liệu ĐÃ LỌC để phản ánh đúng view của user)
     const stats = useMemo(() => {
@@ -264,19 +261,19 @@ export default function MaintenancePage() {
                         <div style={{ display: 'flex', gap: 8 }}>
                             <Select
                                 style={{ width: '50%' }}
-                                placeholder="Chọn Nhà máy"
-                                options={factories.map(f => ({ label: f.name, value: f.id }))}
-                                onChange={val => { setSelectedFactoryId(val); setSelectedProcessId(null); }}
+                                placeholder="Tất cả nhà máy"
+                                allowClear
+                                options={visibleFactories.map(f => ({ label: f.name, value: f.id }))}
+                                onChange={val => { setSelectedFactoryId(val ?? null); setSelectedProcessId(null); }}
                                 value={selectedFactoryId}
-                                disabled={isRestrictedUser} // Khóa nếu user bị giới hạn
                             />
                             <Select
                                 style={{ width: '50%' }}
-                                placeholder="Chọn Công đoạn"
-                                options={processes.filter(p => p.factoryId === selectedFactoryId).map(p => ({ label: p.name, value: p.id }))}
-                                onChange={setSelectedProcessId}
+                                placeholder="Tất cả công đoạn"
+                                allowClear
+                                options={visibleProcesses.map(p => ({ label: p.name, value: p.id }))}
+                                onChange={val => setSelectedProcessId(val ?? null)}
                                 value={selectedProcessId}
-                                disabled={!selectedFactoryId || isRestrictedUser} // Khóa
                             />
                         </div>
                     </Col>

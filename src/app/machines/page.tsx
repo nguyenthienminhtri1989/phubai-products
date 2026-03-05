@@ -45,7 +45,9 @@ export default function MachinesPage() {
 
     const isAdmin = session?.user?.role === "ADMIN";
     const isManager = (session?.user as any)?.accessLevel === "MANAGER";
-    const userProcessId = (session?.user as any)?.processId;
+    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+
+    const canEdit = (m: MachineData) => isAdmin || (isManager && userProcessIds.includes(m.processId));
 
     // 1. Load Data
     const fetchData = async () => {
@@ -59,24 +61,26 @@ export default function MachinesPage() {
             setProcesses(await pRes.json());
             setItems(await iRes.json());
 
-            // Lấy Machines: Manager chỉ thấy máy thuộc công đoạn của mình
+            // Admin dùng filter controls; non-admin lấy tất cả rồi lọc client-side
             let query = "?";
-            if (!isAdmin && isManager && userProcessId) {
-                query += `processId=${userProcessId}`;
-            } else {
+            if (isAdmin) {
                 if (filterFactory) query += `factoryId=${filterFactory}&`;
                 if (filterProcess) query += `processId=${filterProcess}`;
             }
 
             const mRes = await fetch(`/api/machines${query}`);
-            const mData = await mRes.json();
+            let mData: MachineData[] = await mRes.json();
 
-            // Lọc local theo tên (nếu có search text)
-            if (searchText) {
-                setMachines(mData.filter((m: any) => m.name.toLowerCase().includes(searchText.toLowerCase())));
-            } else {
-                setMachines(mData);
+            // Non-admin: chỉ giữ máy thuộc công đoạn của mình
+            if (!isAdmin) {
+                mData = mData.filter(m => userProcessIds.includes(m.processId));
             }
+
+            // Lọc local theo tên
+            if (searchText) {
+                mData = mData.filter(m => m.name.toLowerCase().includes(searchText.toLowerCase()));
+            }
+            setMachines(mData);
         } catch (e) { message.error("Lỗi tải dữ liệu"); }
         finally { setLoading(false); }
     };
@@ -161,7 +165,7 @@ export default function MachinesPage() {
         },
         {
             title: "Hành động", key: "action", width: 100, align: 'right' as const,
-            render: (_: any, r: MachineData) => (isAdmin || isManager) ? (
+            render: (_: any, r: MachineData) => canEdit(r) ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
                     {isAdmin && (
@@ -170,7 +174,6 @@ export default function MachinesPage() {
                         </Popconfirm>
                     )}
                 </Space>
-
             ) : null
         }
     ];
@@ -228,7 +231,10 @@ export default function MachinesPage() {
                     loading={loading}
                     rowSelection={{
                         selectedRowKeys,
-                        onChange: setSelectedRowKeys
+                        onChange: setSelectedRowKeys,
+                        getCheckboxProps: (record: MachineData) => ({
+                            disabled: !canEdit(record),
+                        }),
                     }}
                     pagination={{ pageSize: 20 }}
                 />
@@ -247,7 +253,11 @@ export default function MachinesPage() {
                     </Form.Item>
 
                     <Form.Item name="processId" label="Thuộc Công đoạn" rules={[{ required: true }]}>
-                        <Select options={processes.map(p => ({ label: `${p.name} (${p.factory?.name})`, value: p.id }))} />
+                        <Select
+                            disabled={!isAdmin && !!editingMachine}
+                            options={(isAdmin ? processes : processes.filter(p => userProcessIds.includes(p.id)))
+                                .map(p => ({ label: `${p.name} (${p.factory?.name})`, value: p.id }))}
+                        />
                     </Form.Item>
 
                     <Row gutter={16}>
