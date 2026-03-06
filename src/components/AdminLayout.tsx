@@ -48,7 +48,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     }
   }, [status, pathname, router]);
 
-  if (pathname === "/login" || pathname === "/register") {
+  if (
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname === "/production/mobile-input"
+  ) {
     return <>{children}</>;
   }
 
