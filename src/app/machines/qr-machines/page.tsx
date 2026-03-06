@@ -194,9 +194,9 @@ export default function QRMachinesPage() {
             key: "qr",
             width: 280,
             render: (_: any, r: MachineData) => (
-                <Text copyable={{ text: `${baseUrl}/production/quick-input?machineId=${r.id}` }}
+                <Text copyable={{ text: `${baseUrl}/production/mobile-input?machineId=${r.id}` }}
                     style={{ fontSize: 12, color: "#1677ff" }}>
-                    /quick-input?machineId={r.id}
+                    /mobile-input?machineId={r.id}
                 </Text>
             ),
         },
@@ -214,7 +214,7 @@ export default function QRMachinesPage() {
                             title: `QR Code - ${r.name}`,
                             content: (
                                 <div style={{ textAlign: "center", padding: 20 }}>
-                                    <QRImage url={`${baseUrl}/production/quick-input?machineId=${r.id}`} size={250} />
+                                    <QRImage url={`${baseUrl}/production/mobile-input?machineId=${r.id}`} size={250} />
                                     <div style={{ marginTop: 12, fontSize: 12, color: "#666" }}>
                                         Quét mã này để nhập sản lượng cho <b>{r.name}</b>
                                     </div>
@@ -346,7 +346,7 @@ export default function QRMachinesPage() {
                                 </div>
                                 <div style={{ margin: "8px 0" }}>
                                     <QRImage
-                                        url={`${baseUrl}/production/quick-input?machineId=${m.id}`}
+                                        url={`${baseUrl}/production/mobile-input?machineId=${m.id}`}
                                         size={150}
                                     />
                                 </div>
