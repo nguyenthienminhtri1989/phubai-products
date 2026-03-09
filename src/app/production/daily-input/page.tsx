@@ -247,6 +247,7 @@ export default function DailyInputPage() {
 
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
     const isAdmin = session?.user?.role === "ADMIN";
+    const isReadOnly = !isAdmin && (session?.user as any)?.accessLevel === "READ_ONLY";
     // Lock selectors only when user has exactly 1 process (auto-assigned). Multi-process users can switch between their own.
     const isLocked = !isAdmin && userProcessIds.length === 1;
     // Filter options for non-admin users to only their allowed factories & processes
@@ -258,6 +259,11 @@ export default function DailyInputPage() {
     // --- GIAO DIỆN ---
     return (
         <div style={{ padding: isMobile ? 8 : 20 }}>
+            {isReadOnly && (
+                <div style={{ background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 8, padding: '10px 16px', marginBottom: 10, color: '#d46b08', fontWeight: 500 }}>
+                    Tài khoản chỉ có quyền <b>xem</b>. Liên hệ quản trị viên để được cấp quyền nhập liệu.
+                </div>
+            )}
 
             {/* THANH BỘ LỌC */}
             <Card style={{ marginBottom: 10 }} size="small">
@@ -349,12 +355,13 @@ export default function DailyInputPage() {
                         return (
                             <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
                                 <Card
-                                    hoverable
-                                    onClick={() => handleOpenMachine(m)}
+                                    hoverable={!isReadOnly}
+                                    onClick={() => !isReadOnly && handleOpenMachine(m)}
                                     style={{
-                                        cursor: 'pointer',
+                                        cursor: isReadOnly ? 'default' : 'pointer',
                                         border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9',
                                         background: isDone ? '#f6ffed' : '#fff',
+                                        opacity: isReadOnly ? 0.8 : 1,
                                     }}
                                     bodyStyle={{ padding: isMobile ? 10 : 12 }}
                                 >

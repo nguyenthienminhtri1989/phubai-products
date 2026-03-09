@@ -11,6 +11,7 @@ import {
   ArrowRightOutlined, CheckCircleOutlined, WarningOutlined,
   ClockCircleOutlined, DashboardOutlined, CalendarOutlined,
   SafetyCertificateOutlined, DatabaseOutlined, ApartmentOutlined,
+  MobileOutlined,
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -109,6 +110,8 @@ export default function Home() {
     badge?: number | null;
   };
 
+  const canInput = isAdmin || accessLevel === "OPERATOR" || accessLevel === "MANAGER";
+
   const modules: Module[] = [
     {
       key: "input",
@@ -118,6 +121,14 @@ export default function Home() {
       path: "/production/daily-input",
       bg: "#e6f4ff", border: "#1677ff",
     },
+    ...(canInput ? [{
+      key: "mobile-input",
+      title: "Nhập liệu Mobile",
+      desc: "Giao diện nhập nhanh tối ưu cho điện thoại",
+      icon: <MobileOutlined style={{ fontSize: 30, color: "#13c2c2" }} />,
+      path: "/production/mobile-input",
+      bg: "#e6fffb", border: "#13c2c2",
+    }] : []),
     {
       key: "history",
       title: "Lịch sử & Báo cáo",

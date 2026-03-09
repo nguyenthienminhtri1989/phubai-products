@@ -2,6 +2,33 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
+export async function GET(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const machineId = searchParams.get("machineId");
+  const date = searchParams.get("date");
+  const shift = searchParams.get("shift");
+
+  if (!machineId || !date || !shift) {
+    return NextResponse.json(null);
+  }
+
+  const log = await prisma.productionLog.findFirst({
+    where: {
+      machineId: parseInt(machineId),
+      recordDate: new Date(date),
+      shift: parseInt(shift),
+    },
+    select: { id: true, endIndex: true, startIndex: true, finalOutput: true, note: true },
+  });
+
+  return NextResponse.json(log ?? null);
+}
+
 export async function POST(request: Request) {
   try {
     // 1. LẤY THÔNG TIN NGƯỜI DÙNG
@@ -40,6 +67,15 @@ export async function POST(request: Request) {
     finalOutput = Math.round(parseFloat(finalOutput));
 
     // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
+    // Chặn user READ_ONLY — không có quyền ghi dữ liệu
+    const accessLevel = (session.user as any).accessLevel;
+    if (session.user.role !== "ADMIN" && accessLevel === "READ_ONLY") {
+      return NextResponse.json(
+        { error: "Tài khoản chỉ có quyền xem. Liên hệ quản trị viên để được cấp quyền nhập liệu." },
+        { status: 403 },
+      );
+    }
+
     // Nếu không phải ADMIN, bắt buộc phải kiểm tra Process
     if (session.user.role !== "ADMIN") {
       // Lấy thông tin máy để biết nó thuộc công đoạn nào

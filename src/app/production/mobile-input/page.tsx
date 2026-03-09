@@ -112,12 +112,13 @@ function MobileInputContent() {
                 const pRes = await fetch("/api/processes");
                 if (pRes.ok) {
                     const allProc = await pRes.json();
-                    if (session?.user?.role !== "ADMIN" && session?.user?.processId) {
-                        const userProcId = Number(session.user.processId);
-                        setProcesses(allProc.filter((p: Process) => p.id === userProcId));
-                        // Neu khong co paramMachineId va chi co 1 cong doan => tu chon
-                        if (!paramMachineId && allProc.filter((p: Process) => p.id === userProcId).length === 1) {
-                            setSelectedProcessId(userProcId);
+                    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+                    if (session?.user?.role !== "ADMIN" && userProcessIds.length > 0) {
+                        const userProcs = allProc.filter((p: Process) => userProcessIds.includes(p.id));
+                        setProcesses(userProcs);
+                        // Nếu không có paramMachineId và chỉ có 1 công đoạn => tự chọn
+                        if (!paramMachineId && userProcs.length === 1) {
+                            setSelectedProcessId(userProcs[0].id);
                         }
                     } else {
                         setProcesses(allProc);
@@ -387,6 +388,16 @@ function MobileInputContent() {
             <div style={styles.center}>
                 <Result status="warning" title="Chua dang nhap"
                     extra={<Button type="primary" size="large" href="/login" style={styles.bigBtn}>Dang nhap</Button>} />
+            </div>
+        );
+    }
+    const accessLevel = (session?.user as any)?.accessLevel;
+    if (accessLevel === "READ_ONLY") {
+        return (
+            <div style={styles.center}>
+                <Result status="403" title="Không có quyền"
+                    subTitle="Tài khoản của bạn chỉ có quyền xem. Liên hệ quản trị viên để được cấp quyền nhập liệu."
+                    extra={<Button size="large" href="/" style={styles.bigBtn}>Về trang chủ</Button>} />
             </div>
         );
     }

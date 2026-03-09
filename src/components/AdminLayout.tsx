@@ -21,6 +21,7 @@ import {
   ThunderboltOutlined, // Icon tia sét cho Module Điện năng
   QrcodeOutlined,
   NodeIndexOutlined,
+  MobileOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -88,6 +89,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       children: [
         { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
         { key: "/production/daily-input", label: "Nhập sản lượng" },
+        { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
         {
           key: "/production/history",
           label: "Lịch sử & Báo cáo",
