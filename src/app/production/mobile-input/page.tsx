@@ -762,7 +762,7 @@ function MobileInputContent() {
                         }}>
                         <StopOutlined style={{ fontSize: 22, color: currentState.isStopped ? "#ff4d4f" : "#bbb" }} />
                         <div style={{ fontSize: 14, fontWeight: 600, color: currentState.isStopped ? "#ff4d4f" : "#888" }}>
-                            {currentState.isStopped ? "MAY DUNG" : "Dang chay"}
+                            {currentState.isStopped ? "MÁY DỪNG" : "ĐANG CHẠY"}
                         </div>
                     </div>
                     <div
@@ -775,7 +775,7 @@ function MobileInputContent() {
                         }}>
                         <WarningOutlined style={{ fontSize: 22, color: currentState.isReset ? "#faad14" : "#bbb" }} />
                         <div style={{ fontSize: 14, fontWeight: 600, color: currentState.isReset ? "#d48806" : "#888" }}>
-                            {currentState.isReset ? "DA RESET" : "Binh thuong"}
+                            {currentState.isReset ? "ĐÃ RESET" : "Bình thường"}
                         </div>
                     </div>
                 </div>
@@ -810,7 +810,7 @@ function MobileInputContent() {
                 {/* NE */}
                 {(currentMachine.formulaType === 3 || currentMachine.formulaType === 4) && (
                     <div style={{ padding: "0 16px", marginBottom: 12 }}>
-                        <div style={styles.indexLabel}>Chi so NE:</div>
+                        <div style={styles.indexLabel}>Chi số NE:</div>
                         <InputNumber
                             value={currentState.inputNE}
                             onChange={val => updateCurrentState("inputNE", val ?? 30)}
@@ -843,7 +843,7 @@ function MobileInputContent() {
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                     <Button icon={<LeftOutlined />} disabled={currentIndex === 0}
                         onClick={() => goTo(currentIndex - 1)} style={{ ...styles.navBtn, flex: 1 }}>
-                        Truoc
+                        Trước
                     </Button>
                     <Button disabled={currentIndex >= machines.length - 1}
                         onClick={() => goTo(currentIndex + 1)} style={{ ...styles.navBtn, flex: 1 }}>
@@ -853,13 +853,13 @@ function MobileInputContent() {
                 <div style={{ display: "flex", gap: 8 }}>
                     <Button size="large" icon={<SaveOutlined />} onClick={() => handleSave(false)} loading={saving}
                         style={{ ...styles.saveBtn, flex: 1, background: "#fff", color: "#1677ff", border: "2px solid #1677ff" }}>
-                        Luu
+                        Lưu
                     </Button>
                     <Button type="primary" size="large" icon={<ThunderboltOutlined />}
                         onClick={() => handleSave(true)} loading={saving}
                         disabled={!currentState.isStopped && (currentState.endIndex === null || currentState.endIndex === undefined) && calculatedOutput === 0}
                         style={{ ...styles.saveBtn, flex: 2 }}>
-                        Luu & Tiep →
+                        Lưu & Tiếp →
                     </Button>
                 </div>
             </div>
