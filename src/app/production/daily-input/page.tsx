@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Input } from 'antd';
-import { SaveOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { SaveOutlined, ArrowRightOutlined, SwapOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
@@ -17,6 +17,8 @@ interface Machine {
     currentNE?: number;
     todayLog?: { id: number; finalOutput: number; startIndex?: number; endIndex?: number; inputNE?: number; note?: string };
 }
+
+interface Item { id: number; name: string; }
 
 interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
@@ -33,8 +35,15 @@ export default function DailyInputPage() {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [factories, setFactories] = useState<Factory[]>([]);
     const [processes, setProcesses] = useState<Process[]>([]);
+    const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+
+    // Đổi hàng giữa ca
+    const [isItemChangeVisible, setIsItemChangeVisible] = useState(false);
+    const [cutoverIndex, setCutoverIndex] = useState<number | null>(null);
+    const [newItemId, setNewItemId] = useState<number | null>(null);
+    const [itemChangeSaving, setItemChangeSaving] = useState(false);
 
     // Modal & Form
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -80,12 +89,86 @@ export default function DailyInputPage() {
 
     const fetchMetadata = async () => {
         try {
-            const [resFac, resPro] = await Promise.all([fetch('/api/factories'), fetch('/api/processes')]);
-            if (resFac.ok && resPro.ok) {
-                setFactories(await resFac.json());
-                setProcesses(await resPro.json());
-            }
+            const [resFac, resPro, resItems] = await Promise.all([
+                fetch('/api/factories'), fetch('/api/processes'), fetch('/api/items')
+            ]);
+            if (resFac.ok) setFactories(await resFac.json());
+            if (resPro.ok) setProcesses(await resPro.json());
+            if (resItems.ok) setItems(await resItems.json());
         } catch (e) { message.error("Lỗi tải danh mục"); }
+    };
+
+    const calcOutputHelper = (machine: Machine, start: number, end: number, ne: number, isReset: boolean): number => {
+        const delta = isReset ? end : end - start;
+        const type = machine.formulaType;
+        let result = 0;
+        if (type === 1) result = end;
+        else if (type === 2) result = delta;
+        else if (type === 3) {
+            const spindles = machine.spindleCount || 1;
+            const denom = ne * 1000 * 1.693;
+            if (denom !== 0) result = (delta * spindles) / denom;
+        } else if (type === 4) {
+            if (ne !== 0) result = delta / ne;
+        }
+        return Math.round(result);
+    };
+
+    const handleItemChangeSave = async () => {
+        if (!currentMachine || !currentMachine.currentItem) return;
+        if (!cutoverIndex) { message.error('Vui lòng nhập chỉ số chốt'); return; }
+        if (!newItemId) { message.error('Vui lòng chọn mặt hàng mới'); return; }
+
+        const startIdx = form.getFieldValue('startIndex') || 0;
+        const ne = form.getFieldValue('inputNE') || currentMachine.currentNE || 30;
+        const outputA = calcOutputHelper(currentMachine, startIdx, cutoverIndex, ne, false);
+
+        if (outputA < 0) {
+            message.error('Chỉ số chốt nhỏ hơn chỉ số bắt đầu. Vui lòng kiểm tra lại.');
+            return;
+        }
+
+        setItemChangeSaving(true);
+        try {
+            const dateStr = selectedDate.format('YYYY-MM-DD');
+
+            const resA = await fetch('/api/production/daily-input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recordDate: dateStr, shift: selectedShift,
+                    machineId: currentMachine.id,
+                    itemId: currentMachine.currentItem.id,
+                    startIndex: startIdx, endIndex: cutoverIndex,
+                    inputNE: ne, finalOutput: outputA,
+                    note: 'Đổi hàng giữa ca',
+                }),
+            });
+            if (!resA.ok) throw new Error('Lỗi lưu mặt hàng cũ');
+
+            const resB = await fetch('/api/production/daily-input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recordDate: dateStr, shift: selectedShift,
+                    machineId: currentMachine.id,
+                    itemId: newItemId,
+                    startIndex: cutoverIndex, endIndex: null,
+                    inputNE: ne, finalOutput: 0,
+                    note: 'Mặt hàng mới',
+                }),
+            });
+            if (!resB.ok) throw new Error('Lỗi lưu mặt hàng mới');
+
+            message.success('Đã lưu đổi hàng! Máy đang chạy mặt hàng mới.');
+            setIsItemChangeVisible(false);
+            setIsModalOpen(false);
+            fetchMachines();
+        } catch (e: any) {
+            message.error(e.message || 'Lỗi khi lưu đổi hàng');
+        } finally {
+            setItemChangeSaving(false);
+        }
     };
 
     // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER ---
@@ -123,6 +206,9 @@ export default function DailyInputPage() {
         }
         setCurrentMachine(machine);
         form.resetFields();
+        setIsItemChangeVisible(false);
+        setCutoverIndex(null);
+        setNewItemId(null);
 
         const initValues: any = {
             isReset: false,
@@ -388,7 +474,7 @@ export default function DailyInputPage() {
             {/* MODAL NHẬP LIỆU */}
             <Modal
                 open={isModalOpen}
-                onCancel={() => setIsModalOpen(false)}
+                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); }}
                 footer={null}
                 width={isMobile ? '96vw' : 500}
                 style={isMobile ? { top: 8 } : undefined}
@@ -468,6 +554,70 @@ export default function DailyInputPage() {
                             {calculatedOutput} <small style={{ fontSize: '45%', fontWeight: 'normal' }}>kg</small>
                         </div>
                     </div>
+
+                    {/* ĐỔI HÀNG GIỮA CA */}
+                    {!isItemChangeVisible ? (
+                        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                            <Button
+                                type="link" size="small" icon={<SwapOutlined />}
+                                onClick={() => { setIsItemChangeVisible(true); setCutoverIndex(null); setNewItemId(null); }}
+                                style={{ color: '#d46b08' }}
+                            >
+                                Đổi hàng giữa ca
+                            </Button>
+                        </div>
+                    ) : (
+                        <div style={{ background: '#fffbe6', border: '1px dashed #faad14', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                            <div style={{ color: '#d48806', fontSize: 12, marginBottom: 10 }}>
+                                ⚠️ Chỉ sử dụng khi máy đổi mặt hàng giữa ca
+                            </div>
+                            <div style={{ marginBottom: 10 }}>
+                                <span style={{ fontSize: 12, color: '#666' }}>Mặt hàng hiện tại: </span>
+                                <Tag color="blue">{currentMachine?.currentItem?.name}</Tag>
+                            </div>
+                            <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Chỉ số chốt (thời điểm đổi hàng):</div>
+                                <InputNumber
+                                    value={cutoverIndex}
+                                    onChange={val => setCutoverIndex(val)}
+                                    style={{ width: '100%' }}
+                                    controls={false}
+                                    placeholder="Nhập chỉ số..."
+                                />
+                            </div>
+                            <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Mặt hàng mới:</div>
+                                <Select
+                                    value={newItemId}
+                                    onChange={setNewItemId}
+                                    style={{ width: '100%' }}
+                                    options={items
+                                        .filter(i => i.id !== currentMachine?.currentItem?.id)
+                                        .map(i => ({ label: i.name, value: i.id }))}
+                                    placeholder="Chọn mặt hàng mới..."
+                                    showSearch
+                                    filterOption={(input, option) =>
+                                        (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                                    }
+                                />
+                            </div>
+                            <Row gutter={8}>
+                                <Col span={12}>
+                                    <Button block onClick={() => setIsItemChangeVisible(false)}>Hủy</Button>
+                                </Col>
+                                <Col span={12}>
+                                    <Button
+                                        block type="primary" danger
+                                        icon={<SwapOutlined />}
+                                        loading={itemChangeSaving}
+                                        onClick={handleItemChangeSave}
+                                    >
+                                        Lưu đổi hàng
+                                    </Button>
+                                </Col>
+                            </Row>
+                        </div>
+                    )}
 
                     {/* Nút hành động */}
                     <Row gutter={8}>

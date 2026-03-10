@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       recordDate: new Date(date),
       shift: parseInt(shift),
     },
+    orderBy: { id: "desc" },
     select: { id: true, endIndex: true, startIndex: true, finalOutput: true, note: true },
   });
 
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate Input
-    if (!machineId || !recordDate || !shift) {
+    if (!machineId || !recordDate || !shift || !itemId) {
       return NextResponse.json(
         { error: "Thiếu thông tin bắt buộc" },
         { status: 400 },
@@ -108,12 +109,13 @@ export async function POST(request: Request) {
     // Xử lý Date: Giữ nguyên ngày YYYY-MM-DD từ client gửi lên để tránh lệch múi giờ
     const dateObj = new Date(recordDate);
 
-    // Tìm xem đã có chưa (Update hay Create)
+    // Tìm xem đã có chưa (Update hay Create) - tìm theo cả itemId để hỗ trợ đổi hàng giữa ca
     const existingLog = await prisma.productionLog.findFirst({
       where: {
         machineId,
         recordDate: dateObj,
         shift,
+        itemId,
       },
     });
 
@@ -142,13 +144,14 @@ export async function POST(request: Request) {
       });
     }
 
-    // Update NE cho máy để lần sau tự điền
-    if (inputNE) {
-      await prisma.machine.update({
-        where: { id: machineId },
-        data: { currentNE: parseFloat(inputNE) },
-      });
-    }
+    // Update mặt hàng & NE cho máy để lần sau tự điền
+    await prisma.machine.update({
+      where: { id: machineId },
+      data: {
+        currentItemId: itemId,
+        ...(inputNE ? { currentNE: parseFloat(inputNE) } : {}),
+      },
+    });
 
     return NextResponse.json(savedLog);
   } catch (error) {

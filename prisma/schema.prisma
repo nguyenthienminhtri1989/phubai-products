@@ -158,8 +158,9 @@ model ProductionLog {
   @@index([machineId, shift])
   @@index([itemId])
 
-  // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca chỉ có 1 bản ghi
-  @@unique([machineId, recordDate, shift])
+  // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca + 1 Mặt hàng chỉ có 1 bản ghi
+  // (Cho phép nhiều mặt hàng trong cùng 1 ca khi đổi hàng giữa ca)
+  @@unique([machineId, recordDate, shift, itemId])
   @@map("production_logs")
 }
 

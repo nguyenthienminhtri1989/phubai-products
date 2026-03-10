@@ -25,6 +25,7 @@ export async function GET(request: Request) {
             recordDate: targetDate,
             shift: parseInt(shift),
           },
+          orderBy: { id: "desc" },
           take: 1,
         },
       },

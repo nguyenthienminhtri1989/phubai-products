@@ -3,13 +3,13 @@
 import React, { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import {
     Button, InputNumber, message, Tag, Spin, Result, Space,
-    Typography, Modal, Progress
+    Typography, Modal, Progress, Select
 } from "antd";
 import {
     SaveOutlined, ArrowRightOutlined,
     CheckCircleOutlined, WarningOutlined, StopOutlined,
     LeftOutlined, RightOutlined,
-    ThunderboltOutlined, ScanOutlined
+    ThunderboltOutlined, ScanOutlined, SwapOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useSession } from "next-auth/react";
@@ -27,6 +27,8 @@ interface Machine {
     currentNE?: number;
     isActive?: boolean;
 }
+
+interface Item { id: number; name: string; }
 
 interface Process { id: number; name: string; factoryId: number; }
 
@@ -99,6 +101,13 @@ function MobileInputContent() {
     const endIndexRef = useRef<any>(null);
     const machineBarRef = useRef<HTMLDivElement>(null);
 
+    // Đổi hàng giữa ca
+    const [items, setItems] = useState<Item[]>([]);
+    const [itemChangeModalVisible, setItemChangeModalVisible] = useState(false);
+    const [itemChangeCutover, setItemChangeCutover] = useState<number | null>(null);
+    const [itemChangeNewId, setItemChangeNewId] = useState<number | null>(null);
+    const [itemChangeSaving, setItemChangeSaving] = useState(false);
+
     // ============================
     // FETCH DATA
     // ============================
@@ -109,7 +118,8 @@ function MobileInputContent() {
 
         const fetchInit = async () => {
             try {
-                const pRes = await fetch("/api/processes");
+                const [pRes, iRes] = await Promise.all([fetch("/api/processes"), fetch("/api/items")]);
+                if (iRes.ok) setItems(await iRes.json());
                 if (pRes.ok) {
                     const allProc = await pRes.json();
                     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
@@ -351,6 +361,91 @@ function MobileInputContent() {
         }
     };
 
+    // ============================
+    // ĐỔI HÀNG GIỮA CA
+    // ============================
+
+    const handleMobileItemChange = async () => {
+        if (!currentMachine || !currentState) return;
+        if (!itemChangeCutover) { message.error("Vui lòng nhập chỉ số chốt"); return; }
+        if (!itemChangeNewId) { message.error("Vui lòng chọn mặt hàng mới"); return; }
+        if (!currentMachine.currentItem) { message.error("Máy chưa gán mặt hàng"); return; }
+
+        const startIdx = currentState.startIndex || 0;
+        const ne = currentState.inputNE || 30;
+        const delta = itemChangeCutover - startIdx;
+        const type = currentMachine.formulaType;
+        let outputA = 0;
+        if (type === 1) outputA = itemChangeCutover;
+        else if (type === 2) outputA = delta;
+        else if (type === 3) {
+            const spindles = currentMachine.spindleCount || 1;
+            const denom = ne * 1000 * 1.693;
+            if (denom !== 0) outputA = (delta * spindles) / denom;
+        } else if (type === 4) {
+            if (ne !== 0) outputA = delta / ne;
+        }
+        outputA = parseFloat(outputA.toFixed(2));
+
+        if (outputA < 0) { message.error("Chỉ số chốt nhỏ hơn chỉ số bắt đầu. Vui lòng kiểm tra lại."); return; }
+
+        setItemChangeSaving(true);
+        try {
+            const dateStr = autoDate.format("YYYY-MM-DD");
+
+            const resA = await fetch("/api/production/daily-input", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    recordDate: dateStr, shift: autoShift,
+                    machineId: currentMachine.id,
+                    itemId: currentMachine.currentItem.id,
+                    startIndex: startIdx, endIndex: itemChangeCutover,
+                    inputNE: ne, finalOutput: outputA,
+                    note: "Doi hang giua ca",
+                }),
+            });
+            if (!resA.ok) throw new Error("Loi luu mat hang cu");
+
+            const resB = await fetch("/api/production/daily-input", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    recordDate: dateStr, shift: autoShift,
+                    machineId: currentMachine.id,
+                    itemId: itemChangeNewId,
+                    startIndex: itemChangeCutover, endIndex: null,
+                    inputNE: ne, finalOutput: 0,
+                    note: "Mat hang moi",
+                }),
+            });
+            if (!resB.ok) throw new Error("Loi luu mat hang moi");
+
+            const newItem = items.find(i => i.id === itemChangeNewId);
+            setMachines(prev => prev.map(m => m.id === currentMachine.id
+                ? { ...m, currentItem: newItem ? { id: newItem.id, name: newItem.name } : m.currentItem }
+                : m
+            ));
+            setInputStates(prev => ({
+                ...prev,
+                [currentMachine.id]: {
+                    ...prev[currentMachine.id],
+                    startIndex: itemChangeCutover,
+                    endIndex: null,
+                    saved: true,
+                    output: outputA,
+                },
+            }));
+
+            message.success("Da doi hang thanh cong!");
+            setItemChangeModalVisible(false);
+        } catch (e: any) {
+            message.error(e.message || "Loi khi doi hang");
+        } finally {
+            setItemChangeSaving(false);
+        }
+    };
+
     // Quet QR giua chung
     const handleScanQR = () => {
         // Mo camera quet QR (dung HTML5 input capture)
@@ -557,6 +652,15 @@ function MobileInputContent() {
                     {currentMachine.spindleCount && <Tag style={{ fontSize: 12 }}>{currentMachine.spindleCount} coc</Tag>}
                     {currentState.saved && <Tag color="green" style={{ fontSize: 12 }}>Da nhap</Tag>}
                 </div>
+                {currentMachine.currentItem && (
+                    <Button
+                        type="link" size="small" icon={<SwapOutlined />}
+                        onClick={() => { setItemChangeModalVisible(true); setItemChangeCutover(null); setItemChangeNewId(null); }}
+                        style={{ marginTop: 4, color: "#d46b08", fontSize: 12 }}
+                    >
+                        Đổi hàng giữa ca
+                    </Button>
+                )}
             </div>
 
             {/* FORM */}
@@ -673,6 +777,57 @@ function MobileInputContent() {
                     </Button>
                 </div>
             </div>
+
+            {/* MODAL ĐỔI HÀNG GIỮA CA */}
+            <Modal
+                open={itemChangeModalVisible}
+                onCancel={() => setItemChangeModalVisible(false)}
+                footer={null}
+                title={<span><SwapOutlined /> Đổi mặt hàng giữa ca</span>}
+                centered
+            >
+                <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: 8, padding: "8px 12px", marginBottom: 16, color: "#d48806", fontSize: 13 }}>
+                    ⚠️ Chỉ sử dụng khi máy đổi mặt hàng giữa ca
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, color: "#666", marginBottom: 4 }}>Đang chạy:</div>
+                    <Tag color="blue" style={{ fontSize: 14 }}>{currentMachine.currentItem?.name}</Tag>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Chỉ số chốt (thời điểm đổi hàng):</div>
+                    <InputNumber
+                        value={itemChangeCutover}
+                        onChange={val => setItemChangeCutover(val)}
+                        style={{ width: "100%", height: 56, fontSize: 22 }}
+                        controls={false} inputMode="decimal" placeholder="Nhập chỉ số..."
+                    />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Mặt hàng mới:</div>
+                    <Select
+                        value={itemChangeNewId}
+                        onChange={setItemChangeNewId}
+                        style={{ width: "100%" }}
+                        options={items
+                            .filter(i => i.id !== currentMachine.currentItem?.id)
+                            .map(i => ({ label: i.name, value: i.id }))}
+                        placeholder="Chọn mặt hàng..."
+                        showSearch
+                        filterOption={(input, option) =>
+                            (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                        }
+                    />
+                </div>
+                <Button
+                    type="primary" danger size="large" block
+                    loading={itemChangeSaving}
+                    icon={<SwapOutlined />}
+                    onClick={handleMobileItemChange}
+                    style={{ height: 56, fontSize: 17, fontWeight: 700 }}
+                >
+                    Lưu đổi hàng
+                </Button>
+            </Modal>
         </div>
     );
 }

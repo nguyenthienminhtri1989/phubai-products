@@ -135,7 +135,7 @@ function LineDiagramSVG({ line }: { line: ProductionLine }) {
         return { columns, nodePositions, svgWidth, svgHeight, colWidth, nodeHeight, paddingX, paddingY, headerHeight };
     }, [line]);
 
-    if (!diagramData) return <Empty description="Khong co du lieu lien ket" />;
+    if (!diagramData) return <Empty description="Không có dữ liệu liên kết" />;
 
     const { columns, nodePositions, svgWidth, svgHeight, colWidth, nodeHeight, paddingX, paddingY, headerHeight } = diagramData;
 
@@ -257,23 +257,23 @@ export default function LineDiagramPage() {
 
     return (
         <div style={{ padding: 20 }}>
-            <Title level={3}><NodeIndexOutlined /> So do Line San xuat</Title>
+            <Title level={3}><NodeIndexOutlined /> Sơ đồ Line Sản xuất</Title>
 
             {/* BO LOC */}
             <Card size="small" style={{ marginBottom: 16 }}>
                 <Row gutter={16} align="middle">
                     <Col span={6}>
-                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nha may:</div>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Nhà máy:</div>
                         <Select
                             style={{ width: "100%" }}
-                            placeholder="Chon nha may"
+                            placeholder="Chọn nhà máy"
                             options={factories.map(f => ({ label: f.name, value: f.id }))}
                             onChange={val => { setSelectedFactoryId(val); setSelectedLineId(null); setLines([]); }}
                             value={selectedFactoryId}
                         />
                     </Col>
                     <Col span={6}>
-                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngay (xem lich su):</div>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày (xem lịch sử):</div>
                         <DatePicker
                             value={selectedDate}
                             onChange={val => val && setSelectedDate(val)}
@@ -282,12 +282,12 @@ export default function LineDiagramPage() {
                         />
                     </Col>
                     <Col span={8}>
-                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Chon Line:</div>
+                        <div style={{ fontWeight: 500, marginBottom: 4 }}>Chọn Line:</div>
                         <Select
                             style={{ width: "100%" }}
-                            placeholder={lines.length === 0 ? "Chua co line nao" : "Chon line de xem so do"}
+                            placeholder={lines.length === 0 ? "Chưa có Line nào" : "Chọn Line để xem sơ đồ"}
                             options={lines.map(l => ({
-                                label: `${l.name} (${l.item.name})${!l.endDate ? " - Dang hieu luc" : ""}`,
+                                label: `${l.name} (${l.item.name})${!l.endDate ? " - Đang hiệu lực" : ""}`,
                                 value: l.id,
                             }))}
                             onChange={setSelectedLineId}
@@ -297,7 +297,7 @@ export default function LineDiagramPage() {
                     </Col>
                     <Col span={4} style={{ textAlign: "right", paddingTop: 22 }}>
                         <Button icon={<ReloadOutlined />} onClick={fetchLines} loading={loading}>
-                            Tai lai
+                            Tải lại
                         </Button>
                     </Col>
                 </Row>
@@ -308,35 +308,35 @@ export default function LineDiagramPage() {
                 <Card size="small" style={{ marginBottom: 16 }}>
                     <Row gutter={16}>
                         <Col span={6}>
-                            <Text type="secondary">Mat hang:</Text>
+                            <Text type="secondary">Mặt hàng:</Text>
                             <div><Tag color="blue" style={{ fontSize: 14 }}>{currentLine.item.name}</Tag></div>
                         </Col>
                         <Col span={4}>
-                            <Text type="secondary">Loai tuyen:</Text>
+                            <Text type="secondary">Loại tuyến:</Text>
                             <div>
                                 <Tag color={currentLine.routeType === 2 ? "orange" : "green"}>
-                                    {currentLine.routeType === 2 ? "Co chai ky" : "Khong chai ky"}
+                                    {currentLine.routeType === 2 ? "Có Chải Kỹ" : "Không Chải Kỹ"}
                                 </Tag>
                             </div>
                         </Col>
                         <Col span={4}>
-                            <Text type="secondary">Bat dau:</Text>
+                            <Text type="secondary">Bắt đầu:</Text>
                             <div><b>{dayjs(currentLine.startDate).format("DD/MM/YYYY")}</b></div>
                         </Col>
                         <Col span={4}>
-                            <Text type="secondary">Ket thuc:</Text>
+                            <Text type="secondary">Kết thúc:</Text>
                             <div>
                                 {currentLine.endDate
                                     ? dayjs(currentLine.endDate).format("DD/MM/YYYY")
-                                    : <Tag color="green">Dang hieu luc</Tag>}
+                                    : <Tag color="green">Đang hiệu lực</Tag>}
                             </div>
                         </Col>
                         <Col span={3}>
-                            <Text type="secondary">So lien ket:</Text>
+                            <Text type="secondary">Số liên kết:</Text>
                             <div><b>{currentLine.links.length}</b></div>
                         </Col>
                         <Col span={3}>
-                            <Text type="secondary">Nguoi tao:</Text>
+                            <Text type="secondary">Người tạo:</Text>
                             <div>{currentLine.createdBy?.fullName || "---"}</div>
                         </Col>
                     </Row>
@@ -348,16 +348,16 @@ export default function LineDiagramPage() {
                 title={
                     currentLine
                         ? <span><ApartmentOutlined /> {currentLine.name}</span>
-                        : <span><ApartmentOutlined /> So do duong di san pham</span>
+                        : <span><ApartmentOutlined /> Sơ đồ đường đi sản phẩm</span>
                 }
                 style={{ minHeight: 300 }}
             >
                 {loading ? (
-                    <div style={{ textAlign: "center", padding: 60 }}><Spin size="large" tip="Dang tai so do..." /></div>
+                    <div style={{ textAlign: "center", padding: 60 }}><Spin size="large" tip="Đang tải sơ đồ..." /></div>
                 ) : !selectedFactoryId ? (
-                    <Empty description="Vui long chon Nha may de xem so do" />
+                    <Empty description="Vui lòng chọn Nhà máy để xem sơ đồ" />
                 ) : !currentLine ? (
-                    <Empty description="Chua co Line san xuat nao trong thoi diem nay. Hay tao moi tai trang Thiet lap Line." />
+                    <Empty description="Chưa có Line sản xuất nào tại thời điểm này. Hãy  tạo mới tại trang thiết lập Line." />
                 ) : (
                     <LineDiagramSVG line={currentLine} />
                 )}

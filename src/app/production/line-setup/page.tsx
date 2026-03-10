@@ -119,7 +119,7 @@ export default function LineSetupPage() {
                 if (pRes.ok) setProcesses(await pRes.json());
                 if (iRes.ok) setItems(await iRes.json());
                 if (mRes.ok) setAllMachines(await mRes.json());
-            } catch (e) { message.error("Loi tai danh muc"); }
+            } catch (e) { message.error("Lỗi tải danh mục"); }
         };
         fetchData();
     }, []);
@@ -161,7 +161,7 @@ export default function LineSetupPage() {
     const groupedSuggested = useMemo(() => {
         const groups: Record<string, Machine[]> = {};
         suggestedMachines.forEach(m => {
-            const pName = m.process?.name || "Khac";
+            const pName = m.process?.name || "Khác";
             if (!groups[pName]) groups[pName] = [];
             groups[pName].push(m);
         });
@@ -184,7 +184,7 @@ export default function LineSetupPage() {
     const machinesGroupedByProcess = useMemo(() => {
         const groups: Record<string, Machine[]> = {};
         machinesInFactory.forEach(m => {
-            const pName = m.process?.name || "Khac";
+            const pName = m.process?.name || "Khác";
             if (!groups[pName]) groups[pName] = [];
             groups[pName].push(m);
         });
@@ -196,7 +196,7 @@ export default function LineSetupPage() {
     // Them nhieu lien ket cung luc
     const handleAddLinks = () => {
         if (!selectedSource || selectedTargets.length === 0) {
-            message.warning("Vui long chon may va tick chon may lien ket");
+            message.warning("Vui lòng chọn máy và tick chọn máy liên kết");
             return;
         }
 
@@ -231,12 +231,12 @@ export default function LineSetupPage() {
         });
 
         if (newLinks.length === 0) {
-            message.info("Tat ca lien ket da ton tai");
+            message.info("Tất cả liên kết đã tồn tại");
             return;
         }
 
         setLinks(prev => [...prev, ...newLinks].sort((a, b) => a.stepOrder - b.stepOrder));
-        message.success(`Da them ${newLinks.length} lien ket`);
+        message.success(`Đã thêm ${newLinks.length} liên kết`);
         setSelectedTargets([]);
     };
 
@@ -246,9 +246,9 @@ export default function LineSetupPage() {
 
     const handleClearAllLinks = () => {
         Modal.confirm({
-            title: "Xoa tat ca lien ket?",
-            content: "Ban co chac muon xoa het cac lien ket da thiet lap?",
-            okText: "Xoa het", cancelText: "Huy", okButtonProps: { danger: true },
+            title: "Xóa tất cả liên kết?",
+            content: "Bạn có chắc muốn xóa hết các liên kết đã thiết lập?",
+            okText: "Xóa hết", cancelText: "Hủy", okButtonProps: { danger: true },
             onOk: () => setLinks([]),
         });
     };
@@ -290,8 +290,8 @@ export default function LineSetupPage() {
                 method: "PUT", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ endDate: dayjs().format("YYYY-MM-DD") }),
             });
-            if (!res.ok) throw new Error("Loi dong line");
-            message.success("Da dong line"); fetchExistingLines();
+            if (!res.ok) throw new Error("Lỗi đóng line");
+            message.success("Đã đóng line"); fetchExistingLines();
         } catch (e: any) { message.error(e.message); }
     };
 
@@ -300,23 +300,23 @@ export default function LineSetupPage() {
         try {
             const res = await fetch(`/api/production/lines/${lineId}`, { method: "DELETE" });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
-            message.success("Da xoa line"); fetchExistingLines();
+            message.success("Đã xóa line"); fetchExistingLines();
         } catch (e: any) { message.error(e.message); }
     };
 
     // Luu
     const handleSave = async () => {
         if (!lineName || links.length === 0) {
-            message.error("Dien ten line va them it nhat 1 lien ket"); return;
+            message.error("Điền t ên Line và thêm ít nhất 1 liên kết"); return;
         }
         const isEditing = !!editingLineId;
 
         Modal.confirm({
-            title: isEditing ? "Xac nhan cap nhat Line" : "Xac nhan tao Line",
+            title: isEditing ? "Xác nhận cập nhật Line" : "Xác nhận tạo Line",
             content: isEditing
-                ? `Cap nhat "${lineName}" voi ${links.length} lien ket?`
-                : `Tao "${lineName}" tu ${startDate.format("DD/MM/YYYY")}? Line cu cung mat hang se tu dong dong.`,
-            okText: isEditing ? "Cap nhat" : "Tao moi", cancelText: "Huy",
+                ? `Cập nhật "${lineName}" với ${links.length} liên kết?`
+                : `Tạo "${lineName}" từ ${startDate.format("DD/MM/YYYY")}? Line cũ cùng mặt hàng sẽ tự động đóng.`,
+            okText: isEditing ? "Cập nhật" : "Tạo mới", cancelText: "Hủy",
             onOk: async () => {
                 setSaving(true);
                 try {
@@ -339,7 +339,7 @@ export default function LineSetupPage() {
                         });
                     }
                     if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
-                    message.success(isEditing ? "Da cap nhat!" : "Da tao Line moi!");
+                    message.success(isEditing ? "Đã cập nhật!" : "Đã tạo Line mới!");
                     resetForm(); fetchExistingLines(); setActiveTab("list");
                 } catch (e: any) { message.error(e.message); }
                 finally { setSaving(false); }
@@ -363,38 +363,38 @@ export default function LineSetupPage() {
 
     const lineColumns = [
         {
-            title: "Ten Line", dataIndex: "name",
+            title: "Tên Line", dataIndex: "name",
             render: (t: string, r: ProductionLine) => (
                 <div><b>{t}</b><div style={{ fontSize: 11, color: "#888" }}>{r.factory.name}</div></div>
             ),
         },
-        { title: "Mat hang", key: "item", render: (_: any, r: ProductionLine) => <Tag color="blue">{r.item.name}</Tag> },
+        { title: "Mặt hàng", key: "item", render: (_: any, r: ProductionLine) => <Tag color="blue">{r.item.name}</Tag> },
         {
-            title: "Loai", key: "routeType", width: 120,
+            title: "Loại", key: "routeType", width: 120,
             render: (_: any, r: ProductionLine) => (
                 <Tag color={r.routeType === 2 ? "orange" : "green"}>
-                    {r.routeType === 2 ? "Co chai ky" : "Khong chai ky"}
+                    {r.routeType === 2 ? "Có chải kỹ" : "Không chải kỹ"}
                 </Tag>
             ),
         },
-        { title: "Bat dau", key: "start", width: 110, render: (_: any, r: ProductionLine) => dayjs(r.startDate).format("DD/MM/YYYY") },
+        { title: "Bắt đầu", key: "start", width: 110, render: (_: any, r: ProductionLine) => dayjs(r.startDate).format("DD/MM/YYYY") },
         {
-            title: "Trang thai", key: "status", width: 120,
+            title: "Trạng thái", key: "status", width: 120,
             render: (_: any, r: ProductionLine) =>
-                r.endDate ? <Tag>Dong ({dayjs(r.endDate).format("DD/MM")})</Tag> : <Tag color="green">Hieu luc</Tag>,
+                r.endDate ? <Tag>Dong ({dayjs(r.endDate).format("DD/MM")})</Tag> : <Tag color="green">Hiệu lực</Tag>,
         },
-        { title: "Lien ket", key: "cnt", width: 70, align: "center" as const, render: (_: any, r: ProductionLine) => <b>{r.links.length}</b> },
+        { title: "Liên kết", key: "cnt", width: 70, align: "center" as const, render: (_: any, r: ProductionLine) => <b>{r.links.length}</b> },
         {
-            title: "Thao tac", key: "actions", width: 200,
+            title: "Thao tác", key: "actions", width: 200,
             render: (_: any, r: ProductionLine) => (
                 <Space size={4}>
-                    <Button size="small" icon={<EditOutlined />} onClick={() => handleEditLine(r)}>Sua</Button>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => handleEditLine(r)}>Sửa</Button>
                     {!r.endDate && (
-                        <Popconfirm title="Dong line nay?" onConfirm={() => handleCloseLine(r.id)} okText="Dong" cancelText="Huy">
-                            <Button size="small" icon={<StopOutlined />} danger>Dong</Button>
+                        <Popconfirm title="Đóng line này?" onConfirm={() => handleCloseLine(r.id)} okText="Đóng" cancelText="Hủy">
+                            <Button size="small" icon={<StopOutlined />} danger>Đóng</Button>
                         </Popconfirm>
                     )}
-                    <Popconfirm title="Xoa vinh vien?" onConfirm={() => handleDeleteLine(r.id)} okText="Xoa" cancelText="Huy">
+                    <Popconfirm title="Xóa vĩnh viễn?" onConfirm={() => handleDeleteLine(r.id)} okText="Xóa" cancelText="Hủy">
                         <Button size="small" icon={<DeleteOutlined />} danger />
                     </Popconfirm>
                 </Space>
@@ -415,18 +415,18 @@ export default function LineSetupPage() {
 
     return (
         <div style={{ padding: 20 }}>
-            <Title level={3}><ApartmentOutlined /> Thiet lap Line San xuat</Title>
+            <Title level={3}><ApartmentOutlined /> Thiết lập Line sản xuất</Title>
 
             <Tabs activeKey={activeTab}
                 onChange={key => { setActiveTab(key); if (key === "list") resetForm(); }}
                 items={[
                     {
                         key: "list",
-                        label: <span><UnorderedListOutlined /> Danh sach Line</span>,
+                        label: <span><UnorderedListOutlined /> Danh sách Line</span>,
                         children: (
                             <Card size="small" extra={
                                 <Button type="primary" icon={<PlusOutlined />} onClick={() => { resetForm(); setActiveTab("form"); }}>
-                                    Tao Line moi
+                                    Tạo Line mới
                                 </Button>
                             }>
                                 <Table rowKey="id" columns={lineColumns} dataSource={existingLines}
@@ -436,40 +436,40 @@ export default function LineSetupPage() {
                     },
                     {
                         key: "form",
-                        label: <span><EditOutlined /> {editingLineId ? `Sua Line #${editingLineId}` : "Tao Line moi"}</span>,
+                        label: <span><EditOutlined /> {editingLineId ? `Sửa Line #${editingLineId}` : "Tạo Line mới"}</span>,
                         children: (
                             <>
                                 {/* THONG TIN CO BAN */}
-                                <Card title="Thong tin co ban" size="small" style={{ marginBottom: 16 }}>
+                                <Card title="Thông tin cơ bản" size="small" style={{ marginBottom: 16 }}>
                                     <Row gutter={16}>
                                         <Col span={6}>
                                             <div style={{ fontWeight: 500, marginBottom: 4 }}>Nha may:</div>
-                                            <Select style={{ width: "100%" }} placeholder="Chon nha may"
+                                            <Select style={{ width: "100%" }} placeholder="Chọn nhà máy"
                                                 options={factories.map(f => ({ label: f.name, value: f.id }))}
                                                 onChange={val => { setSelectedFactoryId(val); setSelectedItemId(null); setLinks([]); }}
                                                 value={selectedFactoryId} disabled={!!editingLineId} />
                                         </Col>
                                         <Col span={6}>
-                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Mat hang:</div>
-                                            <Select style={{ width: "100%" }} placeholder="Chon mat hang" showSearch optionFilterProp="label"
+                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Mặt hàng:</div>
+                                            <Select style={{ width: "100%" }} placeholder="Chọn mặt hàng" showSearch optionFilterProp="label"
                                                 options={items.map(i => ({ label: `${i.name}${i.ne ? ` (NE ${i.ne})` : ""}`, value: i.id }))}
                                                 onChange={val => { setSelectedItemId(val); setLinks([]); }}
                                                 value={selectedItemId} disabled={!selectedFactoryId || !!editingLineId} />
                                         </Col>
                                         <Col span={4}>
-                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Loai tuyen:</div>
+                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Loại tuyến:</div>
                                             <Radio.Group value={routeType} onChange={e => setRouteType(e.target.value)}>
-                                                <Radio value={1}>Khong chai ky</Radio>
-                                                <Radio value={2}>Co chai ky</Radio>
+                                                <Radio value={1}>Không chải kỹ</Radio>
+                                                <Radio value={2}>Chải kỹ</Radio>
                                             </Radio.Group>
                                         </Col>
                                         <Col span={4}>
-                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngay bat dau:</div>
+                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Ngày bắt đầu:</div>
                                             <DatePicker value={startDate} onChange={val => val && setStartDate(val)}
                                                 format="DD/MM/YYYY" style={{ width: "100%" }} disabled={!!editingLineId} />
                                         </Col>
                                         <Col span={4}>
-                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Ten line:</div>
+                                            <div style={{ fontWeight: 500, marginBottom: 4 }}>Tên line:</div>
                                             <Input value={lineName} onChange={e => setLineName(e.target.value)} />
                                         </Col>
                                     </Row>
@@ -477,7 +477,7 @@ export default function LineSetupPage() {
 
                                 {/* GOI Y */}
                                 {suggestedMachines.length > 0 && (
-                                    <Card title={<span><BulbOutlined style={{ color: "#faad14" }} /> May goi y (cung mat hang)</span>}
+                                    <Card title={<span><BulbOutlined style={{ color: "#faad14" }} /> Máy gợi ý (cùng mặt hàng)</span>}
                                         size="small" style={{ marginBottom: 16, background: "#fffbe6", border: "1px solid #ffe58f" }}>
                                         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                                             {groupedSuggested.map(([processName, machines]) => (
@@ -498,19 +498,19 @@ export default function LineSetupPage() {
 
                                 {/* THEM LIEN KET NHANH */}
                                 <Card
-                                    title="Them lien ket nhanh"
+                                    title="Thêm liên kết nhanh"
                                     size="small"
                                     style={{ marginBottom: 16, border: "1px solid #91caff" }}
                                     extra={
                                         <Radio.Group value={linkMode} onChange={e => { setLinkMode(e.target.value); setSelectedSource(null); setSelectedTargets([]); }}
                                             size="small" optionType="button" buttonStyle="solid">
-                                            <Radio.Button value="one-to-many">1 Nguon → Nhieu Dich</Radio.Button>
-                                            <Radio.Button value="many-to-one">Nhieu Nguon → 1 Dich</Radio.Button>
+                                            <Radio.Button value="one-to-many">1 Nguồn → Nhiều đích</Radio.Button>
+                                            <Radio.Button value="many-to-one">Nhiều Nguồn → 1 Đích</Radio.Button>
                                         </Radio.Group>
                                     }
                                 >
                                     <Row gutter={16}>
-                                        {/* Cot trai: Chon may chinh */}
+                                        {/* Cot trai: Chọn máy nguồn */}
                                         <Col span={8}>
                                             <div style={{
                                                 background: linkMode === "one-to-many" ? "#e6f7ff" : "#f6ffed",
@@ -518,12 +518,12 @@ export default function LineSetupPage() {
                                             }}>
                                                 <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
                                                     {linkMode === "one-to-many"
-                                                        ? "① Chon 1 MAY NGUON (cap hang):"
-                                                        : "① Chon 1 MAY DICH (nhan hang):"}
+                                                        ? "① Chọn 1 Máy Nguồn (cung cấp hàng):"
+                                                        : "① Chọn 1 Máy Dích (nhận hàng):"}
                                                 </div>
                                                 <Select
                                                     style={{ width: "100%" }}
-                                                    placeholder={linkMode === "one-to-many" ? "Chon may nguon..." : "Chon may dich..."}
+                                                    placeholder={linkMode === "one-to-many" ? "Chọn máy nguồn..." : "Chọn máy đích..."}
                                                     showSearch optionFilterProp="label" size="large"
                                                     value={selectedSource}
                                                     onChange={val => { setSelectedSource(val); setSelectedTargets([]); }}
@@ -574,16 +574,16 @@ export default function LineSetupPage() {
                                                 <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13, display: "flex", justifyContent: "space-between" }}>
                                                     <span>
                                                         {linkMode === "one-to-many"
-                                                            ? "② Tick chon cac MAY DICH (nhan hang tu may tren):"
-                                                            : "② Tick chon cac MAY NGUON (cap hang cho may tren):"}
+                                                            ? "② Tick chọn các Máy Dích (nhận hàng từ máy trên):"
+                                                            : "② Tick chọn các Máy Nguồn (cung cấp hàng cho máy trên):"}
                                                     </span>
                                                     {selectedTargets.length > 0 && (
-                                                        <Tag color="blue">{selectedTargets.length} may da chon</Tag>
+                                                        <Tag color="blue">{selectedTargets.length} máy đã chọn</Tag>
                                                     )}
                                                 </div>
 
                                                 {!selectedSource ? (
-                                                    <Alert message="Chon may o ben trai truoc" type="info" showIcon />
+                                                    <Alert message="Chọn máy ở bên trái trước" type="info" showIcon />
                                                 ) : (
                                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                                                         {machinesGroupedByProcess.map(([pName, machines]) => {
@@ -637,11 +637,11 @@ export default function LineSetupPage() {
                                                     </div>
                                                 )}
 
-                                                {/* Nut them */}
+                                                {/* Nút thêm */}
                                                 {selectedSource && selectedTargets.length > 0 && (
                                                     <div style={{ marginTop: 12, textAlign: "right" }}>
                                                         <Button type="primary" icon={<PlusOutlined />} onClick={handleAddLinks}>
-                                                            Them {selectedTargets.length} lien ket
+                                                            Thêm {selectedTargets.length} liên kết
                                                         </Button>
                                                     </div>
                                                 )}
@@ -652,25 +652,25 @@ export default function LineSetupPage() {
 
                                 {/* DANH SACH LIEN KET DA THIET LAP */}
                                 <Card
-                                    title={`Lien ket da thiet lap (${links.length})`}
+                                    title={`Liên kết đã thiết lập (${links.length})`}
                                     size="small"
                                     extra={
                                         <Space>
                                             {links.length > 0 && (
                                                 <Button icon={<ClearOutlined />} danger size="small" onClick={handleClearAllLinks}>
-                                                    Xoa tat ca
+                                                    Xóa tất cả
                                                 </Button>
                                             )}
-                                            <Button onClick={() => { resetForm(); setActiveTab("list"); }}>Huy</Button>
+                                            <Button onClick={() => { resetForm(); setActiveTab("list"); }}>Hủy</Button>
                                             <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}
                                                 loading={saving} disabled={links.length === 0}>
-                                                {editingLineId ? "Cap nhat" : "Luu"} ({links.length} lien ket)
+                                                {editingLineId ? "Cập nhật" : "Lưu"} ({links.length} liên kết)
                                             </Button>
                                         </Space>
                                     }
                                 >
                                     {links.length === 0 ? (
-                                        <Alert message="Chua co lien ket nao. Dung bang o tren de them lien ket." type="info" showIcon />
+                                        <Alert message="Chưa có liên kết nào. Dùng bảng ở trên để thêm liên kết." type="info" showIcon />
                                     ) : (
                                         <div>
                                             {linksGroupedBySource.map(([key, groupLinks]) => (
