@@ -205,7 +205,7 @@ export default function Home() {
   const ModuleCard = ({ mod }: { mod: Module }) => (
     <Card
       hoverable
-      bordered={false}
+      variant="borderless"
       style={{
         borderRadius: 12,
         borderLeft: `4px solid ${mod.border}`,
@@ -337,7 +337,7 @@ export default function Home() {
         {/* Tổng máy */}
         <Col xs={12} sm={12} md={6}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.07)", height: "100%" }}
             styles={{ body: { padding: "18px 22px" } }}
           >
@@ -348,7 +348,7 @@ export default function Home() {
                 title={<Text type="secondary" style={{ fontSize: 13 }}>Tổng máy hoạt động</Text>}
                 value={machineCount ?? 0}
                 prefix={<RobotOutlined style={{ color: "#1677ff" }} />}
-                valueStyle={{ color: "#1677ff", fontWeight: 700, fontSize: 28 }}
+                styles={{ content: { color: "#1677ff", fontWeight: 700, fontSize: 28 } }}
               />
             )}
           </Card>
@@ -357,7 +357,7 @@ export default function Home() {
         {/* Ca hiện tại */}
         <Col xs={12} sm={12} md={6}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{ borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.07)", height: "100%" }}
             styles={{ body: { padding: "18px 22px" } }}
           >
@@ -365,7 +365,7 @@ export default function Home() {
               title={<Text type="secondary" style={{ fontSize: 13 }}>Ca đang chạy</Text>}
               value={`Ca ${shiftInfo.shift}`}
               prefix={<ClockCircleOutlined style={{ color: shiftInfo.color }} />}
-              valueStyle={{ color: shiftInfo.color, fontWeight: 700, fontSize: 28 }}
+              styles={{ content: { color: shiftInfo.color, fontWeight: 700, fontSize: 28 } }}
             />
           </Card>
         </Col>
@@ -373,7 +373,7 @@ export default function Home() {
         {/* Bảo trì quá hạn */}
         <Col xs={12} sm={12} md={6}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{
               borderRadius: 12,
               boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
@@ -395,10 +395,10 @@ export default function Home() {
                     ? <WarningOutlined style={{ color: "#ff4d4f" }} />
                     : <CheckCircleOutlined style={{ color: "#52c41a" }} />
                 }
-                valueStyle={{
+                styles={{ content: {
                   fontWeight: 700, fontSize: 28,
                   color: maintenanceCount && maintenanceCount > 0 ? "#ff4d4f" : "#52c41a",
-                }}
+                } }}
                 suffix={maintenanceCount && maintenanceCount > 0
                   ? <Text style={{ fontSize: 13, color: "#ff7875" }}>hạng mục</Text>
                   : undefined
@@ -411,7 +411,7 @@ export default function Home() {
         {/* Hệ thống */}
         <Col xs={12} sm={12} md={6}>
           <Card
-            bordered={false}
+            variant="borderless"
             style={{
               borderRadius: 12,
               boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
@@ -424,7 +424,7 @@ export default function Home() {
               title={<Text type="secondary" style={{ fontSize: 13 }}>Trạng thái hệ thống</Text>}
               value="Bình thường"
               prefix={<CheckCircleOutlined style={{ color: "#52c41a" }} />}
-              valueStyle={{ color: "#52c41a", fontWeight: 700, fontSize: 22 }}
+              styles={{ content: { color: "#52c41a", fontWeight: 700, fontSize: 22 } }}
             />
           </Card>
         </Col>

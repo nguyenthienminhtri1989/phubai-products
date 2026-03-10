@@ -231,13 +231,13 @@ export default function ProductionHistoryPage() {
             <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
                 {/* Thẻ Thống kê Tổng */}
                 <Col xs={24} md={8}>
-                    <Card bordered={false} style={{ height: '100%', background: 'linear-gradient(to right, #f6ffed, #ffffff)' }}>
+                    <Card variant="borderless" style={{ height: '100%', background: 'linear-gradient(to right, #f6ffed, #ffffff)' }}>
                         <Statistic
                             title="TỔNG SẢN LƯỢNG (Toàn bộ kết quả lọc)"
                             value={serverStats.totalOutput}
                             precision={2}
                             suffix="kg"
-                            valueStyle={{ color: '#389e0d', fontWeight: 'bold', fontSize: 28 }}
+                            styles={{ content: { color: '#389e0d', fontWeight: 'bold', fontSize: 28 } }}
                         />
                         <Divider style={{ margin: '12px 0' }} />
                         <Statistic title="Số dòng dữ liệu tìm thấy" value={pagination.total} />

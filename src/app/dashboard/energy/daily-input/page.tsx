@@ -236,7 +236,7 @@ export default function EnergyDailyInputPage() {
                         <DatePicker value={selectedDate} onChange={val => val && setSelectedDate(val)} format="DD/MM/YYYY" allowClear={false} style={{ width: '100%' }} />
                     </Col>
                     <Col span={8} style={{ textAlign: 'right' }}>
-                        <Statistic title="Tiến độ chốt sổ" value={meters.filter(m => m.todayRecord).length} suffix={`/ ${meters.length} đồng hồ`} valueStyle={{ fontSize: 20, color: '#1890ff' }} />
+                        <Statistic title="Tiến độ chốt sổ" value={meters.filter(m => m.todayRecord).length} suffix={`/ ${meters.length} đồng hồ`} styles={{ content: { fontSize: 20, color: '#1890ff' } }} />
                     </Col>
                 </Row>
             </Card>

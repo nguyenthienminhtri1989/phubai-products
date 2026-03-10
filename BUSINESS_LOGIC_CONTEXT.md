@@ -94,13 +94,58 @@ Thiết kế tối ưu cho tốc độ của công nhân nhà máy.
 - **Lưu & Tiếp tục (Save & Next):** Bấm 1 nút để lưu máy hiện tại và tự động chuyển form sang máy tiếp theo, không cần đóng/mở cửa sổ.
 - **Tính toán Real-time:** Nhập số xong tự động nảy ra con số Sản lượng (kg) để công nhân kiểm tra trước khi bấm Lưu.
 
-## 8. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
+## 8. MODULE 4: NHẬP LIỆU MOBILE & QR CODE
+
+Bộ tính năng tối ưu cho công nhân nhà máy sử dụng điện thoại tại xưởng.
+
+### 8.1. Trang nhập liệu Mobile (`/production/mobile-input`)
+
+- **File:** `src/app/production/mobile-input/page.tsx`, `src/app/production/mobile-input/layout.tsx`
+- **Giao diện:** Layout riêng, không có sidebar/header desktop, max-width 480px, tối ưu touch
+- **Hỗ trợ URL params:** `?machineId=X&processId=Y` (từ QR Code hoặc link)
+- **Chức năng:**
+  - Tự detect Ca/Ngày theo giờ hiện tại (cùng logic Smart Date)
+  - Chọn Công đoạn → hiển thị danh sách máy → nhập liệu từng máy
+  - Nút **Lưu & Tiếp** chuyển tự động sang máy kế tiếp
+  - Nút điều hướng Trước/Sau giữa các máy
+  - Hiển thị thanh tiến độ (số máy đã nhập / tổng máy)
+  - Hỗ trợ **Đổi mặt hàng giữa ca** (xem 8.3)
+
+### 8.2. Quét QR / In QR Code (`/machines/qr-machines`)
+
+- **File:** `src/app/machines/qr-machines/page.tsx`
+- **Mục đích:** Tạo và in QR Code dán trực tiếp lên máy
+- **Luồng:** In QR → Dán lên máy → Quét bằng điện thoại → Mở thẳng `/production/mobile-input?machineId=X`
+- **Tính năng:** Lọc theo nhà máy/công đoạn, chọn nhiều máy, in hàng loạt
+- **QR image:** Dùng `api.qrserver.com` (không cần cài package)
+- **Truy cập:** Admin và Manager
+
+### 8.3. Đổi mặt hàng giữa ca (Multi-item per shift)
+
+- **Migration:** `prisma/migrations/20260310000000_allow_multi_item_per_shift/`
+- **Thay đổi DB:** Unique constraint cũ `(machineId, recordDate, shift)` → mới `(machineId, recordDate, shift, itemId)`
+- **Ý nghĩa:** Một máy có thể ghi nhiều bản ghi trong cùng 1 ca nếu đổi mặt hàng
+- **UI:** Nút "Đổi mặt hàng giữa ca" (icon SwapOutlined) trong cả trang desktop (`/production/daily-input`) và trang mobile
+- **Cảnh báo:** Chỉ sử dụng khi máy thực sự đổi mặt hàng trong ca, không phải nhập bình thường
+- **Backend:** `src/app/api/production/daily-input/route.ts` — nhận thêm `itemId` trong payload
+
+### 8.4. Quick Input (Nhập nhanh 1 máy) (`/production/quick-input`)
+
+- **File:** `src/app/production/quick-input/page.tsx` *(trang cũ, vẫn còn hoạt động)*
+- **Mục đích:** Nhập nhanh cho 1 máy cụ thể (thường từ QR link cũ)
+- **Sidebar:** Ẩn sidebar khi ở trang `/production/mobile-input` (xem `AdminLayout.tsx` line 55)
+
+## 9. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
 
 1. **Tuyệt đối không phá vỡ chuỗi liên tục của Chỉ số.** Không được để khoảng trống dữ liệu.
 2. **Backend là nguồn chân lý (Source of Truth).** Mọi tính toán logic, tìm chỉ số phải nằm ở Backend. Frontend chỉ gửi yêu cầu và render.
 3. **Cấu hình động, không hard-code.** Công thức tính toán phụ thuộc vào `formulaType` của máy, không fix cứng logic cho từng tên máy.
 4. **Không tự suy diễn nghiệp vụ.** Mọi đề xuất thay đổi database/schema phải giải thích lý do và có migration an toàn.
+5. **Unique constraint production_logs:** Hiện tại là `(machineId, recordDate, shift, itemId)` — cho phép nhiều mặt hàng trong 1 ca.
 
 ---
 
 _Lưu ý cho AI: Khi nhận được file này, hãy đóng vai trò là Senior Backend/Software Architect, chỉ phát triển tính năng mới dựa trên nền tảng kiến trúc đã có, không thiết kế lại hệ thống._
+
+---
+_Cập nhật lần cuối: 2026-03-10 — Thêm Module 4: Nhập liệu Mobile, QR Code, Đổi mặt hàng giữa ca_

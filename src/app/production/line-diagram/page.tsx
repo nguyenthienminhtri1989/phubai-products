@@ -15,6 +15,8 @@ const { Title, Text } = Typography;
 
 interface Factory { id: number; name: string; }
 
+interface MachineOutput { machineId: number; totalOutput: number; }
+
 interface LineLink {
     id: number;
     fromMachineId: number;
@@ -77,7 +79,13 @@ function getColor(processName: string) {
 // ============================
 // COMPONENT VE SO DO SVG
 // ============================
-function LineDiagramSVG({ line }: { line: ProductionLine }) {
+function formatOutput(val: number | undefined): string {
+    if (val === undefined || val === 0) return "0 kg";
+    if (val >= 1000) return val.toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " kg";
+    return val.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) + " kg";
+}
+
+function LineDiagramSVG({ line, machineOutputs }: { line: ProductionLine; machineOutputs: Record<number, number> }) {
     const diagramData = useMemo(() => {
         if (!line.links || line.links.length === 0) return null;
 
@@ -109,9 +117,9 @@ function LineDiagramSVG({ line }: { line: ProductionLine }) {
             .sort((a, b) => a.order - b.order);
 
         // 3. Tinh kich thuoc
-        const colWidth = 150;
+        const colWidth = 160;
         const colGap = 100;
-        const nodeHeight = 36;
+        const nodeHeight = 54;
         const nodeGap = 10;
         const headerHeight = 40;
         const paddingX = 30;
@@ -167,14 +175,29 @@ function LineDiagramSVG({ line }: { line: ProductionLine }) {
                             {col.machines.map((m) => {
                                 const pos = nodePositions[m.id];
                                 if (!pos) return null;
+                                const output = machineOutputs[m.id];
+                                const hasOutput = output !== undefined && output > 0;
                                 return (
                                     <g key={m.id}>
                                         <rect x={pos.x} y={pos.y} width={colWidth} height={nodeHeight}
                                             rx={6} fill={color.bg} stroke={color.border} strokeWidth={1.5}
                                             style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))" }} />
-                                        <text x={pos.x + colWidth / 2} y={pos.y + nodeHeight / 2 + 4}
-                                            textAnchor="middle" fontSize={13} fontWeight="500" fill={color.text}>
+                                        {/* Ten may */}
+                                        <text x={pos.x + colWidth / 2} y={pos.y + 18}
+                                            textAnchor="middle" fontSize={13} fontWeight="600" fill={color.text}>
                                             {m.name}
+                                        </text>
+                                        {/* Duong ke ngang nho */}
+                                        <line
+                                            x1={pos.x + 12} y1={pos.y + 26}
+                                            x2={pos.x + colWidth - 12} y2={pos.y + 26}
+                                            stroke={color.border} strokeWidth={0.8} strokeOpacity={0.5}
+                                        />
+                                        {/* San luong tich luy */}
+                                        <text x={pos.x + colWidth / 2} y={pos.y + 43}
+                                            textAnchor="middle" fontSize={12} fontWeight={hasOutput ? "700" : "400"}
+                                            fill={hasOutput ? color.text : "#aaa"}>
+                                            {formatOutput(output)}
                                         </text>
                                     </g>
                                 );
@@ -221,6 +244,7 @@ export default function LineDiagramPage() {
     const [factories, setFactories] = useState<Factory[]>([]);
     const [lines, setLines] = useState<ProductionLine[]>([]);
     const [loading, setLoading] = useState(false);
+    const [machineOutputs, setMachineOutputs] = useState<Record<number, number>>({});
 
     // Filters
     const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
@@ -251,6 +275,19 @@ export default function LineDiagramPage() {
     };
 
     useEffect(() => { fetchLines(); }, [selectedFactoryId, selectedDate]);
+
+    // Fetch san luong tung may khi chon line
+    useEffect(() => {
+        if (!selectedLineId) { setMachineOutputs({}); return; }
+        fetch(`/api/production/lines/${selectedLineId}/output`)
+            .then(r => r.json())
+            .then((data: MachineOutput[]) => {
+                const map: Record<number, number> = {};
+                data.forEach(d => { map[d.machineId] = d.totalOutput; });
+                setMachineOutputs(map);
+            })
+            .catch(console.error);
+    }, [selectedLineId]);
 
     // Line dang chon
     const currentLine = lines.find(l => l.id === selectedLineId);
@@ -359,7 +396,7 @@ export default function LineDiagramPage() {
                 ) : !currentLine ? (
                     <Empty description="Chưa có Line sản xuất nào tại thời điểm này. Hãy  tạo mới tại trang thiết lập Line." />
                 ) : (
-                    <LineDiagramSVG line={currentLine} />
+                    <LineDiagramSVG line={currentLine} machineOutputs={machineOutputs} />
                 )}
             </Card>
 
@@ -385,3 +422,5 @@ export default function LineDiagramPage() {
         </div>
     );
 }
+
+

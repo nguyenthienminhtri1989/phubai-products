@@ -108,7 +108,7 @@ export default function BackupPage() {
                 {/* CỘT BACKUP */}
                 <Card
                     title={<><CloudDownloadOutlined /> Sao lưu (Export)</>}
-                    bordered={false}
+                    variant="borderless"
                     style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                 >
                     <p>Tải xuống toàn bộ dữ liệu hiện tại (Máy móc, Mặt hàng, Nhật ký sản xuất, Tài khoản...) dưới dạng file <b>.json</b>.</p>
@@ -129,7 +129,7 @@ export default function BackupPage() {
                 {/* CỘT RESTORE */}
                 <Card
                     title={<><CloudUploadOutlined /> Phục hồi (Import)</>}
-                    bordered={false}
+                    variant="borderless"
                     style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                 >
                     <p>Khôi phục dữ liệu từ file <b>.json</b> đã backup trước đó.</p>

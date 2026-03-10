@@ -164,7 +164,7 @@ export default function EnergyMetersPage() {
 
     return (
         <div style={{ padding: 24 }}>
-            <Card bordered={false}>
+            <Card variant="borderless">
                 <Tabs activeKey={activeTab} onChange={setActiveTab} tabBarExtraContent={
                     canEdit ? (
                         <Button type="primary" icon={<PlusOutlined />} onClick={() => {

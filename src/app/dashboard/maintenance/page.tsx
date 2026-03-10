@@ -301,16 +301,16 @@ export default function MaintenancePage() {
             {/* --- DASHBOARD STATS --- */}
             <Row gutter={16} style={{ marginBottom: 24 }}>
                 <Col span={8}>
-                    <Card bordered={false}><Statistic title="Tổng hạng mục (Đang lọc)" value={stats.total} prefix={<ToolOutlined />} /></Card>
+                    <Card variant="borderless"><Statistic title="Tổng hạng mục (Đang lọc)" value={stats.total} prefix={<ToolOutlined />} /></Card>
                 </Col>
                 <Col span={8}>
-                    <Card bordered={false} style={{ borderLeft: '4px solid #cf1322' }}>
-                        <Statistic title="Cần xử lý ngay" value={stats.overdue} valueStyle={{ color: '#cf1322' }} prefix={<AlertOutlined />} />
+                    <Card variant="borderless" style={{ borderLeft: '4px solid #cf1322' }}>
+                        <Statistic title="Cần xử lý ngay" value={stats.overdue} styles={{ content: { color: '#cf1322' } }} prefix={<AlertOutlined />} />
                     </Card>
                 </Col>
                 <Col span={8}>
-                    <Card bordered={false} style={{ borderLeft: '4px solid #faad14' }}>
-                        <Statistic title="Sắp đến hạn" value={stats.upcoming} valueStyle={{ color: '#faad14' }} prefix={<HistoryOutlined />} />
+                    <Card variant="borderless" style={{ borderLeft: '4px solid #faad14' }}>
+                        <Statistic title="Sắp đến hạn" value={stats.upcoming} styles={{ content: { color: '#faad14' } }} prefix={<HistoryOutlined />} />
                     </Card>
                 </Col>
             </Row>

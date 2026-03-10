@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Input } from 'antd';
-import { SaveOutlined, ArrowRightOutlined, SwapOutlined } from '@ant-design/icons';
+import { SaveOutlined, ArrowRightOutlined, SwapOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
@@ -381,21 +381,62 @@ export default function DailyInputPage() {
                     {/* Ngày + Ca */}
                     <Col xs={24} md={8}>
                         {!isMobile && <div style={{ fontWeight: 500, marginBottom: 4, fontSize: 12, color: '#888' }}>Ngày & Ca sản xuất</div>}
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            <DatePicker
-                                value={selectedDate}
-                                onChange={val => val && setSelectedDate(val)}
-                                format="DD/MM/YYYY"
-                                allowClear={false}
-                                style={{ flex: 1 }}
-                            />
-                            <Select
-                                value={selectedShift}
-                                onChange={setSelectedShift}
-                                style={{ width: 80 }}
-                                options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]}
-                            />
-                        </div>
+                        {isMobile ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {/* Điều hướng ngày */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0f5ff', borderRadius: 8, padding: '6px 10px' }}>
+                                    <Button
+                                        size="small"
+                                        icon={<LeftOutlined />}
+                                        onClick={() => setSelectedDate(prev => prev.subtract(1, 'day'))}
+                                    />
+                                    <div style={{ flex: 1, textAlign: 'center' }}>
+                                        <div style={{ fontSize: 10, color: '#888', lineHeight: 1 }}>
+                                            {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][selectedDate.day()]}
+                                            {selectedDate.isSame(dayjs(), 'day') && <span style={{ color: '#52c41a', marginLeft: 4 }}>• Hôm nay</span>}
+                                        </div>
+                                        <div style={{ fontWeight: 700, fontSize: 17, color: '#1677ff', lineHeight: 1.3 }}>
+                                            {selectedDate.format('DD/MM/YYYY')}
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="small"
+                                        icon={<RightOutlined />}
+                                        onClick={() => setSelectedDate(prev => prev.add(1, 'day'))}
+                                    />
+                                </div>
+                                {/* Chọn ca */}
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    {[1, 2, 3].map(s => (
+                                        <Button
+                                            key={s}
+                                            block
+                                            type={selectedShift === s ? 'primary' : 'default'}
+                                            onClick={() => setSelectedShift(s)}
+                                            style={{ height: 40, fontWeight: selectedShift === s ? 700 : 400 }}
+                                        >
+                                            Ca {s}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                <DatePicker
+                                    value={selectedDate}
+                                    onChange={val => val && setSelectedDate(val)}
+                                    format="DD/MM/YYYY"
+                                    allowClear={false}
+                                    style={{ flex: 1 }}
+                                />
+                                <Select
+                                    value={selectedShift}
+                                    onChange={setSelectedShift}
+                                    style={{ width: 80 }}
+                                    options={[{ label: 'Ca 1', value: 1 }, { label: 'Ca 2', value: 2 }, { label: 'Ca 3', value: 3 }]}
+                                />
+                            </div>
+                        )}
                     </Col>
 
                     {/* Thống kê */}
@@ -410,7 +451,7 @@ export default function DailyInputPage() {
                                     title="Tiến độ nhập liệu"
                                     value={doneMachines}
                                     suffix={`/ ${machines.length} máy`}
-                                    valueStyle={{ fontSize: isMobile ? 16 : 20, color: '#1890ff' }}
+                                    styles={{ content: { fontSize: isMobile ? 16 : 20, color: '#1890ff' } }}
                                 />
                             </Col>
                             <Col>
@@ -418,7 +459,7 @@ export default function DailyInputPage() {
                                     title="Tổng sản lượng"
                                     value={totalOutput}
                                     suffix="kg"
-                                    valueStyle={{ fontSize: isMobile ? 16 : 20, color: '#389e0d' }}
+                                    styles={{ content: { fontSize: isMobile ? 16 : 20, color: '#389e0d' } }}
                                 />
                             </Col>
                         </Row>

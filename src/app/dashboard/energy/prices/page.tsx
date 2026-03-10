@@ -135,7 +135,7 @@ export default function ElectricityPricePage() {
         <div style={{ padding: 24 }}>
             <Card
                 title={<Title level={4}><DollarOutlined /> Cấu hình đơn giá điện trung thế</Title>}
-                bordered={false}
+                variant="borderless"
             >
                 <Table
                     columns={columns}
