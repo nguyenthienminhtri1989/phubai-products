@@ -12,6 +12,7 @@ import {
     ThunderboltOutlined, ScanOutlined, SwapOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -68,8 +69,15 @@ function MobileInputContent() {
     const paramMachineId = searchParams.get("machineId");
     const paramProcessId = searchParams.get("processId");
 
-    // Init
-    const { shift: autoShift, date: autoDate } = useMemo(() => detectShiftAndDate(), []);
+    // Init — auto-detect rồi cho phép người dùng sửa
+    const { shift: initShift, date: initDate } = useMemo(() => detectShiftAndDate(), []);
+    const [selectedShift, setSelectedShift] = useState(initShift);
+    const [selectedDate, setSelectedDate] = useState<Dayjs>(initDate);
+
+    // Modal đổi ngày/ca
+    const [dateShiftModalVisible, setDateShiftModalVisible] = useState(false);
+    const [tempDate, setTempDate] = useState<Dayjs>(initDate);
+    const [tempShift, setTempShift] = useState(initShift);
 
     // State chon cong doan
     const [processes, setProcesses] = useState<Process[]>([]);
@@ -176,7 +184,7 @@ function MobileInputContent() {
                         setCurrentIndex(0);
                     }
 
-                    await loadPreviousIndexes(filtered);
+                    await loadPreviousIndexes(filtered, selectedDate, selectedShift);
                 }
             } catch (e) { message.error("Loi tai danh sach may"); }
             finally { setLoadingMachines(false); setInitialLoading(false); }
@@ -185,16 +193,16 @@ function MobileInputContent() {
     }, [selectedProcessId]);
 
     // Load chi so cu
-    const loadPreviousIndexes = async (machineList: Machine[]) => {
-        const dateStr = autoDate.format("YYYY-MM-DD");
+    const loadPreviousIndexes = async (machineList: Machine[], date: Dayjs, shift: number) => {
+        const dateStr = date.format("YYYY-MM-DD");
         const newStates: typeof inputStates = {};
 
         for (const m of machineList) {
             try {
-                const res = await fetch(`/api/production/last-log?machineId=${m.id}&date=${dateStr}&shift=${autoShift}`);
+                const res = await fetch(`/api/production/last-log?machineId=${m.id}&date=${dateStr}&shift=${shift}`);
                 const lastLog = await res.json();
 
-                const checkRes = await fetch(`/api/production/daily-input?machineId=${m.id}&date=${dateStr}&shift=${autoShift}`);
+                const checkRes = await fetch(`/api/production/daily-input?machineId=${m.id}&date=${dateStr}&shift=${shift}`);
                 let alreadySaved = false;
                 let savedEnd = null;
                 if (checkRes.ok) {
@@ -286,8 +294,8 @@ function MobileInputContent() {
         setSaving(true);
         try {
             const payload = {
-                recordDate: autoDate.format("YYYY-MM-DD"),
-                shift: autoShift,
+                recordDate: selectedDate.format("YYYY-MM-DD"),
+                shift: selectedShift,
                 machineId: currentMachine.id,
                 itemId: currentMachine.currentItem?.id,
                 startIndex: currentState.startIndex,
@@ -391,13 +399,13 @@ function MobileInputContent() {
 
         setItemChangeSaving(true);
         try {
-            const dateStr = autoDate.format("YYYY-MM-DD");
+            const dateStr = selectedDate.format("YYYY-MM-DD");
 
             const resA = await fetch("/api/production/daily-input", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    recordDate: dateStr, shift: autoShift,
+                    recordDate: dateStr, shift: selectedShift,
                     machineId: currentMachine.id,
                     itemId: currentMachine.currentItem.id,
                     startIndex: startIdx, endIndex: itemChangeCutover,
@@ -411,7 +419,7 @@ function MobileInputContent() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    recordDate: dateStr, shift: autoShift,
+                    recordDate: dateStr, shift: selectedShift,
                     machineId: currentMachine.id,
                     itemId: itemChangeNewId,
                     startIndex: itemChangeCutover, endIndex: null,
@@ -443,6 +451,27 @@ function MobileInputContent() {
             message.error(e.message || "Loi khi doi hang");
         } finally {
             setItemChangeSaving(false);
+        }
+    };
+
+    // ============================
+    // ĐỔI NGÀY / CA
+    // ============================
+
+    const openDateShiftModal = () => {
+        setTempDate(selectedDate);
+        setTempShift(selectedShift);
+        setDateShiftModalVisible(true);
+    };
+
+    const confirmDateShift = async () => {
+        const dateChanged = !tempDate.isSame(selectedDate, "day");
+        const shiftChanged = tempShift !== selectedShift;
+        setSelectedDate(tempDate);
+        setSelectedShift(tempShift);
+        setDateShiftModalVisible(false);
+        if ((dateChanged || shiftChanged) && machines.length > 0) {
+            await loadPreviousIndexes(machines, tempDate, tempShift);
         }
     };
 
@@ -497,16 +526,67 @@ function MobileInputContent() {
         );
     }
 
+    // Modal đổi ngày/ca (dùng chung cả 2 màn hình)
+    const dateShiftModal = (
+        <Modal
+            open={dateShiftModalVisible}
+            onCancel={() => setDateShiftModalVisible(false)}
+            title="Ngày & Ca làm việc"
+            centered
+            footer={
+                <Button type="primary" block size="large" onClick={confirmDateShift}
+                    style={{ height: 48, fontSize: 16, fontWeight: 700 }}>
+                    Xác nhận
+                </Button>
+            }
+        >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <Button icon={<LeftOutlined />} size="large"
+                    onClick={() => setTempDate(prev => prev.subtract(1, "day"))} />
+                <div style={{ flex: 1, textAlign: "center" }}>
+                    <div style={{ fontWeight: 700, fontSize: 22, color: "#1677ff" }}>
+                        {tempDate.format("DD/MM/YYYY")}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
+                        {["CN", "T2", "T3", "T4", "T5", "T6", "T7"][tempDate.day()]}
+                        {tempDate.isSame(dayjs(), "day") && <span style={{ color: "#52c41a", marginLeft: 6 }}>• Hôm nay</span>}
+                    </div>
+                </div>
+                <Button icon={<RightOutlined />} size="large"
+                    onClick={() => setTempDate(prev => prev.add(1, "day"))} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+                {[1, 2, 3].map(s => (
+                    <Button key={s} block size="large"
+                        type={tempShift === s ? "primary" : "default"}
+                        onClick={() => setTempShift(s)}
+                        style={{ height: 52, fontSize: 17, fontWeight: tempShift === s ? 700 : 400 }}>
+                        Ca {s}
+                    </Button>
+                ))}
+            </div>
+        </Modal>
+    );
+
     // CHON CONG DOAN
     if (!selectedProcessId) {
         return (
             <div style={styles.page}>
                 <div style={styles.header}>
+                    <div style={{ width: 32 }} /> {/* spacer */}
                     <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{ fontSize: 20, fontWeight: 700 }}>Nhap san luong</div>
-                        <div style={{ fontSize: 13, opacity: 0.8 }}>{SHIFT_SHORT[autoShift]} — {autoDate.format("DD/MM/YYYY")}</div>
+                        <div
+                            onClick={openDateShiftModal}
+                            style={{ fontSize: 13, opacity: 0.9, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                            {SHIFT_SHORT[selectedShift]} — {selectedDate.format("DD/MM/YYYY")}
+                            <span style={{ fontSize: 11, opacity: 0.7 }}>✏️</span>
+                        </div>
                     </div>
+                    <div style={{ width: 32 }} /> {/* spacer */}
                 </div>
+                {dateShiftModal}
                 <div style={{ padding: 16 }}>
                     {/* Nut quet QR o dau */}
                     <Button
@@ -601,8 +681,14 @@ function MobileInputContent() {
                 <Button icon={<LeftOutlined />} size="small"
                     onClick={() => { setSelectedProcessId(null); setMachines([]); }}
                     style={{ border: "none", background: "transparent", color: "#fff", fontSize: 16 }} />
-                <div style={{ flex: 1, textAlign: "center" }}>
-                    <div style={{ fontSize: 14, opacity: 0.8 }}>{SHIFT_SHORT[autoShift]} — {autoDate.format("DD/MM/YYYY")}</div>
+                <div
+                    style={{ flex: 1, textAlign: "center", cursor: "pointer" }}
+                    onClick={openDateShiftModal}
+                >
+                    <div style={{ fontSize: 14, opacity: 0.9, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        {SHIFT_SHORT[selectedShift]} — {selectedDate.format("DD/MM/YYYY")}
+                        <span style={{ fontSize: 11, opacity: 0.7 }}>✏️</span>
+                    </div>
                 </div>
                 <Button icon={<ScanOutlined />} size="small"
                     onClick={handleScanQR}
@@ -777,6 +863,9 @@ function MobileInputContent() {
                     </Button>
                 </div>
             </div>
+
+            {/* MODAL ĐỔI NGÀY / CA */}
+            {dateShiftModal}
 
             {/* MODAL ĐỔI HÀNG GIỮA CA */}
             <Modal
