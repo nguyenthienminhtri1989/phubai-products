@@ -152,7 +152,7 @@ function MobileInputContent() {
                         if (targetMachine) {
                             setSelectedProcessId(targetMachine.processId);
                         } else {
-                            message.error("Khong tim thay may #" + paramMachineId);
+                            message.error("Không tìm thấy máy #" + paramMachineId);
                             setInitialLoading(false);
                         }
                     }
@@ -186,7 +186,7 @@ function MobileInputContent() {
 
                     await loadPreviousIndexes(filtered, selectedDate, selectedShift);
                 }
-            } catch (e) { message.error("Loi tai danh sach may"); }
+            } catch (e) { message.error("Lỗi tải danh sách máy"); }
             finally { setLoadingMachines(false); setInitialLoading(false); }
         };
         fetchMachines();
@@ -285,8 +285,8 @@ function MobileInputContent() {
 
         if (calculatedOutput < 0 && !currentState.isReset && !currentState.isStopped) {
             Modal.error({
-                title: "San luong am!",
-                content: 'Chi so SAU nho hon TRUOC. Neu dong ho da reset, hay bat "Da Reset".',
+                title: "Sản lượng âm!",
+                content: 'Chỉ số SAU nhỏ hơn TRƯỚC. Xin kiểm tra lại. Nếu đồng hồ đã reset, hãy bật "Đã Reset".',
             });
             return;
         }
@@ -302,7 +302,7 @@ function MobileInputContent() {
                 endIndex: currentState.endIndex,
                 inputNE: currentState.inputNE,
                 finalOutput: calculatedOutput,
-                note: currentState.isStopped ? "May dung" : currentState.isReset ? "Reset dong ho" : "",
+                note: currentState.isStopped ? "Máy dừng" : currentState.isReset ? "Reset đồng hồ" : "",
             };
 
             const res = await fetch("/api/production/daily-input", {
@@ -313,7 +313,7 @@ function MobileInputContent() {
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.error || "Loi luu");
+                throw new Error(err.error || "Lỗi lưu");
             }
 
             setInputStates(prev => ({
@@ -335,9 +335,9 @@ function MobileInputContent() {
                     }, 200);
                 }, 800);
             } else if (andNext && currentIndex >= machines.length - 1) {
-                message.success("Da nhap xong tat ca may!");
+                message.success("Đã nhập xong tất cả máy!");
             } else {
-                message.success("Da luu!");
+                message.success("Đã lưu!");
             }
         } catch (e: any) {
             message.error(e.message);
@@ -410,10 +410,10 @@ function MobileInputContent() {
                     itemId: currentMachine.currentItem.id,
                     startIndex: startIdx, endIndex: itemChangeCutover,
                     inputNE: ne, finalOutput: outputA,
-                    note: "Doi hang giua ca",
+                    note: "Đổi mặt hàng trong ca",
                 }),
             });
-            if (!resA.ok) throw new Error("Loi luu mat hang cu");
+            if (!resA.ok) throw new Error("Lỗi lưu mặt hàng cũ");
 
             const resB = await fetch("/api/production/daily-input", {
                 method: "POST",
@@ -424,10 +424,10 @@ function MobileInputContent() {
                     itemId: itemChangeNewId,
                     startIndex: itemChangeCutover, endIndex: null,
                     inputNE: ne, finalOutput: 0,
-                    note: "Mat hang moi",
+                    note: "Mặt hàng mới",
                 }),
             });
-            if (!resB.ok) throw new Error("Loi luu mat hang moi");
+            if (!resB.ok) throw new Error("Lỗi lưu mặt hàng mới");
 
             const newItem = items.find(i => i.id === itemChangeNewId);
             setMachines(prev => prev.map(m => m.id === currentMachine.id
@@ -445,10 +445,10 @@ function MobileInputContent() {
                 },
             }));
 
-            message.success("Da doi hang thanh cong!");
+            message.success("Đã đổi mặt hàng thành công!");
             setItemChangeModalVisible(false);
         } catch (e: any) {
-            message.error(e.message || "Loi khi doi hang");
+            message.error(e.message || "Lỗi khi đổi mặt hàng");
         } finally {
             setItemChangeSaving(false);
         }
@@ -479,7 +479,7 @@ function MobileInputContent() {
     const handleScanQR = () => {
         // Mo camera quet QR (dung HTML5 input capture)
         // Hoac chuyen den trang quet
-        const url = prompt("Nhap URL tu QR (hoac dan link):");
+        const url = prompt("Nhập URL từ QR (hoặc dán link):");
         if (url) {
             try {
                 const parsed = new URL(url);
@@ -488,14 +488,14 @@ function MobileInputContent() {
                     const targetIdx = machines.findIndex(m => m.id === parseInt(mId));
                     if (targetIdx >= 0) {
                         goTo(targetIdx);
-                        message.success(`Da chuyen den ${machines[targetIdx].name}`);
+                        message.success(`Đã chuyển đến ${machines[targetIdx].name}`);
                     } else {
-                        // May khong thuoc cong doan nay -> chuyen trang
+                        // Máy không thuộc công đoạn này -> chuyển trang
                         window.location.href = `/production/mobile-input?machineId=${mId}`;
                     }
                 }
             } catch (e) {
-                message.error("Link khong hop le");
+                message.error("Link không hợp lệ");
             }
         }
     };
@@ -505,13 +505,13 @@ function MobileInputContent() {
     // ============================
 
     if (status === "loading" || initialLoading) {
-        return <div style={styles.center}><Spin size="large" tip="Dang tai..." /></div>;
+        return <div style={styles.center}><Spin size="large" tip="Đang tải..." /></div>;
     }
     if (status === "unauthenticated") {
         return (
             <div style={styles.center}>
-                <Result status="warning" title="Chua dang nhap"
-                    extra={<Button type="primary" size="large" href="/login" style={styles.bigBtn}>Dang nhap</Button>} />
+                <Result status="warning" title="Chưa đăng nhập"
+                    extra={<Button type="primary" size="large" href="/login" style={styles.bigBtn}>Đăng nhập</Button>} />
             </div>
         );
     }
@@ -575,7 +575,7 @@ function MobileInputContent() {
                 <div style={styles.header}>
                     <div style={{ width: 32 }} /> {/* spacer */}
                     <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{ fontSize: 20, fontWeight: 700 }}>Nhap san luong</div>
+                        <div style={{ fontSize: 20, fontWeight: 700 }}>Nhập sản lượng</div>
                         <div
                             onClick={openDateShiftModal}
                             style={{ fontSize: 13, opacity: 0.9, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
@@ -593,13 +593,13 @@ function MobileInputContent() {
                         icon={<ScanOutlined />}
                         size="large" block
                         onClick={() => {
-                            const url = prompt("Nhap URL tu QR:");
+                            const url = prompt("Nhập URL từ QR:");
                             if (url) {
                                 try {
                                     const parsed = new URL(url);
                                     const mId = parsed.searchParams.get("machineId");
                                     if (mId) window.location.href = `/production/mobile-input?machineId=${mId}`;
-                                } catch { message.error("Link khong hop le"); }
+                                } catch { message.error("Link không hợp lệ"); }
                             }
                         }}
                         style={{
@@ -607,7 +607,7 @@ function MobileInputContent() {
                             marginBottom: 20, background: "#1677ff", color: "#fff", border: "none",
                         }}
                     >
-                        Quet QR de bat dau
+                        Quét QR để bắt đầu
                     </Button>
 
                     <div style={{
@@ -615,7 +615,7 @@ function MobileInputContent() {
                         display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
                     }}>
                         <div style={{ flex: 1, height: 1, background: "#e8e8e8" }} />
-                        <span>hoac chon cong doan</span>
+                        <span>hoặc chọn công đoạn</span>
                         <div style={{ flex: 1, height: 1, background: "#e8e8e8" }} />
                     </div>
 
@@ -639,14 +639,14 @@ function MobileInputContent() {
     }
 
     if (loadingMachines) {
-        return <div style={styles.center}><Spin size="large" tip="Dang tai may..." /></div>;
+        return <div style={styles.center}><Spin size="large" tip="Đang tải máy..." /></div>;
     }
 
     if (machines.length === 0) {
         return (
             <div style={styles.center}>
-                <Result status="info" title="Khong co may nao"
-                    extra={<Button size="large" onClick={() => { setSelectedProcessId(null); setMachines([]); }}>Chon lai</Button>} />
+                <Result status="info" title="Không có máy nào"
+                    extra={<Button size="large" onClick={() => { setSelectedProcessId(null); setMachines([]); }}>Chọn lại</Button>} />
             </div>
         );
     }
@@ -664,10 +664,10 @@ function MobileInputContent() {
             }}>
                 <CheckCircleOutlined style={{ fontSize: 64, color: "#52c41a" }} />
                 <div style={{ fontSize: 24, fontWeight: 700, marginTop: 16, color: "#389e0d" }}>
-                    Da luu: {lastSavedOutput} kg
+                    Đã lưu: {lastSavedOutput} kg
                 </div>
                 <div style={{ fontSize: 16, color: "#666", marginTop: 8 }}>
-                    Chuyen sang may tiep theo...
+                    Chuyển sang máy tiếp theo...
                 </div>
             </div>
         );
@@ -733,10 +733,10 @@ function MobileInputContent() {
                 <div style={{ display: "flex", gap: 6, marginTop: 6, justifyContent: "center", flexWrap: "wrap" }}>
                     {currentMachine.currentItem
                         ? <Tag color="blue" style={{ fontSize: 13 }}>{currentMachine.currentItem.name}</Tag>
-                        : <Tag color="red" style={{ fontSize: 13 }}>Chua gan hang</Tag>}
+                        : <Tag color="red" style={{ fontSize: 13 }}>Chưa gán hàng</Tag>}
                     <Tag style={{ fontSize: 12 }}>CT{currentMachine.formulaType}</Tag>
                     {currentMachine.spindleCount && <Tag style={{ fontSize: 12 }}>{currentMachine.spindleCount} coc</Tag>}
-                    {currentState.saved && <Tag color="green" style={{ fontSize: 12 }}>Da nhap</Tag>}
+                    {currentState.saved && <Tag color="green" style={{ fontSize: 12 }}>Đã nhập</Tag>}
                 </div>
                 {currentMachine.currentItem && (
                     <Button
@@ -783,7 +783,7 @@ function MobileInputContent() {
                 {/* Chi so */}
                 <div style={styles.indexRow}>
                     <div style={styles.indexBox}>
-                        <div style={styles.indexLabel}>Chi so TRUOC</div>
+                        <div style={styles.indexLabel}>Chỉ số TRƯỚC</div>
                         <InputNumber
                             value={currentState.startIndex}
                             onChange={val => updateCurrentState("startIndex", val ?? 0)}
@@ -795,7 +795,7 @@ function MobileInputContent() {
                     </div>
                     <ArrowRightOutlined style={{ fontSize: 24, color: "#1677ff", marginTop: 28 }} />
                     <div style={styles.indexBox}>
-                        <div style={styles.indexLabel}>Chi so SAU</div>
+                        <div style={styles.indexLabel}>Chỉ số SAU</div>
                         <InputNumber
                             ref={endIndexRef}
                             value={currentState.endIndex}
@@ -827,7 +827,7 @@ function MobileInputContent() {
                     background: calculatedOutput < 0 ? "#fff1f0" : "#f6ffed",
                     borderColor: calculatedOutput < 0 ? "#ffccc7" : "#b7eb8f",
                 }}>
-                    <div style={{ fontSize: 13, color: "#666" }}>San luong</div>
+                    <div style={{ fontSize: 13, color: "#666" }}>Sản lượng</div>
                     <div style={{
                         fontSize: 48, fontWeight: 800, lineHeight: 1.1,
                         color: calculatedOutput < 0 ? "#ff4d4f" : "#389e0d",

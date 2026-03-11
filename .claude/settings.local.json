@@ -8,7 +8,8 @@
       "Bash(rm:*)",
       "Bash(pg_isready:*)",
       "Bash(psql:*)",
-      "Bash(PGPASSWORD=123456 psql:*)"
+      "Bash(PGPASSWORD=123456 psql:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

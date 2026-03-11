@@ -135,7 +135,76 @@ Bộ tính năng tối ưu cho công nhân nhà máy sử dụng điện thoại
 - **Mục đích:** Nhập nhanh cho 1 máy cụ thể (thường từ QR link cũ)
 - **Sidebar:** Ẩn sidebar khi ở trang `/production/mobile-input` (xem `AdminLayout.tsx` line 55)
 
-## 9. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
+## 9. MODULE 5: GHI NHẬN DỪNG MÁY / SỰ CỐ (MACHINE STOP LOGGING)
+
+Module ghi nhận các sự kiện dừng máy, giải thích bất thường sản lượng và hỗ trợ phân tích thống kê.
+
+### 9.1. Database Models mới
+
+- **`stop_categories`** — Danh mục nguyên nhân dừng: `name`, `color` (hex), `isActive`, `isDefault`.
+  - 8 danh mục mặc định được seed: Hỏng máy, Bảo dưỡng định kỳ, Thiếu nguyên liệu, Sự cố điện, Thay đổi mặt hàng, Lỗi chất lượng, Thiếu nhân sự, Khác.
+  - `isDefault = true` → **không được xóa, không được tắt**.
+- **`machine_stop_logs`** — Bản ghi từng lần dừng: `machineId`, `categoryId`, `startTime`, `endTime?`, `durationMinutes?`, `severity`, `shift`, `recordDate`, `reportedById`.
+  - `durationMinutes` luôn được **tính server-side** = `(endTime - startTime) / 60s`, client không được tự tính.
+  - `shift` tự động detect từ `startTime` nếu không truyền: Ca1: 06-14h, Ca2: 14-22h, Ca3: 22-06h.
+  - `recordDate` tự extract từ ngày của `startTime`.
+  - `endTime = null` → máy vẫn đang dừng.
+
+### 9.2. API Routes
+
+| Route | Methods | Mô tả |
+|-------|---------|-------|
+| `/api/production/stop-categories` | GET, POST | Lấy danh sách / Tạo mới (Admin) |
+| `/api/production/stop-categories/[id]` | PUT, DELETE | Sửa / Xóa (Admin, isDefault không xóa được) |
+| `/api/production/machine-stops` | GET, POST | Lịch sử (phân trang, nhiều filter) / Tạo mới |
+| `/api/production/machine-stops/[id]` | PUT, DELETE | Cập nhật (set endTime khi máy chạy lại) / Xóa |
+| `/api/production/machine-stops/stats` | GET | Thống kê tổng hợp (count, downtime, top máy, by category) |
+
+**Validation bắt buộc:**
+- `startTime` không được trong tương lai.
+- `endTime` phải sau `startTime` và không được trong tương lai.
+- Category phải tồn tại và `isActive = true`.
+
+### 9.3. UI Pages
+
+- **`src/app/dashboard/stop-categories/page.tsx`** — Quản lý danh mục (Admin only): bảng CRUD, color picker, toggle active.
+- **`src/app/production/machine-stops/page.tsx`** — Trang ghi nhận chính:
+  - Grid card máy, sorted: máy đang dừng lên đầu (màu đỏ), máy đang chạy xuống dưới (màu xanh).
+  - Card hiển thị trạng thái realtime: "Đang dừng X phút" + nguyên nhân + mức độ.
+  - Nút **"Báo dừng"**: chọn nguyên nhân (grid button có màu) + mức độ (4 mức) + thời gian (realtime/manual).
+  - Nút **"Máy đã chạy"**: xác nhận restart + thời gian (realtime/manual).
+  - Auto-refresh 60 giây.
+- **`src/app/production/stop-history/page.tsx`** — Lịch sử dừng máy:
+  - Filter: khoảng ngày, nhà máy, công đoạn, nguyên nhân (multi-select), trạng thái.
+  - Phân trang server-side, summary stats (tổng lần dừng, tổng thời gian, đang dừng).
+  - Sửa / xóa bản ghi (Admin hoặc người báo).
+  - Xuất Excel (XLSX).
+
+### 9.4. Phân quyền
+
+- **Admin:** Toàn quyền, thấy tất cả máy mọi nhà máy.
+- **User thường:** Chỉ báo dừng / xem lịch sử máy trong `processId` của mình. Chỉ xóa được bản ghi do mình tạo.
+- **Danh mục:** Chỉ Admin tạo/sửa/xóa. Mọi user đọc để hiển thị.
+
+### 9.5. Severity (Mức độ)
+
+| Giá trị | Nhãn | Màu |
+|---------|------|-----|
+| `low` | Nhẹ | Xanh |
+| `medium` | Trung bình | Cam |
+| `high` | Nặng | Đỏ |
+| `critical` | Nghiêm trọng | Đỏ đậm |
+
+### 9.6. Menu mới trong AdminLayout
+
+- Sub2 (Quản lý SX): **Ghi nhận dừng máy** (`/production/machine-stops`) + **Lịch sử dừng máy** (`/production/stop-history`).
+- Sub-admin (Admin only): **Danh mục nguyên nhân dừng** (`/dashboard/stop-categories`).
+
+**Status:** ✅ Completed
+
+---
+
+## 10. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
 
 1. **Tuyệt đối không phá vỡ chuỗi liên tục của Chỉ số.** Không được để khoảng trống dữ liệu.
 2. **Backend là nguồn chân lý (Source of Truth).** Mọi tính toán logic, tìm chỉ số phải nằm ở Backend. Frontend chỉ gửi yêu cầu và render.
@@ -148,4 +217,4 @@ Bộ tính năng tối ưu cho công nhân nhà máy sử dụng điện thoại
 _Lưu ý cho AI: Khi nhận được file này, hãy đóng vai trò là Senior Backend/Software Architect, chỉ phát triển tính năng mới dựa trên nền tảng kiến trúc đã có, không thiết kế lại hệ thống._
 
 ---
-_Cập nhật lần cuối: 2026-03-10 — Thêm Module 4: Nhập liệu Mobile, QR Code, Đổi mặt hàng giữa ca_
+_Cập nhật lần cuối: 2026-03-10 — Thêm Module 5: Ghi nhận dừng máy / Sự cố (Machine Stop Logging)_

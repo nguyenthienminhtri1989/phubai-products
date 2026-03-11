@@ -110,6 +110,7 @@ model Machine {
   productionLogs ProductionLog[]
   linksFrom ProductionLineLink[] @relation("LinkFrom")
   linksTo   ProductionLineLink[] @relation("LinkTo")
+  stopLogs  MachineStopLog[]
 
   @@map("machines")
 }
@@ -187,6 +188,7 @@ model User {
   createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
   createdAt   DateTime @default(now())
   createdLines ProductionLine[]
+  reportedStops MachineStopLog[]
 
   @@map("users")
 }
@@ -444,3 +446,60 @@ model ProductionLineLink {
 // Them vao model Machine:
 //   linksFrom ProductionLineLink[] @relation("LinkFrom")
 //   linksTo   ProductionLineLink[] @relation("LinkTo")
+
+// ==========================================
+// MODULE GHI NHẬN DỪNG MÁY / SỰ CỐ
+// ==========================================
+
+// 1. Danh mục nguyên nhân dừng máy
+model StopCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   // Vd: "Hỏng máy", "Thiếu nguyên liệu"
+  color     String   @default("#ff4d4f") // Màu hex cho biểu đồ/tag
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false) // Dữ liệu seed = true, không được xóa
+
+  createdAt DateTime @default(now())
+
+  stopLogs  MachineStopLog[]
+
+  @@map("stop_categories")
+}
+
+// 2. Ghi nhận dừng máy
+model MachineStopLog {
+  id              Int       @id @default(autoincrement())
+
+  // Máy nào dừng
+  machineId       Int
+  machine         Machine   @relation(fields: [machineId], references: [id])
+
+  // Nguyên nhân
+  categoryId      Int
+  category        StopCategory @relation(fields: [categoryId], references: [id])
+
+  // Thời gian
+  startTime       DateTime  // Lúc máy dừng
+  endTime         DateTime? // Lúc máy chạy lại (null = vẫn đang dừng)
+  durationMinutes Int?      // Tự tính: khoảng cách phút
+
+  // Chi tiết
+  description     String?   // Mô tả thêm
+  severity        String    @default("medium") // low, medium, high, critical
+
+  // Ngữ cảnh
+  recordDate      DateTime  @db.Date  // Ngày xảy ra
+  shift           Int?      // Ca làm việc (1, 2, 3)
+
+  // Người báo cáo
+  reportedById    Int
+  reportedBy      User      @relation(fields: [reportedById], references: [id])
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([machineId])
+  @@index([recordDate])
+  @@index([categoryId])
+  @@map("machine_stop_logs")
+}

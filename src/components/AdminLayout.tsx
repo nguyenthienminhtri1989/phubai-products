@@ -18,10 +18,12 @@ import {
   BarcodeOutlined,
   PartitionOutlined,
   RobotOutlined,
-  ThunderboltOutlined, // Icon tia sét cho Module Điện năng
+  ThunderboltOutlined,
   QrcodeOutlined,
   NodeIndexOutlined,
   MobileOutlined,
+  PauseCircleOutlined,
+  TagsOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -52,7 +54,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   if (
     pathname === "/login" ||
     pathname === "/register" ||
-    pathname === "/production/mobile-input"
+    pathname === "/production/mobile-input" ||
+    pathname === "/production/mobile-stops"
   ) {
     return <>{children}</>;
   }
@@ -115,6 +118,21 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           label: "Sơ đồ line SX",
           icon: <NodeIndexOutlined />
         },
+        {
+          key: "/production/machine-stops",
+          label: "Ghi nhận dừng máy",
+          icon: <PauseCircleOutlined />,
+        },
+        {
+          key: "/production/mobile-stops",
+          label: "Dừng máy Mobile",
+          icon: <MobileOutlined />,
+        },
+        {
+          key: "/production/stop-history",
+          label: "Lịch sử dừng máy",
+          icon: <HistoryOutlined />,
+        },
       ],
     },
   ];
@@ -161,6 +179,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           key: "/users",
           icon: <UserOutlined />,
           label: "Quản lý Tài khoản",
+        },
+        {
+          key: "/dashboard/stop-categories",
+          icon: <TagsOutlined />,
+          label: "Danh mục nguyên nhân dừng",
         },
         {
           key: "/admin/backup",

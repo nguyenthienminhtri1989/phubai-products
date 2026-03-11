@@ -113,16 +113,39 @@ async function main() {
   // 5. TẠO TÀI KHOẢN ADMIN (Quan trọng nhất)
   const hashedPassword = await bcrypt.hash("150489", 10);
 
-  await prisma.user.create({
-    data: {
+  await prisma.user.upsert({
+    where: { username: "admin" },
+    update: {},
+    create: {
       username: "admin",
       password: hashedPassword,
       fullName: "Quản trị viên",
       role: "ADMIN",
       accessLevel: "MANAGER",
-      isActive: true, // Kích hoạt luôn
+      isActive: true,
     },
   });
+
+  // 6. TẠO DANH MỤC NGUYÊN NHÂN DỪNG MÁY (StopCategory)
+  const stopCategories = [
+    { name: "Hỏng máy",           color: "#ff4d4f" },
+    { name: "Bảo dưỡng định kỳ",  color: "#faad14" },
+    { name: "Thiếu nguyên liệu",  color: "#fa8c16" },
+    { name: "Sự cố điện",         color: "#f5222d" },
+    { name: "Thay đổi mặt hàng",  color: "#1677ff" },
+    { name: "Lỗi chất lượng",     color: "#722ed1" },
+    { name: "Thiếu nhân sự",      color: "#eb2f96" },
+    { name: "Khác",               color: "#8c8c8c" },
+  ];
+
+  for (const cat of stopCategories) {
+    const existing = await prisma.stopCategory.findFirst({ where: { name: cat.name } });
+    if (!existing) {
+      await prisma.stopCategory.create({
+        data: { name: cat.name, color: cat.color, isDefault: true, isActive: true },
+      });
+    }
+  }
 
   console.log("✅ Đã tạo xong dữ liệu mẫu!");
 }
