@@ -82,7 +82,13 @@ export default function MachineStopsPage() {
       fetch("/api/processes").then(r => r.json()),
       fetch("/api/production/stop-categories?activeOnly=true").then(r => r.json()),
     ]).then(([f, p, c]) => {
-      setFactories(f);
+      // Dedup theo tên phòng trường hợp seed chạy nhiều lần tạo duplicate trong DB
+      const seen = new Set<string>();
+      setFactories((f as Factory[]).filter(x => {
+        if (seen.has(x.name)) return false;
+        seen.add(x.name);
+        return true;
+      }));
       setProcesses(p);
       setCategories(c);
     });

@@ -35,23 +35,37 @@ export async function PUT(
 // 2. HÀM DELETE: Xóa nhà máy
 export async function DELETE(
   request: Request,
-  // Sửa kiểu dữ liệu của params thành Promise
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // --- KHẮC PHỤC LỖI Ở ĐÂY ---
     const { id: idString } = await params;
     const id = parseInt(idString);
-    // ---------------------------
 
-    await prisma.factory.delete({
-      where: { id: id },
-    });
+    // Kiểm tra dữ liệu liên kết trước khi xóa
+    const [processCount, substationCount, powerMeterCount] = await Promise.all([
+      prisma.process.count({ where: { factoryId: id } }),
+      prisma.substation.count({ where: { factoryId: id } }),
+      prisma.powerMeter.count({ where: { factoryId: id } }),
+    ]);
+
+    if (processCount + substationCount + powerMeterCount > 0) {
+      const parts = [
+        processCount > 0 ? `${processCount} công đoạn` : "",
+        substationCount > 0 ? `${substationCount} trạm điện` : "",
+        powerMeterCount > 0 ? `${powerMeterCount} đồng hồ điện` : "",
+      ].filter(Boolean).join(", ");
+      return NextResponse.json(
+        { error: `Không thể xóa: nhà máy đang có ${parts} liên kết. Hãy xóa các mục đó trước.` },
+        { status: 400 }
+      );
+    }
+
+    await prisma.factory.delete({ where: { id } });
     return NextResponse.json({ message: "Xóa thành công" }, { status: 200 });
   } catch (error) {
     console.error("Lỗi DELETE:", error);
     return NextResponse.json(
-      { error: "Không xóa được, có thể do ràng buộc dữ liệu" },
+      { error: "Lỗi máy chủ khi xóa nhà máy" },
       { status: 500 }
     );
   }

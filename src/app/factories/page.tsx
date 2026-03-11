@@ -55,7 +55,6 @@ export default function FactoryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(values),
         });
-        message.success("Cập nhật thành công");
       } else {
         // Gọi API để thêm mới
         res = await fetch("/api/factories", {
@@ -90,15 +89,14 @@ export default function FactoryPage() {
       title: "Bạn có chắc chắn muốn xóa không?",
       content: "Hành động này không thể hoàn tác",
       onOk: async () => {
-        try {
-          await fetch(`/api/factories/${id}`, {
-            method: "DELETE",
-          });
-          message.success("Xóa thành công");
-          fetchFactories(); // Load lại bảng
-        } catch (error) {
-          message.error("Lỗi khi xóa: " + error);
+        const res = await fetch(`/api/factories/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json();
+          message.error(data.error || "Xóa thất bại");
+          return Promise.reject();
         }
+        message.success("Xóa thành công");
+        fetchFactories();
       },
     });
   };

@@ -6,6 +6,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Đang khởi tạo dữ liệu mẫu...");
 
+  // Chỉ seed khi chưa có dữ liệu (tránh tạo duplicate khi chạy lại)
+  const existingFactories = await prisma.factory.count();
+  if (existingFactories > 0) {
+    console.log("⏭️  Đã có dữ liệu, bỏ qua seed để tránh duplicate.");
+    return;
+  }
+
   // 1. TẠO NHÀ MÁY
   const factory1 = await prisma.factory.create({
     data: { name: "Nhà máy Sợi 1" },
