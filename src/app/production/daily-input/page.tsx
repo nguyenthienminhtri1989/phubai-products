@@ -98,8 +98,8 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi tải danh mục"); }
     };
 
-    const calcOutputHelper = (machine: Machine, start: number, end: number, ne: number, isReset: boolean): number => {
-        const delta = isReset ? end : end - start;
+    const calcOutputHelper = (machine: Machine, start: number, end: number, ne: number): number => {
+        const delta = end - start;
         const type = machine.formulaType;
         let result = 0;
         if (type === 1) result = end;
@@ -121,7 +121,7 @@ export default function DailyInputPage() {
 
         const startIdx = form.getFieldValue('startIndex') || 0;
         const ne = form.getFieldValue('inputNE') || currentMachine.currentNE || 30;
-        const outputA = calcOutputHelper(currentMachine, startIdx, cutoverIndex, ne, false);
+        const outputA = calcOutputHelper(currentMachine, startIdx, cutoverIndex, ne);
 
         if (outputA < 0) {
             message.error('Chỉ số chốt nhỏ hơn chỉ số bắt đầu. Vui lòng kiểm tra lại.');
@@ -254,7 +254,7 @@ export default function DailyInputPage() {
         const end = Number(watchEndIndex);
         if (watchEndIndex === null || watchEndIndex === undefined) return 0;
 
-        const delta = watchIsReset ? end : end - start;
+        const delta = end - start;
         const type = currentMachine.formulaType;
         let result = 0;
 
@@ -539,6 +539,9 @@ export default function DailyInputPage() {
                                 checkedChildren="Đã Reset"
                                 unCheckedChildren="Bình thường"
                                 disabled={watchIsStopped}
+                                onChange={(checked) => {
+                                    if (checked) form.setFieldValue('startIndex', 0);
+                                }}
                                 style={{ background: watchIsReset ? '#faad14' : undefined }}
                             />
                         </Form.Item>
@@ -550,8 +553,6 @@ export default function DailyInputPage() {
                             <Form.Item name="startIndex" label="Chỉ số TRƯỚC">
                                 <InputNumber
                                     style={{ width: '100%', fontSize: isMobile ? 18 : 14 }}
-                                    readOnly={!watchIsReset && !form.getFieldValue('isNewMachine')}
-                                    variant="filled"
                                     disabled={watchIsStopped}
                                     controls={false}
                                 />
