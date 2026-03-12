@@ -13,10 +13,18 @@ export async function GET(request: Request) {
     const targetDate = new Date(dateStr);
     const targetShift = parseInt(shiftStr);
 
+    // Giới hạn tìm kiếm trong khoảng 2 ngày đổ lại để tránh cộng dồn sai khi bỏ ca quá lâu
+    const twoDaysAgo = new Date(targetDate);
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
     // Tìm bản ghi gần nhất có endIndex (bỏ qua bản ghi hiện tại và bản ghi không có endIndex)
     const lastLog = await prisma.productionLog.findFirst({
       where: {
         machineId: parseInt(machineId),
+        recordDate: {
+          gte: twoDaysAgo,
+          lte: targetDate,
+        },
         endIndex: { not: null },
         NOT: {
           AND: [

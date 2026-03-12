@@ -256,10 +256,14 @@ export default function DailyInputPage() {
         // Nếu chưa nhập chỉ số sau thì sản lượng tạm thời là 0
         if (watchEndIndex === null || watchEndIndex === undefined || isNaN(end)) return 0;
 
-        const delta = end - start;
-        const type = currentMachine.formulaType;
         let result = 0;
+        const type = currentMachine.formulaType;
+        const delta = end - start;
 
+        // Xử lý logic Reset đồng hồ: Nếu chỉ số bị quay vòng (End < Start), 
+        // nhưng người dùng không bật "Sửa chỉ số trước" thì có thể là lỗi.
+        // Tuy nhiên, nếu họ bật "Sửa chỉ số trước" thì họ sẽ chủ động sửa startIndex cho nhỏ hơn endIndex.
+        
         if (type === 1) result = end;
         else if (type === 2) result = delta;
         else if (type === 3) {
@@ -285,8 +289,13 @@ export default function DailyInputPage() {
                 return;
             }
 
-            if (calculatedOutput < 0 && !values.isStopped) {
-                Modal.error({ title: 'Lỗi số liệu!', content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.' });
+            // Nếu sản lượng âm và KHÔNG bật chế độ sửa chỉ số trước/reset, thì mới chặn.
+            // Nếu họ đã bật "Sửa chỉ số trước" và chủ động nhập, ta tin tưởng số liệu đó.
+            if (calculatedOutput < 0 && !values.isStopped && !values.isReset) {
+                Modal.error({ 
+                    title: 'Lỗi số liệu!', 
+                    content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu đồng hồ bị quay vòng hoặc chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.' 
+                });
                 return;
             }
             if (calculatedOutput > 1000) {
