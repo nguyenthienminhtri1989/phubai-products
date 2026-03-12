@@ -115,8 +115,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Xử lý Date: Giữ nguyên ngày YYYY-MM-DD từ client gửi lên để tránh lệch múi giờ
-    const dateObj = new Date(recordDate);
+    // Xử lý Date: Đảm bảo ngày ở định dạng ISO 00:00:00 để khớp với @db.Date
+    const dateObj = new Date(`${recordDate}T00:00:00.000Z`);
 
     // Tìm xem đã có chưa (Update hay Create) - tìm theo cả itemId để hỗ trợ đổi hàng giữa ca
     const existingLog = await prisma.productionLog.findFirst({
@@ -142,30 +142,33 @@ export async function POST(request: Request) {
     };
 
     let savedLog;
-    if (existingLog) {
-      savedLog = await prisma.productionLog.update({
-        where: { id: existingLog.id },
-        data: dataToSave,
-      });
-    } else {
-      try {
-        savedLog = await prisma.productionLog.create({ data: dataToSave });
-      } catch (createError: any) {
-        // P2002 = unique constraint violation: record tồn tại nhưng findFirst miss
-        // (thường do timezone @db.Date hoặc itemId không khớp ở lần tìm trước)
-        if (createError.code === "P2002") {
-          const conflicting = await prisma.productionLog.findFirst({
-            where: { machineId, recordDate: dateObj, shift, itemId },
-          });
-          if (!conflicting) throw createError;
-          savedLog = await prisma.productionLog.update({
-            where: { id: conflicting.id },
-            data: dataToSave,
-          });
-        } else {
-          throw createError;
-        }
+    try {
+      if (existingLog) {
+        savedLog = await prisma.productionLog.update({
+          where: { id: existingLog.id },
+          data: dataToSave,
+        });
+      } else {
+        // Sử dụng upsert để an toàn hơn thay vì create đơn thuần
+        savedLog = await prisma.productionLog.upsert({
+          where: {
+            machineId_recordDate_shift_itemId: {
+              machineId,
+              recordDate: dateObj,
+              shift,
+              itemId,
+            }
+          },
+          update: dataToSave,
+          create: dataToSave,
+        });
       }
+    } catch (dbError: any) {
+      console.error("Database Save Error:", dbError);
+      return NextResponse.json({ 
+        error: "Lỗi cơ sở dữ liệu", 
+        detail: dbError.message 
+      }, { status: 500 });
     }
 
     // Update mặt hàng & NE cho máy để lần sau tự điền
