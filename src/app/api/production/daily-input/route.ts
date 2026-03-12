@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
+// Hàm hỗ trợ chuẩn hóa ngày về 00:00:00 UTC để khớp với @db.Date trong Prisma
+const normalizeDate = (dateStr: string) => {
+  return new Date(`${dateStr}T00:00:00.000Z`);
+};
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -20,11 +25,11 @@ export async function GET(request: Request) {
   const log = await prisma.productionLog.findFirst({
     where: {
       machineId: parseInt(machineId),
-      recordDate: new Date(date),
+      recordDate: normalizeDate(date),
       shift: parseInt(shift),
     },
     orderBy: { id: "desc" },
-    select: { id: true, endIndex: true, startIndex: true, finalOutput: true, note: true },
+    select: { id: true, endIndex: true, startIndex: true, finalOutput: true, note: true, itemId: true },
   });
 
   return NextResponse.json(log ?? null);
@@ -49,7 +54,7 @@ export async function POST(request: Request) {
       finalOutput,
     } = body;
 
-    // 1. Ép kiểu và kiểm tra dữ liệu đầu vào
+    // 1. Ép kiểu dữ liệu
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
@@ -59,12 +64,11 @@ export async function POST(request: Request) {
     finalOutput = finalOutput != null ? Math.round(parseFloat(finalOutput)) : 0;
 
     if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
-      return NextResponse.json({ error: "Thông tin máy/ca/hàng không hợp lệ" }, { status: 400 });
+      return NextResponse.json({ error: "Dữ liệu đầu vào không hợp lệ" }, { status: 400 });
     }
 
-    // 2. Xử lý ngày tháng chuẩn (tránh lệch múi giờ)
-    // Dùng chuỗi YYYY-MM-DD trực tiếp để Prisma xử lý @db.Date chính xác
-    const dateObj = new Date(`${recordDate}T00:00:00.000Z`);
+    // 2. Chuẩn hóa ngày (Quan trọng để tìm đúng bản ghi cũ)
+    const dateObj = normalizeDate(recordDate);
 
     // 3. Kiểm tra quyền hạn
     const accessLevel = (session.user as any).accessLevel;
@@ -72,18 +76,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tài khoản không có quyền nhập liệu" }, { status: 403 });
     }
 
-    // 4. Tìm bản ghi cũ để cập nhật hoặc tạo mới
-    // Tìm chính xác theo tổ hợp Unique: Máy + Ngày + Ca + Mặt hàng
+    // 4. Tìm bản ghi hiện tại để Cập nhật (Update) hoặc Tạo mới (Create)
     const existingLog = await prisma.productionLog.findFirst({
       where: {
         machineId,
         recordDate: dateObj,
         shift,
-        itemId,
+        itemId, // Tìm theo đúng mặt hàng đang sửa
       },
     });
 
-    const userId = parseInt(session.user.id);
     const dataToSave = {
       machineId,
       recordDate: dateObj,
@@ -94,59 +96,50 @@ export async function POST(request: Request) {
       inputNE,
       finalOutput,
       note,
-      createdById: isNaN(userId) ? null : userId,
+      createdById: parseInt(session.user.id),
     };
 
     let savedLog;
     if (existingLog) {
-      // Nếu đã có bản ghi, thực hiện Cập nhật
+      // CẬP NHẬT: Nếu đã tồn tại, ghi đè toàn bộ (bao gồm startIndex và finalOutput mới)
       savedLog = await prisma.productionLog.update({
         where: { id: existingLog.id },
         data: dataToSave,
       });
     } else {
-      // Nếu chưa có, tạo mới (Sử dụng try-catch riêng để bắt lỗi Unique)
+      // TẠO MỚI: Nếu chưa có
       try {
         savedLog = await prisma.productionLog.create({
           data: dataToSave,
         });
-      } catch (createError: any) {
-        // Nếu xảy ra lỗi trùng lặp (P2002), tìm lại lần nữa và ghi đè
-        if (createError.code === "P2002") {
-          const fallbackLog = await prisma.productionLog.findFirst({
-            where: { machineId, recordDate: dateObj, shift, itemId },
+      } catch (e: any) {
+        if (e.code === 'P2002') {
+          // Xử lý race condition: nếu vừa được tạo bởi người khác, thì update nó
+          const fallback = await prisma.productionLog.findFirst({
+            where: { machineId, recordDate: dateObj, shift, itemId }
           });
-          if (fallbackLog) {
+          if (fallback) {
             savedLog = await prisma.productionLog.update({
-              where: { id: fallbackLog.id },
-              data: dataToSave,
+              where: { id: fallback.id },
+              data: dataToSave
             });
-          } else {
-            throw createError;
-          }
-        } else {
-          throw createError;
-        }
+          } else throw e;
+        } else throw e;
       }
     }
 
-    // 5. Cập nhật trạng thái máy (Mặt hàng và Chi số hiện tại)
-    const machineUpdateData: any = { currentItemId: itemId };
-    if (inputNE !== null && !isNaN(inputNE)) {
-      machineUpdateData.currentNE = inputNE;
-    }
-
+    // 5. Cập nhật trạng thái máy
     await prisma.machine.update({
       where: { id: machineId },
-      data: machineUpdateData,
+      data: {
+        currentItemId: itemId,
+        ...(inputNE ? { currentNE: parseFloat(inputNE) } : {}),
+      },
     });
 
     return NextResponse.json(savedLog);
   } catch (error: any) {
-    console.error("Critical Save Error:", error);
-    return NextResponse.json({ 
-      error: "Lỗi hệ thống khi lưu", 
-      message: error.message 
-    }, { status: 500 });
+    console.error("Save Error:", error);
+    return NextResponse.json({ error: "Lỗi hệ thống", detail: error.message }, { status: 500 });
   }
 }

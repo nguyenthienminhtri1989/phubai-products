@@ -250,6 +250,8 @@ export default function DailyInputPage() {
 
     const calculatedOutput = useMemo(() => {
         if (!currentMachine || watchIsStopped) return 0;
+        
+        // Luôn lấy giá trị từ form để đảm bảo tính toán theo số người dùng vừa sửa
         const start = Number(watchStartIndex) || 0;
         const end = Number(watchEndIndex);
         
@@ -260,18 +262,15 @@ export default function DailyInputPage() {
         const type = currentMachine.formulaType;
         const delta = end - start;
 
-        // Xử lý logic Reset đồng hồ: Nếu chỉ số bị quay vòng (End < Start), 
-        // nhưng người dùng không bật "Sửa chỉ số trước" thì có thể là lỗi.
-        // Tuy nhiên, nếu họ bật "Sửa chỉ số trước" thì họ sẽ chủ động sửa startIndex cho nhỏ hơn endIndex.
-        
-        if (type === 1) result = end;
-        else if (type === 2) result = delta;
-        else if (type === 3) {
+        // Công thức tính toán theo loại máy
+        if (type === 1) result = end; // Nhập thẳng kg
+        else if (type === 2) result = delta; // Chỉ số Sau - Trước
+        else if (type === 3) { // Máy có cọc/NE
             const ne = Number(watchInputNE) || 1;
             const spindles = currentMachine.spindleCount || 1;
             const denominator = ne * 1000 * 1.693;
             if (denominator !== 0) result = (delta * spindles) / denominator;
-        } else if (type === 4) {
+        } else if (type === 4) { // Chỉ số / NE
             const ne = Number(watchInputNE) || 1;
             if (ne !== 0) result = delta / ne;
         }
@@ -289,8 +288,9 @@ export default function DailyInputPage() {
                 return;
             }
 
-            // Nếu sản lượng âm và KHÔNG bật chế độ sửa chỉ số trước/reset, thì mới chặn.
-            // Nếu họ đã bật "Sửa chỉ số trước" và chủ động nhập, ta tin tưởng số liệu đó.
+            // Nếu sản lượng âm: 
+            // - Nếu KHÔNG gạt "Sửa chỉ số trước": Báo lỗi yêu cầu kiểm tra lại.
+            // - Nếu CÓ gạt "Sửa chỉ số trước": Cho phép lưu (tin tưởng người dùng đã chủ động sửa).
             if (calculatedOutput < 0 && !values.isStopped && !values.isReset) {
                 Modal.error({ 
                     title: 'Lỗi số liệu!', 
