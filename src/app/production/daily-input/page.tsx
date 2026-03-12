@@ -252,7 +252,9 @@ export default function DailyInputPage() {
         if (!currentMachine || watchIsStopped) return 0;
         const start = Number(watchStartIndex) || 0;
         const end = Number(watchEndIndex);
-        if (watchEndIndex === null || watchEndIndex === undefined) return 0;
+        
+        // Nếu chưa nhập chỉ số sau thì sản lượng tạm thời là 0
+        if (watchEndIndex === null || watchEndIndex === undefined || isNaN(end)) return 0;
 
         const delta = end - start;
         const type = currentMachine.formulaType;
@@ -269,12 +271,20 @@ export default function DailyInputPage() {
             const ne = Number(watchInputNE) || 1;
             if (ne !== 0) result = delta / ne;
         }
-        return Math.round(result);
+        
+        const final = Math.round(result);
+        return isNaN(final) ? 0 : final;
     }, [watchEndIndex, watchStartIndex, watchIsReset, watchIsStopped, watchInputNE, currentMachine]);
 
     const handleSave = async (saveAndNext: boolean) => {
         try {
             const values = await form.validateFields();
+            
+            if (isNaN(calculatedOutput)) {
+                message.error("Sản lượng tính toán không hợp lệ. Vui lòng kiểm tra lại các chỉ số.");
+                return;
+            }
+
             if (calculatedOutput < 0 && !values.isStopped) {
                 Modal.error({ title: 'Lỗi số liệu!', content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.' });
                 return;

@@ -62,14 +62,18 @@ export async function POST(request: Request) {
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
-    startIndex = startIndex != null ? parseFloat(startIndex) : 0; // != null bắt cả undefined
+    startIndex = startIndex != null ? parseFloat(startIndex) : 0;
     endIndex = endIndex != null ? parseFloat(endIndex) : null;
     inputNE = inputNE != null ? parseFloat(inputNE) : null;
-    finalOutput = Math.round(parseFloat(finalOutput));
+    finalOutput = finalOutput != null ? Math.round(parseFloat(finalOutput)) : 0;
 
-    // Validate sau khi parseInt — bắt NaN nếu giá trị không hợp lệ
-    if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
-      return NextResponse.json({ error: "machineId / shift / itemId không hợp lệ" }, { status: 400 });
+    // Validate sau khi parse — bắt NaN nếu giá trị không hợp lệ
+    if (isNaN(machineId) || isNaN(shift) || isNaN(itemId) || isNaN(startIndex) || isNaN(finalOutput)) {
+      return NextResponse.json({ error: "Dữ liệu số không hợp lệ (NaN)" }, { status: 400 });
+    }
+
+    if (endIndex !== null && isNaN(endIndex)) {
+      return NextResponse.json({ error: "Chỉ số sau không hợp lệ" }, { status: 400 });
     }
 
     // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
@@ -165,12 +169,14 @@ export async function POST(request: Request) {
     }
 
     // Update mặt hàng & NE cho máy để lần sau tự điền
+    const machineUpdateData: any = { currentItemId: itemId };
+    if (inputNE !== null && !isNaN(inputNE)) {
+      machineUpdateData.currentNE = inputNE;
+    }
+
     await prisma.machine.update({
       where: { id: machineId },
-      data: {
-        currentItemId: itemId,
-        ...(inputNE ? { currentNE: parseFloat(inputNE) } : {}),
-      },
+      data: machineUpdateData,
     });
 
     return NextResponse.json(savedLog);
