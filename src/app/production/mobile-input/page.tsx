@@ -246,7 +246,7 @@ function MobileInputContent() {
         const end = Number(currentState.endIndex);
         if (currentState.endIndex === null || currentState.endIndex === undefined) return 0;
 
-        const delta = currentState.isReset ? end : end - start;
+        const delta = end - start;
         const type = currentMachine.formulaType;
         let result = 0;
 
@@ -283,10 +283,10 @@ function MobileInputContent() {
     const handleSave = async (andNext: boolean = false) => {
         if (!currentMachine || !currentState) return;
 
-        if (calculatedOutput < 0 && !currentState.isReset && !currentState.isStopped) {
+        if (calculatedOutput < 0 && !currentState.isStopped) {
             Modal.error({
                 title: "Sản lượng âm!",
-                content: 'Chỉ số SAU nhỏ hơn TRƯỚC. Xin kiểm tra lại. Nếu đồng hồ đã reset, hãy bật "Đã Reset".',
+                content: 'Chỉ số SAU nhỏ hơn TRƯỚC. Xin kiểm tra lại. Nếu chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.',
             });
             return;
         }
@@ -302,7 +302,7 @@ function MobileInputContent() {
                 endIndex: currentState.endIndex,
                 inputNE: currentState.inputNE,
                 finalOutput: calculatedOutput,
-                note: currentState.isStopped ? "Máy dừng" : currentState.isReset ? "Reset đồng hồ" : "",
+                note: currentState.isStopped ? "Máy dừng" : currentState.isReset ? "Sửa chỉ số trước" : "",
             };
 
             const res = await fetch("/api/production/daily-input", {
@@ -775,7 +775,7 @@ function MobileInputContent() {
                         }}>
                         <WarningOutlined style={{ fontSize: 22, color: currentState.isReset ? "#faad14" : "#bbb" }} />
                         <div style={{ fontSize: 14, fontWeight: 600, color: currentState.isReset ? "#d48806" : "#888" }}>
-                            {currentState.isReset ? "ĐÃ RESET" : "Bình thường"}
+                            {currentState.isReset ? "Sửa chỉ số trước" : "Bình thường"}
                         </div>
                     </div>
                 </div>

@@ -226,7 +226,7 @@ export default function DailyInputPage() {
             initValues.endIndex = log.endIndex ?? null;
             initValues.inputNE = log.inputNE ?? machine.currentNE ?? 30;
             initValues.isStopped = log.note === "Máy dừng";
-            initValues.isReset = log.note === "Reset đồng hồ";
+            initValues.isReset = log.note === "Sửa chỉ số trước" || log.note === "Reset đồng hồ";
             message.info("Đang sửa dữ liệu đã nhập. Lưu lại để cập nhật.");
         } else {
             try {
@@ -275,8 +275,8 @@ export default function DailyInputPage() {
     const handleSave = async (saveAndNext: boolean) => {
         try {
             const values = await form.validateFields();
-            if (calculatedOutput < 0 && !values.isReset && !values.isStopped) {
-                Modal.error({ title: 'Lỗi số liệu!', content: 'Sản lượng bị ÂM. Có phải đồng hồ đã bị Reset về 0? Hãy tích vào ô "Đã Reset".' });
+            if (calculatedOutput < 0 && !values.isStopped) {
+                Modal.error({ title: 'Lỗi số liệu!', content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.' });
                 return;
             }
             if (calculatedOutput > 1000) {
@@ -302,7 +302,7 @@ export default function DailyInputPage() {
                 endIndex: values.endIndex,
                 inputNE: values.inputNE,
                 finalOutput: calculatedOutput,
-                note: values.isStopped ? "Máy dừng" : (values.isReset ? "Reset đồng hồ" : "")
+                note: values.isStopped ? "Máy dừng" : (values.isReset ? "Sửa chỉ số trước" : "")
             };
             const res = await fetch('/api/production/daily-input', {
                 method: 'POST',
@@ -536,12 +536,9 @@ export default function DailyInputPage() {
                         </Form.Item>
                         <Form.Item name="isReset" valuePropName="checked" noStyle>
                             <Switch
-                                checkedChildren="Đã Reset"
+                                checkedChildren="Sửa chỉ số trước"
                                 unCheckedChildren="Bình thường"
                                 disabled={watchIsStopped}
-                                onChange={(checked) => {
-                                    if (checked) form.setFieldValue('startIndex', 0);
-                                }}
                                 style={{ background: watchIsReset ? '#faad14' : undefined }}
                             />
                         </Form.Item>
@@ -552,8 +549,9 @@ export default function DailyInputPage() {
                         <Col span={12}>
                             <Form.Item name="startIndex" label="Chỉ số TRƯỚC">
                                 <InputNumber
-                                    style={{ width: '100%', fontSize: isMobile ? 18 : 14 }}
+                                    style={{ width: '100%', fontSize: isMobile ? 18 : 14, background: (!watchIsReset && !watchIsStopped) ? '#f5f5f5' : undefined }}
                                     disabled={watchIsStopped}
+                                    readOnly={!watchIsReset}
                                     controls={false}
                                 />
                             </Form.Item>

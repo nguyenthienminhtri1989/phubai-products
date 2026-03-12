@@ -13,22 +13,27 @@ export async function GET(request: Request) {
     const targetDate = new Date(dateStr);
     const targetShift = parseInt(shiftStr);
 
-    // Logic: Tìm bản ghi có (Ngày nhỏ hơn) HOẶC (Ngày bằng nhưng Ca nhỏ hơn)
+    // Tìm bản ghi gần nhất có endIndex (bỏ qua bản ghi hiện tại và bản ghi không có endIndex)
     const lastLog = await prisma.productionLog.findFirst({
       where: {
         machineId: parseInt(machineId),
-        OR: [
-          { recordDate: { lt: targetDate } },
-          {
-            recordDate: targetDate,
-            shift: { lt: targetShift },
-          },
-        ],
+        endIndex: { not: null },
+        NOT: {
+          AND: [
+            { recordDate: targetDate },
+            { shift: targetShift },
+          ],
+        },
       },
       orderBy: [
-        { recordDate: "desc" }, // Ngày gần nhất
-        { shift: "desc" }, // Ca lớn nhất trong ngày đó
+        { recordDate: "desc" },
+        { shift: "desc" },
       ],
+      select: {
+        endIndex: true,
+        recordDate: true,
+        shift: true,
+      },
     });
 
     return NextResponse.json(lastLog);
