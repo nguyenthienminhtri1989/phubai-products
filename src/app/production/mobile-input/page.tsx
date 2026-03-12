@@ -170,8 +170,10 @@ function MobileInputContent() {
             if (res.ok) {
                 const data = await res.json();
                 setTotalOutput3Ca(data.total || 0);
+            } else {
+                console.error('[daily-total] API error:', res.status);
             }
-        } catch { /* ignore */ }
+        } catch (err) { console.error('[daily-total] fetch error:', err); }
     };
 
     useEffect(() => {
@@ -206,6 +208,13 @@ function MobileInputContent() {
         fetchMachines();
     }, [selectedProcessId]);
 
+    // Re-fetch daily total khi đổi ngày
+    useEffect(() => {
+        if (selectedProcessId) {
+            fetchDailyTotal(selectedProcessId, selectedDate);
+        }
+    }, [selectedDate, selectedProcessId]);
+
     // Load chi so cu
     const loadPreviousIndexes = async (machineList: Machine[], date: Dayjs, shift: number) => {
         const dateStr = date.format("YYYY-MM-DD");
@@ -219,11 +228,13 @@ function MobileInputContent() {
                 const checkRes = await fetch(`/api/production/daily-input?machineId=${m.id}&date=${dateStr}&shift=${shift}`);
                 let alreadySaved = false;
                 let savedEnd = null;
+                let savedOutput = 0;
                 if (checkRes.ok) {
                     const existing = await checkRes.json();
                     if (existing && existing.id) {
                         alreadySaved = true;
                         savedEnd = existing.endIndex;
+                        savedOutput = existing.finalOutput ?? 0;
                     }
                 }
 
@@ -234,7 +245,7 @@ function MobileInputContent() {
                     isReset: false,
                     isStopped: false,
                     saved: alreadySaved,
-                    output: 0,
+                    output: savedOutput,
                 };
             } catch (e) {
                 newStates[m.id] = {
