@@ -15,7 +15,15 @@ interface Machine {
     spindleCount?: number;
     currentItem?: { id: number; name: string };
     currentNE?: number;
-    todayLog?: { id: number; finalOutput: number; startIndex?: number; endIndex?: number; inputNE?: number; note?: string };
+    todayLog?: { 
+        id: number; 
+        itemId: number; // Thêm itemId vào đây để biết log đó của hàng nào
+        finalOutput: number; 
+        startIndex?: number; 
+        endIndex?: number; 
+        inputNE?: number; 
+        note?: string 
+    };
 }
 
 interface Item { id: number; name: string; }
@@ -222,6 +230,7 @@ export default function DailyInputPage() {
         if (machine.todayLog) {
             // Chế độ sửa: điền lại giá trị đã nhập trước đó
             const log = machine.todayLog;
+            initValues.itemId = log.itemId ?? machine.currentItem?.id; // Ưu tiên itemId của bản ghi cũ
             initValues.startIndex = log.startIndex ?? 0;
             initValues.endIndex = log.endIndex ?? null;
             initValues.inputNE = log.inputNE ?? machine.currentNE ?? 30;
@@ -334,6 +343,7 @@ export default function DailyInputPage() {
                 ...m,
                 todayLog: {
                     id: m.todayLog?.id ?? 0,
+                    itemId: payload.itemId, // Lưu lại itemId để khi sửa upsert tìm đúng bản ghi
                     finalOutput: calculatedOutput,
                     startIndex: payload.startIndex,
                     endIndex: payload.endIndex,
