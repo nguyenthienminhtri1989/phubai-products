@@ -9,7 +9,8 @@ const normalizeDate = (dateStr: string) => {
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  if (!session?.user?.id)
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const machineId = searchParams.get("machineId");
@@ -33,11 +34,20 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+    if (!session?.user?.id)
+      return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
 
     const body = await request.json();
     const { recordDate, note } = body;
-    let { machineId, shift, itemId, startIndex, endIndex, inputNE, finalOutput } = body;
+    let {
+      machineId,
+      shift,
+      itemId,
+      startIndex,
+      endIndex,
+      inputNE,
+      finalOutput,
+    } = body;
 
     // 1. Ép kiểu dữ liệu an toàn
     machineId = parseInt(machineId);
@@ -49,7 +59,10 @@ export async function POST(request: Request) {
     finalOutput = finalOutput != null ? Math.round(parseFloat(finalOutput)) : 0;
 
     if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
-      return NextResponse.json({ error: "Dữ liệu không hợp lệ" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Dữ liệu không hợp lệ" },
+        { status: 400 },
+      );
     }
 
     // 2. Chuẩn hóa ngày
@@ -102,9 +115,17 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Save Error Details:", error);
     // Nếu vẫn lỗi P2002 sau khi dùng upsert, có thể do itemId bị thay đổi
-    return NextResponse.json({ 
-      error: "Lỗi lưu dữ liệu", 
-      detail: error.code === 'P2002' ? "Xung đột dữ liệu ca làm việc" : error.message 
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Lỗi lưu dữ liệu",
+        detail:
+          error.code === "P2002"
+            ? "Xung đột dữ liệu ca làm việc"
+            : error.message,
+      },
+      { status: 500 },
+    );
   }
 }
+
+// CODE ĐÃ THỰC SỰ ĐƯỢC ĐẨY LÊN GIT CHƯA??????
