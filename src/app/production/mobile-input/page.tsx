@@ -115,6 +115,7 @@ function MobileInputContent() {
     const [itemChangeCutover, setItemChangeCutover] = useState<number | null>(null);
     const [itemChangeNewId, setItemChangeNewId] = useState<number | null>(null);
     const [itemChangeSaving, setItemChangeSaving] = useState(false);
+    const [totalOutput3Ca, setTotalOutput3Ca] = useState(0);
 
     // ============================
     // FETCH DATA
@@ -163,12 +164,25 @@ function MobileInputContent() {
     }, [status, session]);
 
     // Fetch machines khi chon cong doan
+    const fetchDailyTotal = async (processId: number, date: Dayjs) => {
+        try {
+            const res = await fetch(`/api/production/daily-total?processId=${processId}&date=${date.format('YYYY-MM-DD')}`);
+            if (res.ok) {
+                const data = await res.json();
+                setTotalOutput3Ca(data.total || 0);
+            }
+        } catch { /* ignore */ }
+    };
+
     useEffect(() => {
         if (!selectedProcessId) return;
         const fetchMachines = async () => {
             setLoadingMachines(true);
             try {
-                const res = await fetch("/api/machines");
+                const [res] = await Promise.all([
+                    fetch("/api/machines"),
+                    fetchDailyTotal(selectedProcessId, selectedDate),
+                ]);
                 if (res.ok) {
                     const all = await res.json();
                     const filtered = all
@@ -274,6 +288,10 @@ function MobileInputContent() {
 
     const savedCount = useMemo(() =>
         Object.values(inputStates).filter(s => s.saved).length
+        , [inputStates]);
+
+    const totalOutputCa = useMemo(() =>
+        Object.values(inputStates).reduce((sum, s) => sum + (s.saved ? (s.output || 0) : 0), 0)
         , [inputStates]);
 
     // ============================
@@ -722,9 +740,14 @@ function MobileInputContent() {
                         );
                     })}
                 </div>
-                <Progress percent={Math.round((savedCount / machines.length) * 100)} size="small"
-                    style={{ padding: "0 12px", marginBottom: 4 }}
-                    format={() => `${savedCount}/${machines.length}`} />
+                <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', marginBottom: 4, gap: 8 }}>
+                    <Progress percent={Math.round((savedCount / machines.length) * 100)} size="small"
+                        style={{ flex: 1 }}
+                        format={() => `${savedCount}/${machines.length}`} />
+                    <div style={{ fontSize: 12, color: '#389e0d', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {totalOutputCa} / {totalOutput3Ca} kg
+                    </div>
+                </div>
             </div>
 
             {/* TEN MAY */}

@@ -48,6 +48,7 @@ export default function DailyInputPage() {
     const [items, setItems] = useState<Item[]>([]);
     const [loading, setLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [totalOutput3Ca, setTotalOutput3Ca] = useState(0);
 
     // Đổi hàng giữa ca
     const [isItemChangeVisible, setIsItemChangeVisible] = useState(false);
@@ -201,8 +202,15 @@ export default function DailyInputPage() {
         try {
             const dateStr = selectedDate.format('YYYY-MM-DD');
             const query = `?processId=${selectedProcessId}&date=${dateStr}&shift=${selectedShift}`;
-            const res = await fetch(`/api/production/daily-status${query}`);
+            const [res, resTotal] = await Promise.all([
+                fetch(`/api/production/daily-status${query}`),
+                fetch(`/api/production/daily-total?processId=${selectedProcessId}&date=${dateStr}`),
+            ]);
             setMachines(await res.json());
+            if (resTotal.ok) {
+                const data = await resTotal.json();
+                setTotalOutput3Ca(data.total || 0);
+            }
         } catch { message.error("Lỗi tải máy"); }
         finally { setLoading(false); }
     };
@@ -487,8 +495,8 @@ export default function DailyInputPage() {
                             </Col>
                             <Col>
                                 <Statistic
-                                    title="Tổng sản lượng"
-                                    value={totalOutput}
+                                    title="SL Ca / SL Ngày"
+                                    value={`${totalOutput} / ${totalOutput3Ca}`}
                                     suffix="kg"
                                     styles={{ content: { fontSize: isMobile ? 16 : 20, color: '#389e0d' } }}
                                 />
