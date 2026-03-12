@@ -32,9 +32,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // 1. LẤY THÔNG TIN NGƯỜI DÙNG
     const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
     }
 
@@ -50,15 +49,7 @@ export async function POST(request: Request) {
       finalOutput,
     } = body;
 
-    // Validate Input
-    if (!machineId || !recordDate || !shift || !itemId) {
-      return NextResponse.json(
-        { error: "Thiếu thông tin bắt buộc" },
-        { status: 400 },
-      );
-    }
-
-    // Ép kiểu an toàn
+    // 1. Ép kiểu và kiểm tra dữ liệu đầu vào
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
@@ -67,58 +58,22 @@ export async function POST(request: Request) {
     inputNE = inputNE != null ? parseFloat(inputNE) : null;
     finalOutput = finalOutput != null ? Math.round(parseFloat(finalOutput)) : 0;
 
-    // Validate sau khi parse — bắt NaN nếu giá trị không hợp lệ
-    if (isNaN(machineId) || isNaN(shift) || isNaN(itemId) || isNaN(startIndex) || isNaN(finalOutput)) {
-      return NextResponse.json({ error: "Dữ liệu số không hợp lệ (NaN)" }, { status: 400 });
+    if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
+      return NextResponse.json({ error: "Thông tin máy/ca/hàng không hợp lệ" }, { status: 400 });
     }
 
-    if (endIndex !== null && isNaN(endIndex)) {
-      return NextResponse.json({ error: "Chỉ số sau không hợp lệ" }, { status: 400 });
-    }
-
-    // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
-    // Chặn user READ_ONLY — không có quyền ghi dữ liệu
-    const accessLevel = (session.user as any).accessLevel;
-    if (session.user.role !== "ADMIN" && accessLevel === "READ_ONLY") {
-      return NextResponse.json(
-        { error: "Tài khoản chỉ có quyền xem. Liên hệ quản trị viên để được cấp quyền nhập liệu." },
-        { status: 403 },
-      );
-    }
-
-    // Nếu không phải ADMIN, bắt buộc phải kiểm tra Process
-    if (session.user.role !== "ADMIN") {
-      // Lấy thông tin máy để biết nó thuộc công đoạn nào
-      const targetMachine = await prisma.machine.findUnique({
-        where: { id: machineId },
-        select: { processId: true },
-      });
-
-      if (!targetMachine) {
-        return NextResponse.json(
-          { error: "Máy không tồn tại" },
-          { status: 404 },
-        );
-      }
-
-      // So sánh công đoạn của User và công đoạn của Máy
-      const userProcessIds: number[] = (session.user as any).processIds || [];
-
-      if (!userProcessIds.includes(targetMachine.processId)) {
-        return NextResponse.json(
-          {
-            error:
-              "BẠN KHÔNG CÓ QUYỀN! Tài khoản của bạn không được phép nhập liệu cho máy thuộc công đoạn này.",
-          },
-          { status: 403 },
-        );
-      }
-    }
-
-    // Xử lý Date: Đảm bảo ngày ở định dạng ISO 00:00:00 để khớp với @db.Date
+    // 2. Xử lý ngày tháng chuẩn (tránh lệch múi giờ)
+    // Dùng chuỗi YYYY-MM-DD trực tiếp để Prisma xử lý @db.Date chính xác
     const dateObj = new Date(`${recordDate}T00:00:00.000Z`);
 
-    // Tìm xem đã có chưa (Update hay Create) - tìm theo cả itemId để hỗ trợ đổi hàng giữa ca
+    // 3. Kiểm tra quyền hạn
+    const accessLevel = (session.user as any).accessLevel;
+    if (session.user.role !== "ADMIN" && accessLevel === "READ_ONLY") {
+      return NextResponse.json({ error: "Tài khoản không có quyền nhập liệu" }, { status: 403 });
+    }
+
+    // 4. Tìm bản ghi cũ để cập nhật hoặc tạo mới
+    // Tìm chính xác theo tổ hợp Unique: Máy + Ngày + Ca + Mặt hàng
     const existingLog = await prisma.productionLog.findFirst({
       where: {
         machineId,
@@ -128,6 +83,7 @@ export async function POST(request: Request) {
       },
     });
 
+    const userId = parseInt(session.user.id);
     const dataToSave = {
       machineId,
       recordDate: dateObj,
@@ -138,40 +94,43 @@ export async function POST(request: Request) {
       inputNE,
       finalOutput,
       note,
-      createdById: parseInt(session.user.id),
+      createdById: isNaN(userId) ? null : userId,
     };
 
     let savedLog;
-    try {
-      if (existingLog) {
-        savedLog = await prisma.productionLog.update({
-          where: { id: existingLog.id },
+    if (existingLog) {
+      // Nếu đã có bản ghi, thực hiện Cập nhật
+      savedLog = await prisma.productionLog.update({
+        where: { id: existingLog.id },
+        data: dataToSave,
+      });
+    } else {
+      // Nếu chưa có, tạo mới (Sử dụng try-catch riêng để bắt lỗi Unique)
+      try {
+        savedLog = await prisma.productionLog.create({
           data: dataToSave,
         });
-      } else {
-        // Sử dụng upsert để an toàn hơn thay vì create đơn thuần
-        savedLog = await prisma.productionLog.upsert({
-          where: {
-            machineId_recordDate_shift_itemId: {
-              machineId,
-              recordDate: dateObj,
-              shift,
-              itemId,
-            }
-          },
-          update: dataToSave,
-          create: dataToSave,
-        });
+      } catch (createError: any) {
+        // Nếu xảy ra lỗi trùng lặp (P2002), tìm lại lần nữa và ghi đè
+        if (createError.code === "P2002") {
+          const fallbackLog = await prisma.productionLog.findFirst({
+            where: { machineId, recordDate: dateObj, shift, itemId },
+          });
+          if (fallbackLog) {
+            savedLog = await prisma.productionLog.update({
+              where: { id: fallbackLog.id },
+              data: dataToSave,
+            });
+          } else {
+            throw createError;
+          }
+        } else {
+          throw createError;
+        }
       }
-    } catch (dbError: any) {
-      console.error("Database Save Error:", dbError);
-      return NextResponse.json({ 
-        error: "Lỗi cơ sở dữ liệu", 
-        detail: dbError.message 
-      }, { status: 500 });
     }
 
-    // Update mặt hàng & NE cho máy để lần sau tự điền
+    // 5. Cập nhật trạng thái máy (Mặt hàng và Chi số hiện tại)
     const machineUpdateData: any = { currentItemId: itemId };
     if (inputNE !== null && !isNaN(inputNE)) {
       machineUpdateData.currentNE = inputNE;
@@ -183,8 +142,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(savedLog);
-  } catch (error) {
-    console.error("Save Error:", error);
-    return NextResponse.json({ error: "Lỗi hệ thống" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Critical Save Error:", error);
+    return NextResponse.json({ 
+      error: "Lỗi hệ thống khi lưu", 
+      message: error.message 
+    }, { status: 500 });
   }
 }
