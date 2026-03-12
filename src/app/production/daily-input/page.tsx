@@ -1,3 +1,5 @@
+// TEST LẠI XEM CODE CÓ PUSH LÊN GIT THÀNH CÔNG KHÔNG?
+
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -15,14 +17,14 @@ interface Machine {
     spindleCount?: number;
     currentItem?: { id: number; name: string };
     currentNE?: number;
-    todayLog?: { 
-        id: number; 
+    todayLog?: {
+        id: number;
         itemId: number; // Thêm itemId vào đây để biết log đó của hàng nào
-        finalOutput: number; 
-        startIndex?: number; 
-        endIndex?: number; 
-        inputNE?: number; 
-        note?: string 
+        finalOutput: number;
+        startIndex?: number;
+        endIndex?: number;
+        inputNE?: number;
+        note?: string
     };
 }
 
@@ -255,15 +257,15 @@ export default function DailyInputPage() {
 
     const totalOutput = useMemo(() =>
         machines.reduce((sum, m) => sum + (m.todayLog?.finalOutput ?? 0), 0),
-    [machines]);
+        [machines]);
 
     const calculatedOutput = useMemo(() => {
         if (!currentMachine || watchIsStopped) return 0;
-        
+
         // Luôn lấy giá trị từ form để đảm bảo tính toán theo số người dùng vừa sửa
         const start = Number(watchStartIndex) || 0;
         const end = Number(watchEndIndex);
-        
+
         // Nếu chưa nhập chỉ số sau thì sản lượng tạm thời là 0
         if (watchEndIndex === null || watchEndIndex === undefined || isNaN(end)) return 0;
 
@@ -283,7 +285,7 @@ export default function DailyInputPage() {
             const ne = Number(watchInputNE) || 1;
             if (ne !== 0) result = delta / ne;
         }
-        
+
         const final = Math.round(result);
         return isNaN(final) ? 0 : final;
     }, [watchEndIndex, watchStartIndex, watchIsReset, watchIsStopped, watchInputNE, currentMachine]);
@@ -291,7 +293,7 @@ export default function DailyInputPage() {
     const handleSave = async (saveAndNext: boolean) => {
         try {
             const values = await form.validateFields();
-            
+
             if (isNaN(calculatedOutput)) {
                 message.error("Sản lượng tính toán không hợp lệ. Vui lòng kiểm tra lại các chỉ số.");
                 return;
@@ -301,9 +303,9 @@ export default function DailyInputPage() {
             // - Nếu KHÔNG gạt "Sửa chỉ số trước": Báo lỗi yêu cầu kiểm tra lại.
             // - Nếu CÓ gạt "Sửa chỉ số trước": Cho phép lưu (tin tưởng người dùng đã chủ động sửa).
             if (calculatedOutput < 0 && !values.isStopped && !values.isReset) {
-                Modal.error({ 
-                    title: 'Lỗi số liệu!', 
-                    content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu đồng hồ bị quay vòng hoặc chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.' 
+                Modal.error({
+                    title: 'Lỗi số liệu!',
+                    content: 'Sản lượng bị ÂM. Chỉ số SAU phải lớn hơn chỉ số TRƯỚC. Nếu đồng hồ bị quay vòng hoặc chỉ số trước bị sai, hãy bật "Sửa chỉ số trước" để chỉnh lại.'
                 });
                 return;
             }
