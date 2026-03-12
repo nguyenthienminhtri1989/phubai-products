@@ -62,10 +62,15 @@ export async function POST(request: Request) {
     machineId = parseInt(machineId);
     shift = parseInt(shift);
     itemId = parseInt(itemId);
-    startIndex = startIndex !== null ? parseFloat(startIndex) : 0; // Lưu 0 nếu null
-    endIndex = endIndex !== null ? parseFloat(endIndex) : null;
-    inputNE = inputNE ? parseFloat(inputNE) : null;
+    startIndex = startIndex != null ? parseFloat(startIndex) : 0; // != null bắt cả undefined
+    endIndex = endIndex != null ? parseFloat(endIndex) : null;
+    inputNE = inputNE != null ? parseFloat(inputNE) : null;
     finalOutput = Math.round(parseFloat(finalOutput));
+
+    // Validate sau khi parseInt — bắt NaN nếu giá trị không hợp lệ
+    if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
+      return NextResponse.json({ error: "machineId / shift / itemId không hợp lệ" }, { status: 400 });
+    }
 
     // 2. LOGIC BẢO MẬT: KIỂM TRA QUYỀN NHẬP LIỆU
     // Chặn user READ_ONLY — không có quyền ghi dữ liệu
@@ -119,29 +124,44 @@ export async function POST(request: Request) {
       },
     });
 
-    let savedLog;
     const dataToSave = {
       machineId,
       recordDate: dateObj,
       shift,
       itemId,
-      startIndex, // Đã có trong Schema
+      startIndex,
       endIndex,
       inputNE,
       finalOutput,
       note,
-      createdById: parseInt(session.user.id), // <-- Lưu ID người nhập vào đây
+      createdById: parseInt(session.user.id),
     };
 
+    let savedLog;
     if (existingLog) {
       savedLog = await prisma.productionLog.update({
         where: { id: existingLog.id },
         data: dataToSave,
       });
     } else {
-      savedLog = await prisma.productionLog.create({
-        data: dataToSave,
-      });
+      try {
+        savedLog = await prisma.productionLog.create({ data: dataToSave });
+      } catch (createError: any) {
+        // P2002 = unique constraint violation: record tồn tại nhưng findFirst miss
+        // (thường do timezone @db.Date hoặc itemId không khớp ở lần tìm trước)
+        if (createError.code === "P2002") {
+          const conflicting = await prisma.productionLog.findFirst({
+            where: { machineId, recordDate: dateObj, shift, itemId },
+          });
+          if (!conflicting) throw createError;
+          savedLog = await prisma.productionLog.update({
+            where: { id: conflicting.id },
+            data: dataToSave,
+          });
+        } else {
+          throw createError;
+        }
+      }
     }
 
     // Update mặt hàng & NE cho máy để lần sau tự điền
