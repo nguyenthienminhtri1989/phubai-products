@@ -37,7 +37,11 @@ export async function POST(req: Request) {
       },
     });
     return NextResponse.json(newMachine);
-  } catch (e) {
-    return NextResponse.json({ error: "Lỗi tạo máy" }, { status: 500 });
+  } catch (e: any) {
+    console.error("Machine create error:", e);
+    if (e.code === 'P2002') {
+      return NextResponse.json({ error: "Tên máy đã tồn tại. Vui lòng đặt tên khác." }, { status: 400 });
+    }
+    return NextResponse.json({ error: e.message || "Lỗi tạo máy" }, { status: 500 });
   }
 }

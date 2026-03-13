@@ -98,12 +98,15 @@ export default function MachinesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(values)
             });
-            if (!res.ok) throw new Error("Lỗi lưu");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Lỗi lưu");
+            }
 
             message.success("Thành công!");
             setIsModalOpen(false);
             fetchData();
-        } catch (e) { message.error("Lỗi khi lưu"); }
+        } catch (e: any) { message.error(e.message || "Lỗi khi lưu"); }
     };
 
     // 3. Xử lý Xóa

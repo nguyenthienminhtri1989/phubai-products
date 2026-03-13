@@ -55,7 +55,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname === "/production/mobile-input" ||
-    pathname === "/production/mobile-stops"
+    pathname === "/production/mobile-stops" ||
+    pathname === "/production/mobile-report"
   ) {
     return <>{children}</>;
   }
@@ -97,6 +98,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           key: "/production/history",
           label: "Lịch sử & Báo cáo",
           icon: <HistoryOutlined />,
+        },
+        {
+          key: "/production/mobile-report",
+          label: "Báo cáo Mobile",
+          icon: <MobileOutlined />,
         },
         {
           key: "/dashboard/maintenance",
