@@ -9,7 +9,7 @@ import {
     SaveOutlined, ArrowRightOutlined,
     CheckCircleOutlined, WarningOutlined, StopOutlined,
     LeftOutlined, RightOutlined,
-    ThunderboltOutlined, ScanOutlined, SwapOutlined
+    ThunderboltOutlined, ScanOutlined, SwapOutlined, HomeOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -602,7 +602,12 @@ function MobileInputContent() {
         return (
             <div style={styles.page}>
                 <div style={styles.header}>
-                    <div style={{ width: 32 }} /> {/* spacer */}
+                    <Button
+                        type="text"
+                        icon={<HomeOutlined />}
+                        style={{ color: "white", fontSize: 18 }}
+                        onClick={() => router.push("/")}
+                    />
                     <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{ fontSize: 20, fontWeight: 700 }}>Nhập sản lượng</div>
                         <div
@@ -719,6 +724,12 @@ function MobileInputContent() {
                         <span style={{ fontSize: 11, opacity: 0.7 }}>✏️</span>
                     </div>
                 </div>
+                <Button
+                    type="text"
+                    icon={<HomeOutlined />}
+                    style={{ color: "white", fontSize: 18 }}
+                    onClick={() => router.push("/")}
+                />
                 <Button icon={<ScanOutlined />} size="small"
                     onClick={handleScanQR}
                     style={{ border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 14, borderRadius: 8 }}>

@@ -24,6 +24,8 @@ import {
   MobileOutlined,
   PauseCircleOutlined,
   TagsOutlined,
+  ScheduleOutlined,
+  ProductOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -92,22 +94,26 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: "Quản lý Sản xuất",
       children: [
         { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
-        { key: "/production/daily-input", label: "Nhập sản lượng" },
-        { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
+        { key: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
+        {
+          key: "sub-mobile",
+          icon: <MobileOutlined />,
+          label: "Mobile",
+          children: [
+            { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
+            { key: "/production/mobile-report", label: "Báo cáo Mobile", icon: <MobileOutlined /> },
+            { key: "/production/mobile-stops", label: "Báo sự cố", icon: <MobileOutlined /> },
+          ],
+        },
         {
           key: "/production/history",
           label: "Lịch sử & Báo cáo",
           icon: <HistoryOutlined />,
         },
         {
-          key: "/production/mobile-report",
-          label: "Báo cáo Mobile",
-          icon: <MobileOutlined />,
-        },
-        {
           key: "/dashboard/maintenance",
           label: "Nhật ký bảo dưỡng",
-          icon: <HistoryOutlined />,
+          icon: <ScheduleOutlined />,
         },
         {
           key: "/machines/qr-machines",
@@ -128,11 +134,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           key: "/production/machine-stops",
           label: "Ghi nhận dừng máy",
           icon: <PauseCircleOutlined />,
-        },
-        {
-          key: "/production/mobile-stops",
-          label: "Dừng máy Mobile",
-          icon: <MobileOutlined />,
         },
         {
           key: "/production/stop-history",
@@ -236,7 +237,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy"]}
+          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile"]}
           items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {

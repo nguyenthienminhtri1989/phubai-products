@@ -8,11 +8,11 @@ import {
 import {
     LeftOutlined, RightOutlined,
     CheckCircleOutlined, ExclamationCircleOutlined,
-    ClockCircleOutlined, ReloadOutlined,
+    ClockCircleOutlined, ReloadOutlined, HomeOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -62,6 +62,7 @@ type View = "machine" | "report-stop" | "confirm-restart";
 function MobileStopsContent() {
     const { data: session, status } = useSession();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const paramProcessId = searchParams.get("processId");
 
     const userRole = (session?.user as any)?.role;
@@ -301,12 +302,17 @@ function MobileStopsContent() {
         return (
             <div style={S.page}>
                 <div style={{ ...S.header, background: "linear-gradient(135deg, #ff4d4f, #cf1322)" }}>
-                    <div style={{ width: 32 }} />
+                    <Button
+                        type="text"
+                        icon={<HomeOutlined />}
+                        style={{ color: "white", fontSize: 18 }}
+                        onClick={() => router.push("/")}
+                    />
                     <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{ fontSize: 20, fontWeight: 700 }}>Dừng máy</div>
                         <div style={{ fontSize: 13, opacity: 0.85 }}>Chọn công đoạn làm việc</div>
                     </div>
-                    <div style={{ width: 32 }} />
+                    <div style={{ width: 40 }} />
                 </div>
                 <div style={{ padding: 16 }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -574,6 +580,12 @@ function MobileStopsContent() {
                             : "Tất cả máy đang chạy ✓"}
                     </div>
                 </div>
+                <Button
+                    type="text"
+                    icon={<HomeOutlined />}
+                    style={{ color: "white", fontSize: 18 }}
+                    onClick={() => router.push("/")}
+                />
                 <Button icon={<ReloadOutlined />} size="small"
                     onClick={() => setRefreshTick(v => v + 1)}
                     style={{ border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", borderRadius: 8 }} />
