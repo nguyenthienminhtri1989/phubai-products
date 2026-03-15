@@ -69,6 +69,7 @@ model Item {
   updatedAt    DateTime @updatedAt
 
   productionLines ProductionLine[]
+  iotMaps         IotItemMap[]
 
   @@map("items")
 }
@@ -111,6 +112,7 @@ model Machine {
   linksFrom ProductionLineLink[] @relation("LinkFrom")
   linksTo   ProductionLineLink[] @relation("LinkTo")
   stopLogs  MachineStopLog[]
+  iotMaps   IotMachineMap[]
 
   @@map("machines")
 }
@@ -502,4 +504,77 @@ model MachineStopLog {
   @@index([recordDate])
   @@index([categoryId])
   @@map("machine_stop_logs")
+}
+
+// ==========================================
+// MODULE IMPORT IOT EXCEL
+// ==========================================
+
+// Nguồn IoT — mỗi phần mềm IoT là 1 source
+model IotSource {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  // Mapping tên ca: lưu dạng JSON key-value
+  // VD: {"Ca sáng":1, "Shift A":1, "Ca chiều":2, "Ca đêm":3}
+  shiftMap    Json     @default("{}")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  machineMaps IotMachineMap[]
+  itemMaps    IotItemMap[]
+  importLogs  IotImportLog[]
+
+  @@map("iot_sources")
+}
+
+// Mapping tên máy: tên bên IoT ↔ machineId bên ERP
+model IotMachineMap {
+  id        Int       @id @default(autoincrement())
+  sourceId  Int
+  source    IotSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  iotName   String
+  machineId Int
+  machine   Machine   @relation(fields: [machineId], references: [id])
+  createdAt DateTime  @default(now())
+
+  @@unique([sourceId, iotName])
+  @@index([sourceId])
+  @@map("iot_machine_maps")
+}
+
+// Mapping tên mặt hàng: tên bên IoT ↔ itemId bên ERP
+model IotItemMap {
+  id        Int       @id @default(autoincrement())
+  sourceId  Int
+  source    IotSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  iotName   String
+  itemId    Int
+  item      Item      @relation(fields: [itemId], references: [id])
+  createdAt DateTime  @default(now())
+
+  @@unique([sourceId, iotName])
+  @@index([sourceId])
+  @@map("iot_item_maps")
+}
+
+// Lịch sử mỗi lần import
+model IotImportLog {
+  id           Int       @id @default(autoincrement())
+  sourceId     Int
+  source       IotSource @relation(fields: [sourceId], references: [id])
+  fileName     String
+  totalRows    Int       @default(0)
+  insertedRows Int       @default(0)
+  updatedRows  Int       @default(0)
+  skippedRows  Int       @default(0)
+  errorRows    Int       @default(0)
+  status       String    // "SUCCESS" | "PARTIAL" | "FAILED"
+  errorDetail  Json?
+  importedById Int?
+  importedAt   DateTime  @default(now())
+
+  @@index([sourceId])
+  @@map("iot_import_logs")
 }

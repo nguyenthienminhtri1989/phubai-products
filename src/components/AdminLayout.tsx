@@ -27,6 +27,7 @@ import {
   ScheduleOutlined,
   ProductOutlined,
   LineChartOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -107,11 +108,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           ],
         },
         {
-          key: "/production/history",
-          label: "Lịch sử & Báo cáo",
-          icon: <HistoryOutlined />,
-        },
-        {
           key: "/dashboard/maintenance",
           label: "Nhật ký bảo dưỡng",
           icon: <ScheduleOutlined />,
@@ -184,11 +180,25 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: "Báo cáo",
       children: [
         {
+          key: "/production/history",
+          label: "Lịch sử & Báo cáo",
+          icon: <HistoryOutlined />,
+        },
+        {
           key: "/reports/production",
-          label: "Báo cáo sản lượng",
+          label: "Biểu đồ sản lượng",
           icon: <LineChartOutlined />,
         },
       ],
+    } as any);
+  }
+
+  // 3c. Menu Import IoT (Admin + Manager)
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+    baseMenuItems.push({
+      key: "/iot-import",
+      icon: <UploadOutlined />,
+      label: "Import IoT",
     } as any);
   }
 
