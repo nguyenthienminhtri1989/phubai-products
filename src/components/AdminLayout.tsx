@@ -26,6 +26,7 @@ import {
   TagsOutlined,
   ScheduleOutlined,
   ProductOutlined,
+  LineChartOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -175,6 +176,22 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   }
   // ========================================================
 
+  // 3b. Menu Báo cáo (Admin + Manager)
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+    baseMenuItems.push({
+      key: "sub-reports",
+      icon: <LineChartOutlined />,
+      label: "Báo cáo",
+      children: [
+        {
+          key: "/reports/production",
+          label: "Báo cáo sản lượng",
+          icon: <LineChartOutlined />,
+        },
+      ],
+    } as any);
+  }
+
   // 4. Menu Quản trị hệ thống (Chỉ Admin mới thấy)
   if (isAdmin) {
     baseMenuItems.push({
@@ -237,7 +254,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile"]}
+          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile", "sub-reports"]}
           items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
