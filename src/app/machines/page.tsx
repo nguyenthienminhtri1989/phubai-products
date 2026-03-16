@@ -61,9 +61,9 @@ export default function MachinesPage() {
             setProcesses(await pRes.json());
             setItems(await iRes.json());
 
-            // Admin dùng filter controls; non-admin lấy tất cả rồi lọc client-side
+            // Admin và Manager dùng filter controls; non-admin lấy tất cả rồi lọc client-side
             let query = "?";
-            if (isAdmin) {
+            if (isAdmin || isManager) {
                 if (filterFactory) query += `factoryId=${filterFactory}&`;
                 if (filterProcess) query += `processId=${filterProcess}`;
             }
@@ -189,7 +189,7 @@ export default function MachinesPage() {
             <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={isAdmin ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button> : null}>
                 {/* TOOLBAR */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
-                    {isAdmin && (
+                    {(isAdmin || isManager) && (
                         <>
                             <Col span={6}>
                                 <Select
@@ -209,7 +209,7 @@ export default function MachinesPage() {
                             </Col>
                         </>
                     )}
-                    <Col span={isAdmin ? 6 : 18}>
+                    <Col span={(isAdmin || isManager) ? 6 : 18}>
                         <Input placeholder="Tìm tên máy..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} />
                     </Col>
                     <Col span={6} style={{ textAlign: 'right' }}>

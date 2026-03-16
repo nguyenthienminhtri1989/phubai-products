@@ -182,8 +182,11 @@ export default function DailyInputPage() {
         }
     };
 
-    // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER ---
+    // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER (NGOẠI TRỪ ADMIN & MANAGER) ---
     useEffect(() => {
+        const isAdminOrManager = session?.user?.role === "ADMIN" || (session?.user as any)?.accessLevel === "MANAGER";
+        if (isAdminOrManager) return;
+
         const userProcessIds: number[] = (session?.user as any)?.processIds || [];
         if (processes.length > 0 && userProcessIds.length > 0) {
             const userProcessId = userProcessIds[0];
