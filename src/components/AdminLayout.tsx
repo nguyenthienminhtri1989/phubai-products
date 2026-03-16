@@ -28,6 +28,8 @@ import {
   ProductOutlined,
   LineChartOutlined,
   UploadOutlined,
+  ToolOutlined,
+  AlertOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -60,7 +62,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     pathname === "/register" ||
     pathname === "/production/mobile-input" ||
     pathname === "/production/mobile-stops" ||
-    pathname === "/production/mobile-report"
+    pathname === "/production/mobile-report" ||
+    pathname === "/production/mobile-maintenance"
   ) {
     return <>{children}</>;
   }
@@ -104,7 +107,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           children: [
             { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
             { key: "/production/mobile-report", label: "Báo cáo Mobile", icon: <MobileOutlined /> },
-            { key: "/production/mobile-stops", label: "Báo sự cố", icon: <MobileOutlined /> },
+            { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
+            { key: "/production/mobile-maintenance", label: "Bảo dưỡng", icon: <ToolOutlined /> },
           ],
         },
         {
@@ -194,7 +198,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   }
 
   // 3c. Menu Import IoT (Admin + Manager)
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER" || userRole === "MANAGER") {
     baseMenuItems.push({
       key: "/iot-import",
       icon: <UploadOutlined />,

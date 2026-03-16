@@ -204,7 +204,91 @@ Module ghi nhận các sự kiện dừng máy, giải thích bất thường s�
 
 ---
 
-## 10. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
+## 10. MODULE 6: IMPORT IOT EXCEL (IoT Excel Import)
+
+Module nhập tự động dữ liệu sản lượng từ file Excel xuất bởi các phần mềm IoT của nhà máy.
+
+### 10.1. Khái niệm cốt lõi
+
+- **IotSource (Nguồn IoT):** Mỗi phần mềm IoT là 1 source riêng biệt (VD: "IoT Chải thô", "IoT Ghép"). Mỗi source có bộ mapping tên riêng.
+- **Mapping:** Tên máy / tên mặt hàng / tên ca trong file Excel IoT **khác** với tên trong ERP → cần mapping để ánh xạ trước khi import.
+- **shiftMap:** Lưu dạng JSON `{"Ca sáng": 1, "Shift A": 1, "Ca chiều": 2}` trong bảng `iot_sources`.
+- **Luồng wizard 4 bước:** Chọn nguồn & Upload → Khớp tên (chỉ hiện nếu có unmapped) → Preview → Kết quả.
+
+### 10.2. Database Models mới
+
+- **`iot_sources`** — Nguồn IoT: `name` (unique), `description`, `shiftMap` (JSON), `isActive`.
+- **`iot_machine_maps`** — Mapping tên máy IoT ↔ `machineId` ERP. Unique `(sourceId, iotName)`.
+- **`iot_item_maps`** — Mapping tên mặt hàng IoT ↔ `itemId` ERP. Unique `(sourceId, iotName)`.
+- **`iot_import_logs`** — Lịch sử từng lần import: `fileName`, `totalRows`, `insertedRows`, `updatedRows`, `skippedRows`, `errorRows`, `status`, `errorDetail` (JSON), `importedById`.
+
+**Không sửa `ProductionLog`** — Unique constraint `(machineId, recordDate, shift, itemId)` giữ nguyên.
+
+### 10.3. Logic Parse Excel
+
+**Detect cột tự động** (sau khi normalize: trim + lowercase + bỏ dấu):
+- Ngày: chứa `ngay`, `date`, `ngày`
+- Ca: chứa `ca`, `shift`
+- Máy: chứa `may`, `máy`, `machine`
+- Mặt hàng: chứa `mat hang`, `hang`, `item`, `san pham` *(optional)*
+- Sản lượng: chứa `san luong`, `output`, `sl`, `quantity`
+
+**Parse ngày** hỗ trợ 3 dạng: Excel serial number, `DD/MM/YYYY`, `YYYY-MM-DD`, `DD-MM-YYYY`.
+
+**Xác định action:** Sau khi mapping đầy đủ, query `ProductionLog.findUnique` theo unique key → `INSERT` nếu chưa có, `UPDATE` nếu đã tồn tại.
+
+**Row status:** `READY` | `NO_DATE` | `NO_SHIFT` | `NO_MACHINE` | `NO_ITEM`.
+
+### 10.4. API Routes
+
+| Route | Methods | Mô tả |
+|-------|---------|-------|
+| `/api/iot/sources` | GET, POST | Danh sách sources / Tạo mới |
+| `/api/iot/sources/[id]` | PUT, DELETE | Sửa / Xóa (block nếu đã có import log) |
+| `/api/iot/mapping` | GET, POST, DELETE | Xem mapping / Bulk upsert / Xóa từng entry |
+| `/api/iot/parse-excel` | POST | Phân tích file Excel, trả về rows + unmapped lists |
+| `/api/iot/import` | POST | Ghi vào ProductionLog, tạo IotImportLog |
+| `/api/iot/import-logs` | GET | Lịch sử import (kèm tên người thực hiện) |
+
+### 10.5. Files
+
+**API:**
+- `src/app/api/iot/sources/route.ts` — GET list, POST create
+- `src/app/api/iot/sources/[id]/route.ts` — PUT update, DELETE
+- `src/app/api/iot/mapping/route.ts` — GET/POST/DELETE mapping
+- `src/app/api/iot/parse-excel/route.ts` — POST parse file Excel
+- `src/app/api/iot/import/route.ts` — POST thực hiện import vào DB
+- `src/app/api/iot/import-logs/route.ts` — GET lịch sử
+
+**Components:**
+- `src/components/iot-import/ImportWizard.tsx` — Wizard 4 bước (component chính)
+- `src/components/iot-import/MappingStep.tsx` — Bước 2: khớp tên máy/mặt hàng/ca
+- `src/components/iot-import/PreviewStep.tsx` — Bước 3: KPI cards + bảng preview với filter tabs
+- `src/components/iot-import/ImportHistory.tsx` — Bảng lịch sử + drawer chi tiết lỗi
+
+**Pages:**
+- `src/app/iot-import/page.tsx` — Trang chính (2 tabs: Import | Lịch sử)
+- `src/app/iot-import/sources/page.tsx` — Quản lý sources, xem/xóa mapping
+
+### 10.6. Quy tắc import
+
+- Khi import, field cố định: `startIndex = 0`, `endIndex = null`, `inputNE = null`, `note = "Import từ IoT: {sourceName}"`.
+- Chỉ import rows có `status = "READY"`.
+- `INSERT`: tạo bản ghi mới; `UPDATE`: chỉ cập nhật `finalOutput` và `note`.
+- `IotImportLog` được tạo sau **mỗi lần import dù thành công hay thất bại**.
+- Source không thể xóa nếu đã có `IotImportLog` liên quan (chỉ được tắt `isActive`).
+
+### 10.7. Phân quyền
+
+- **Admin hoặc accessLevel = "MANAGER":** Toàn quyền (import, quản lý sources, xem lịch sử).
+- **User thường:** Không có quyền truy cập module này.
+- **Menu sidebar:** Hiển thị mục "Import IoT" (UploadOutlined) cho Admin + Manager.
+
+**Status:** ✅ Completed
+
+---
+
+## 11. NGUYÊN TẮC BẤT BIẾN KHI AI VIẾT CODE (AI CODING RULES)
 
 1. **Tuyệt đối không phá vỡ chuỗi liên tục của Chỉ số.** Không được để khoảng trống dữ liệu.
 2. **Backend là nguồn chân lý (Source of Truth).** Mọi tính toán logic, tìm chỉ số phải nằm ở Backend. Frontend chỉ gửi yêu cầu và render.
@@ -217,4 +301,4 @@ Module ghi nhận các sự kiện dừng máy, giải thích bất thường s�
 _Lưu ý cho AI: Khi nhận được file này, hãy đóng vai trò là Senior Backend/Software Architect, chỉ phát triển tính năng mới dựa trên nền tảng kiến trúc đã có, không thiết kế lại hệ thống._
 
 ---
-_Cập nhật lần cuối: 2026-03-10 — Thêm Module 5: Ghi nhận dừng máy / Sự cố (Machine Stop Logging)_
+_Cập nhật lần cuối: 2026-03-15 — Thêm Module 6: Import IoT Excel (IotSource, mapping, wizard 4 bước)_
