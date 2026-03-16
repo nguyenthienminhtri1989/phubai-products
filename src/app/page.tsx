@@ -11,7 +11,7 @@ import {
   ArrowRightOutlined, CheckCircleOutlined, WarningOutlined,
   ClockCircleOutlined, DashboardOutlined, CalendarOutlined,
   SafetyCertificateOutlined, DatabaseOutlined, ApartmentOutlined,
-  MobileOutlined,
+  MobileOutlined, BarChartOutlined
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -136,6 +136,14 @@ export default function Home() {
       icon: <HistoryOutlined style={{ fontSize: 30, color: "#52c41a" }} />,
       path: "/production/history",
       bg: "#f6ffed", border: "#52c41a",
+    },
+    {
+      key: "chart-report",
+      title: "Báo cáo Biểu đồ",
+      desc: "Phân tích sản lượng qua biểu đồ trực quan",
+      icon: <BarChartOutlined style={{ fontSize: 30, color: "#fa541c" }} />,
+      path: "/reports/production",
+      bg: "#fff2e8", border: "#fa541c",
     },
     {
       key: "maintenance",
