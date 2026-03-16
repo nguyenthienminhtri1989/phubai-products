@@ -125,7 +125,7 @@ export async function POST(req: Request) {
         skippedRows,
         errorRows,
         status: logStatus,
-        errorDetail: errorDetails.length > 0 ? errorDetails : null,
+        errorDetail: errorDetails.length > 0 ? errorDetails : undefined,
         importedById: userId,
       },
     });
