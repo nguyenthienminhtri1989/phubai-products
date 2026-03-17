@@ -182,13 +182,15 @@ export default function DailyInputPage() {
         }
     };
 
-    // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN THEO USER (NGOẠI TRỪ ADMIN & MANAGER) ---
+    // --- TỰ ĐỘNG CHỌN NHÀ MÁY & CÔNG ĐOẠN NẾU USER CHỈ QUẢN LÝ 1 CÔNG ĐOẠN ---
     useEffect(() => {
-        const isAdminOrManager = session?.user?.role === "ADMIN" || (session?.user as any)?.accessLevel === "MANAGER";
-        if (isAdminOrManager) return;
+        const isAdmin = session?.user?.role === "ADMIN";
+        if (isAdmin) return;
 
-        const userProcessIds: number[] = (session?.user as any)?.processIds || [];
-        if (processes.length > 0 && userProcessIds.length > 0) {
+        const rawProcessIds = (session?.user as any)?.processIds || [];
+        const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
+
+        if (processes.length > 0 && userProcessIds.length === 1) {
             const userProcessId = userProcessIds[0];
             const targetProcess = processes.find(p => p.id === userProcessId);
             if (targetProcess) {
@@ -373,7 +375,8 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
-    const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const rawProcessIds = (session?.user as any)?.processIds || [];
+    const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
     const isAdmin = session?.user?.role === "ADMIN";
     const isReadOnly = !isAdmin && (session?.user as any)?.accessLevel === "READ_ONLY";
     // Lock selectors only when user has exactly 1 process (auto-assigned). Multi-process users can switch between their own.
