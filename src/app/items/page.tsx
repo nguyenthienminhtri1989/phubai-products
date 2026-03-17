@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Table, Button, Modal, Form, Input, InputNumber, message, Card, Space, Popconfirm, Tag } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+    Table, Button, Modal, Form, Input, InputNumber, Select,
+    message, Card, Space, Popconfirm, Tag, Upload, Alert,
+} from "antd";
+import {
+    PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
+    SearchOutlined, UploadOutlined,
+} from "@ant-design/icons";
 import { useSession } from "next-auth/react";
+import * as XLSX from "xlsx";
 
 interface ItemData {
     id: number;
@@ -17,6 +24,17 @@ interface ItemData {
     _count?: { productionLogs: number };
 }
 
+interface PreviewData {
+    headers: string[];
+    rows: any[][];
+}
+
+interface ImportResult {
+    imported: number;
+    skipped: number;
+    total: number;
+}
+
 export default function ItemsManagementPage() {
     const { data: session } = useSession();
     const [items, setItems] = useState<ItemData[]>([]);
@@ -24,6 +42,14 @@ export default function ItemsManagementPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ItemData | null>(null);
     const [searchText, setSearchText] = useState("");
+
+    // Import state
+    const [isImportOpen, setIsImportOpen] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [previewData, setPreviewData] = useState<PreviewData>({ headers: [], rows: [] });
+    const [validCount, setValidCount] = useState(0);
+    const [importLoading, setImportLoading] = useState(false);
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
     const [form] = Form.useForm();
 
@@ -50,16 +76,9 @@ export default function ItemsManagementPage() {
     }, []);
 
     // --- 2. Xử lý Lưu (Thêm/Sửa) ---
-    // --- 2. Xử lý Lưu (Thêm/Sửa) ---
     const handleSave = async (values: any) => {
         try {
-            // Nếu có editingItem -> PUT vào /api/items/[id]
-            // Nếu không -> POST vào /api/items
-
-            const url = editingItem
-                ? `/api/items/${editingItem.id}`
-                : "/api/items";
-
+            const url = editingItem ? `/api/items/${editingItem.id}` : "/api/items";
             const method = editingItem ? "PUT" : "POST";
 
             const res = await fetch(url, {
@@ -84,9 +103,7 @@ export default function ItemsManagementPage() {
     // --- 3. Xử lý Xóa ---
     const handleDelete = async (id: number) => {
         try {
-            // Gọi đúng chuẩn RESTful: DELETE /api/items/[id]
             const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
-
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
 
@@ -109,10 +126,82 @@ export default function ItemsManagementPage() {
         setIsModalOpen(true);
     };
 
+    // --- 5. Import Excel ---
+    const handleFileSelect = (file: File): boolean => {
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (!ext || !["xlsx", "xls"].includes(ext)) {
+            message.error("Chỉ chấp nhận file .xlsx hoặc .xls");
+            return false;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const buffer = e.target?.result as ArrayBuffer;
+                const wb = XLSX.read(buffer, { type: "array" });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+
+                if (rows.length < 2) {
+                    message.warning("File trống hoặc không có dữ liệu");
+                    return;
+                }
+
+                const headers = (rows[0] as any[]).map((h) => String(h ?? "").trim());
+                const nameIdx = headers.findIndex((h) => h.toLowerCase() === "name");
+
+                if (nameIdx === -1) {
+                    message.error('Không tìm thấy cột "name" trong file');
+                    return;
+                }
+
+                const dataRows = (rows as any[][]).slice(1).filter((row) => {
+                    const v = row[nameIdx];
+                    return v !== undefined && v !== null && String(v).trim() !== "";
+                });
+
+                setPreviewData({ headers, rows: dataRows.slice(0, 5) });
+                setValidCount(dataRows.length);
+                setImportFile(file);
+                setImportResult(null);
+            } catch {
+                message.error("Không thể đọc file, vui lòng kiểm tra lại");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        return false; // ngăn auto-upload của Ant Design
+    };
+
+    const handleImport = async () => {
+        if (!importFile) return;
+        setImportLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", importFile);
+            const res = await fetch("/api/items/import", { method: "POST", body: formData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Lỗi import");
+            setImportResult(data);
+            fetchItems();
+        } catch (e: any) {
+            message.error(e.message);
+        } finally {
+            setImportLoading(false);
+        }
+    };
+
+    const resetImport = () => {
+        setIsImportOpen(false);
+        setImportFile(null);
+        setPreviewData({ headers: [], rows: [] });
+        setValidCount(0);
+        setImportResult(null);
+    };
+
     const canEdit = (session?.user as any)?.role === "ADMIN" ||
         ["OPERATOR", "MANAGER"].includes((session?.user as any)?.accessLevel);
 
-    // --- 5. Cột bảng ---
+    // --- 6. Cột bảng ---
     const columns = [
         {
             title: "Tên mặt hàng",
@@ -165,7 +254,6 @@ export default function ItemsManagementPage() {
             render: (_: any, r: ItemData) => (
                 <Space>
                     <Button icon={<EditOutlined />} size="small" onClick={() => openModal(r)} />
-
                     <Popconfirm
                         title="Xóa mặt hàng này?"
                         description="Hành động này không thể hoàn tác."
@@ -186,6 +274,26 @@ export default function ItemsManagementPage() {
         }] : []),
     ];
 
+    // --- 7. Preview columns cho import ---
+    const previewColumns = previewData.headers.map((h, i) => ({
+        title: <span style={{ fontSize: 12, fontWeight: 600 }}>{h}</span>,
+        dataIndex: String(i),
+        key: i,
+        ellipsis: true,
+        render: (val: any) =>
+            val !== undefined && val !== null && String(val) !== ""
+                ? String(val)
+                : <span style={{ color: "#ccc" }}>—</span>,
+    }));
+
+    const previewTableData = previewData.rows.map((row, ri) => {
+        const obj: any = { key: ri };
+        previewData.headers.forEach((_, ci) => {
+            obj[String(ci)] = row[ci];
+        });
+        return obj;
+    });
+
     if (!session) return <div className="p-10 text-center">Vui lòng đăng nhập...</div>;
 
     return (
@@ -203,7 +311,19 @@ export default function ItemsManagementPage() {
                             style={{ width: 200 }}
                         />
                         <Button icon={<ReloadOutlined />} onClick={fetchItems}>Tải lại</Button>
-                        {canEdit && <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>Thêm mới</Button>}
+                        {canEdit && (
+                            <>
+                                <Button
+                                    icon={<UploadOutlined />}
+                                    onClick={() => setIsImportOpen(true)}
+                                >
+                                    Import Excel
+                                </Button>
+                                <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+                                    Thêm mới
+                                </Button>
+                            </>
+                        )}
                     </Space>
                 }
             >
@@ -212,7 +332,7 @@ export default function ItemsManagementPage() {
                     columns={columns}
                     dataSource={items}
                     loading={loading}
-                    pagination={{ pageSize: 8 }}
+                    pagination={{ pageSize: 20 }}
                     bordered
                 />
             </Card>
@@ -250,7 +370,10 @@ export default function ItemsManagementPage() {
                         </Form.Item>
 
                         <Form.Item name="weavingStyle" label="Kiểu dệt">
-                            <Input placeholder="Dệt thoi / Kim" />
+                            <Select placeholder="Chọn kiểu dệt" allowClear>
+                                <Select.Option value="Dệt kim">Dệt kim</Select.Option>
+                                <Select.Option value="Dệt thoi">Dệt thoi</Select.Option>
+                            </Select>
                         </Form.Item>
                     </div>
 
@@ -271,6 +394,97 @@ export default function ItemsManagementPage() {
                         </Space>
                     </div>
                 </Form>
+            </Modal>
+
+            {/* MODAL IMPORT EXCEL */}
+            <Modal
+                title="Import Excel - Danh mục Mặt hàng"
+                open={isImportOpen}
+                onCancel={resetImport}
+                width={720}
+                footer={
+                    importResult ? (
+                        <Button onClick={resetImport}>Đóng</Button>
+                    ) : (
+                        <Space>
+                            <Button onClick={resetImport}>Hủy</Button>
+                            <Button
+                                type="primary"
+                                onClick={handleImport}
+                                disabled={!importFile || validCount === 0}
+                                loading={importLoading}
+                            >
+                                Xác nhận Import
+                            </Button>
+                        </Space>
+                    )
+                }
+            >
+                {importResult ? (
+                    <Alert
+                        type="success"
+                        showIcon
+                        message={`Đã thêm ${importResult.imported} / ${importResult.total} mặt hàng`}
+                        description={
+                            importResult.skipped > 0
+                                ? `${importResult.skipped} dòng bỏ qua do tên đã tồn tại trong hệ thống`
+                                : "Tất cả dòng hợp lệ đã được thêm thành công"
+                        }
+                        style={{ fontSize: 14 }}
+                    />
+                ) : (
+                    <>
+                        <Upload.Dragger
+                            accept=".xlsx,.xls"
+                            maxCount={1}
+                            showUploadList={false}
+                            beforeUpload={handleFileSelect}
+                            style={{ marginBottom: 16 }}
+                        >
+                            <p style={{ fontSize: 28, color: "#1677ff", margin: "8px 0" }}>
+                                <UploadOutlined />
+                            </p>
+                            <p style={{ fontWeight: 500, margin: "4px 0" }}>
+                                {importFile
+                                    ? <><span style={{ color: "#1677ff" }}>{importFile.name}</span> — click để chọn file khác</>
+                                    : "Click hoặc kéo thả file Excel vào đây"
+                                }
+                            </p>
+                            <p style={{ color: "#999", fontSize: 12, margin: "4px 0 8px" }}>
+                                Chấp nhận .xlsx, .xls • Cột bắt buộc: <strong>name</strong>
+                            </p>
+                        </Upload.Dragger>
+
+                        {importFile && (
+                            <>
+                                {validCount > 0 ? (
+                                    <Alert
+                                        type="info"
+                                        message={`Tìm thấy ${validCount} dòng hợp lệ${validCount > 5 ? ` — hiển thị 5 dòng đầu` : ""}`}
+                                        style={{ marginBottom: 12 }}
+                                    />
+                                ) : (
+                                    <Alert
+                                        type="warning"
+                                        message='Không tìm thấy dòng hợp lệ nào. Đảm bảo cột "name" có giá trị.'
+                                        style={{ marginBottom: 12 }}
+                                    />
+                                )}
+
+                                {previewData.rows.length > 0 && (
+                                    <Table
+                                        size="small"
+                                        columns={previewColumns}
+                                        dataSource={previewTableData}
+                                        pagination={false}
+                                        scroll={{ x: "max-content" }}
+                                        bordered
+                                    />
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
             </Modal>
         </div>
     );
