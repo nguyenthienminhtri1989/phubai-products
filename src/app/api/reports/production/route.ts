@@ -9,11 +9,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
     }
 
-    const role = (session.user as any)?.role;
-    if (role !== "ADMIN" && role !== "MANAGER") {
-      return NextResponse.json({ error: "Không có quyền truy cập" }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");

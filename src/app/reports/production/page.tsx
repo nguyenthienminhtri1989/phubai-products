@@ -47,15 +47,8 @@ export default function ProductionReportPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
-      return;
     }
-    if (status === "authenticated") {
-      const role = (session?.user as any)?.role;
-      if (role !== "ADMIN" && role !== "MANAGER") {
-        router.push("/");
-      }
-    }
-  }, [status, session, router]);
+  }, [status, router]);
 
   const fetchData = useCallback(async (filters: FilterValues) => {
     setLoading(true);
@@ -89,19 +82,16 @@ export default function ProductionReportPage() {
   // Auto-fetch with default filters on mount
   useEffect(() => {
     if (status === "authenticated") {
-      const role = (session?.user as any)?.role;
-      if (role === "ADMIN" || role === "MANAGER") {
-        fetchData({
-          dateRange: [dayjs().subtract(29, "day"), dayjs()],
-          factoryId: null,
-          processId: null,
-          machineIds: [],
-          itemIds: [],
-          shifts: [1, 2, 3],
-        });
-      }
+      fetchData({
+        dateRange: [dayjs().subtract(29, "day"), dayjs()],
+        factoryId: null,
+        processId: null,
+        machineIds: [],
+        itemIds: [],
+        shifts: [1, 2, 3],
+      });
     }
-  }, [status, session, fetchData]);
+  }, [status, fetchData]);
 
   const handleMachineClick = useCallback((machineId: number) => {
     setSelectedMachineIds((prev) =>

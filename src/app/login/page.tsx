@@ -209,6 +209,14 @@ export default function LoginPage() {
         .login-card .ant-input {
           background: transparent !important;
           color: #ffffff !important;
+          border: none !important;
+        }
+        .login-card .ant-input:-webkit-autofill,
+        .login-card .ant-input:-webkit-autofill:hover, 
+        .login-card .ant-input:-webkit-autofill:focus, 
+        .login-card .ant-input:-webkit-autofill:active {
+          -webkit-text-fill-color: #ffffff !important;
+          transition: background-color 5000s ease-in-out 0s !important;
         }
         .login-card .ant-input::placeholder,
         .login-card .ant-input-password input::placeholder {
