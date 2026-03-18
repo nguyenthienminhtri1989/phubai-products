@@ -30,6 +30,7 @@ import {
   UploadOutlined,
   ToolOutlined,
   AlertOutlined,
+  CommentOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -231,6 +232,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       ],
     } as any);
   }
+
+  // Góp ý & Đề xuất (tất cả user đều thấy)
+  baseMenuItems.push({
+    key: "/feedback",
+    icon: <CommentOutlined />,
+    label: "Góp ý & Đề xuất",
+  } as any);
 
   // Thêm mục Cài đặt xuống cuối cùng
   baseMenuItems.push({
