@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 // Lấy danh sách giá điện (Tự động khởi tạo nếu chưa có)
 export async function GET() {
@@ -47,9 +48,14 @@ export async function GET() {
   }
 }
 
-// Cập nhật giá điện
+// Cập nhật giá điện (chỉ ADMIN)
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Không có quyền thực hiện thao tác này" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { id, price, description } = body;
 

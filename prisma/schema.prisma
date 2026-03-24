@@ -10,7 +10,7 @@ datasource db {
 }
 
 // ==========================================
-// 1. QUẢN LÝ CẤU TRÚC NHÀ MÁY (Hierarchy)
+// 1. DANH MỤC NHÀ MÁY (Hierarchy)
 // ==========================================
 
 model Factory {
@@ -317,6 +317,10 @@ model PowerMeter {
   substationId Int?    
   substation   Substation? @relation(fields: [substationId], references: [id])
 
+  // Nhóm đồng hồ (tuỳ chọn)
+  meterGroupId Int?
+  meterGroup   MeterGroupCategory? @relation(fields: [meterGroupId], references: [id])
+
   records     PowerRecord[]
 
   @@map("power_meters")
@@ -577,4 +581,52 @@ model IotImportLog {
 
   @@index([sourceId])
   @@map("iot_import_logs")
+}
+
+// ==========================================
+// DANH MỤC CA LÀM VIỆC (Shift Category)
+// ==========================================
+
+model ShiftCategory {
+  code      String   @id              // Mã ca (VD: CA1, CA2) — do user nhập thủ công
+  name      String   @unique          // Tên ca (VD: Ca sáng, Ca chiều) — không được trùng
+  note      String?                   // Ghi chú (tùy chọn)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shift_categories")
+}
+
+// ==========================================
+// DANH MỤC LOẠI ĐIỆN NĂNG (Energy Type Category)
+// ==========================================
+
+model EnergyTypeCategory {
+  code      String   @id              // Mã loại điện (VD: DL, MT) — do user nhập thủ công
+  name      String   @unique          // Tên loại điện (VD: Điện lực, Điện mặt trời) — không được trùng
+  note      String?                   // Ghi chú (tùy chọn)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("energy_type_categories")
+}
+
+// ==========================================
+// DANH MỤC NHÓM ĐỒNG HỒ ĐIỆN (Meter Group Category)
+// ==========================================
+
+model MeterGroupCategory {
+  id        Int      @id @default(autoincrement())
+  groupCode String   @unique // Mã nhóm (VD: MG01, HT-NM1)
+  groupName String   @unique // Tên nhóm (VD: Hạ thế Nhà máy 1)
+  note      String?          // Ghi chú (tùy chọn)
+
+  powerMeters PowerMeter[]   // Quan hệ ngược: nhóm này chứa những đồng hồ nào
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("meter_group_categories")
 }

@@ -11,6 +11,7 @@ const { Option } = Select;
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 interface Factory { id: number; name: string; }
 interface Substation { id: number; code: string; name: string; factoryId: number; factory?: Factory; }
+interface MeterGroup { id: number; groupCode: string; groupName: string; }
 interface PowerMeter {
     id: number;
     code: string;
@@ -21,8 +22,10 @@ interface PowerMeter {
     ti: number;
     factoryId: number;
     substationId: number | null;
+    meterGroupId: number | null;
     factory?: Factory;
     substation?: Substation;
+    meterGroup?: MeterGroup;
 }
 
 export default function EnergyMetersPage() {
@@ -33,6 +36,7 @@ export default function EnergyMetersPage() {
     const [factories, setFactories] = useState<Factory[]>([]);
     const [substations, setSubstations] = useState<Substation[]>([]);
     const [meters, setMeters] = useState<PowerMeter[]>([]);
+    const [meterGroups, setMeterGroups] = useState<MeterGroup[]>([]);
 
     // Quyền thao tác (Sửa số 99 thành ID Tổ Điện thực tế của bạn)
     // Khai báo một mảng chứa ID của tất cả các Tổ Điện
@@ -54,14 +58,16 @@ export default function EnergyMetersPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [facRes, subRes, metRes] = await Promise.all([
+            const [facRes, subRes, metRes, grpRes] = await Promise.all([
                 fetch('/api/factories'),
                 fetch('/api/energy/substations'),
-                fetch('/api/energy/meters')
+                fetch('/api/energy/meters'),
+                fetch('/api/meter-group-categories'),
             ]);
             if (facRes.ok) setFactories(await facRes.json());
             if (subRes.ok) setSubstations(await subRes.json());
             if (metRes.ok) setMeters(await metRes.json());
+            if (grpRes.ok) setMeterGroups(await grpRes.json());
         } catch (e) {
             message.error("Lỗi tải dữ liệu");
         } finally {
@@ -105,6 +111,7 @@ export default function EnergyMetersPage() {
                 description: values.description || null,
                 factoryId: Number(values.factoryId),
                 substationId: values.substationId ? Number(values.substationId) : null,
+                meterGroupId: values.meterGroupId ? Number(values.meterGroupId) : null,
                 tu: Number(values.tu),
                 ti: Number(values.ti)
             };
@@ -151,7 +158,15 @@ export default function EnergyMetersPage() {
         { title: 'Hệ số TU', dataIndex: 'tu', key: 'tu' },
         { title: 'Hệ số TI', dataIndex: 'ti', key: 'ti' },
         { title: 'Nhà máy', dataIndex: ['factory', 'name'], key: 'factoryName' },
-        { title: 'Thuộc Trạm', dataIndex: ['substation', 'name'], key: 'substationName', render: t => t || '---' },
+        { title: 'Thuộc Trạm', dataIndex: ['substation', 'name'], key: 'substationName', render: (t: string) => t || '---' },
+        {
+            title: 'Nhóm đồng hồ',
+            key: 'meterGroup',
+            render: (_: unknown, record: PowerMeter) =>
+                record.meterGroup
+                    ? <Tag color="purple">{record.meterGroup.groupCode} — {record.meterGroup.groupName}</Tag>
+                    : <span style={{ color: '#ccc' }}>—</span>,
+        },
         {
             title: 'Thao tác', key: 'action',
             render: (_, record) => canEdit ? (
@@ -227,7 +242,6 @@ export default function EnergyMetersPage() {
                         noStyle
                     >
                         {({ getFieldValue }) => {
-                            const isTrungThe = getFieldValue('type') === 2;
                             const selectedFac = getFieldValue('factoryId');
                             return (
                                 <Form.Item name="substationId" label="Thuộc trạm biến áp (Không bắt buộc với Trung thế)">
@@ -239,6 +253,14 @@ export default function EnergyMetersPage() {
                                 </Form.Item>
                             );
                         }}
+                    </Form.Item>
+
+                    <Form.Item name="meterGroupId" label="Nhóm đồng hồ (tùy chọn)">
+                        <Select allowClear placeholder="Chọn nhóm đồng hồ..." showSearch optionFilterProp="children">
+                            {meterGroups.map(g => (
+                                <Option key={g.id} value={g.id}>{g.groupCode} — {g.groupName}</Option>
+                            ))}
+                        </Select>
                     </Form.Item>
                 </Form>
             </Modal>

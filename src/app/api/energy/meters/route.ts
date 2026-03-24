@@ -4,12 +4,13 @@ import { NextResponse } from "next/server";
 export async function GET() {
   try {
     const data = await prisma.powerMeter.findMany({
-      include: { factory: true, substation: true },
+      include: { factory: true, substation: true, meterGroup: true },
       orderBy: { factoryId: "asc" },
     });
     return NextResponse.json(data);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Lỗi tải danh sách đồng hồ" }, { status: 500 });
   }
 }
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
         ti: data.ti,
         factoryId: data.factoryId,
         substationId: data.substationId || null,
+        meterGroupId: data.meterGroupId ? Number(data.meterGroupId) : null,
       },
     });
     return NextResponse.json(newData, { status: 201 });
@@ -51,10 +53,12 @@ export async function PUT(request: Request) {
         ti: data.ti,
         factoryId: data.factoryId,
         substationId: data.substationId || null,
+        meterGroupId: data.meterGroupId ? Number(data.meterGroupId) : null,
       },
     });
     return NextResponse.json(updatedData);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Lỗi cập nhật đồng hồ" }, { status: 400 });
   }
 }

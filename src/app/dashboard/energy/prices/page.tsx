@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Modal, Form, InputNumber, Input, message, Tag, Typography } from 'antd';
 import { EditOutlined, DollarOutlined } from '@ant-design/icons';
+import { useSession } from 'next-auth/react';
 import dayjs from 'dayjs';
 import type { TableProps } from 'antd';
 
@@ -19,12 +20,15 @@ interface ElectricityPrice {
 }
 
 export default function ElectricityPricePage() {
+    const { data: session } = useSession();
     const [data, setData] = useState<ElectricityPrice[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState<ElectricityPrice | null>(null);
 
     const [form] = Form.useForm();
+
+    const isAdmin = (session?.user as { role?: string })?.role === 'ADMIN';
 
     const fetchPrices = async () => {
         setLoading(true);
@@ -119,15 +123,16 @@ export default function ElectricityPricePage() {
         {
             title: 'Thao tác',
             key: 'action',
-            render: (_, record) => (
-                <Button
-                    type="primary"
-                    icon={<EditOutlined />}
-                    onClick={() => handleEdit(record)}
-                >
-                    Cập nhật
-                </Button>
-            )
+            render: (_: unknown, record: ElectricityPrice) =>
+                isAdmin ? (
+                    <Button
+                        type="primary"
+                        icon={<EditOutlined />}
+                        onClick={() => handleEdit(record)}
+                    >
+                        Cập nhật
+                    </Button>
+                ) : null,
         }
     ];
 

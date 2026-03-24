@@ -31,6 +31,8 @@ import {
   ToolOutlined,
   AlertOutlined,
   CommentOutlined,
+  ClockCircleOutlined,
+  GroupOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -92,6 +94,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
         { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
         { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+        { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
+        { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
+        { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
+        { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
       ],
     },
     {
@@ -169,7 +175,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       label: "Quản lý Điện năng",
       children: [
         { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
-        { key: "/dashboard/energy/meters", label: "Trạm & Đồng hồ" },
         { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
         { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
       ],
