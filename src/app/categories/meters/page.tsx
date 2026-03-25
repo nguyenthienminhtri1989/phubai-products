@@ -102,8 +102,20 @@ export default function EnergyMetersPage() {
     };
 
     const handleDeleteSubstation = async (id: number) => {
-        // Gọi API DELETE (Bạn cần viết API hỗ trợ method DELETE)
-        message.warning("Chức năng xóa đang được khóa để bảo vệ dữ liệu!");
+        try {
+            const res = await fetch('/api/energy/substations', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            if (res.ok) {
+                message.success("Đã xóa trạm biến áp!");
+                fetchData();
+            } else {
+                const err = await res.json();
+                message.error(err.error);
+            }
+        } catch (e) { message.error("Lỗi hệ thống"); }
     };
 
     // --- XỬ LÝ ĐỒNG HỒ (METER) ---
@@ -134,6 +146,23 @@ export default function EnergyMetersPage() {
         } catch (e) { message.error("Lỗi hệ thống"); }
     };
 
+    const handleDeleteMeter = async (id: number) => {
+        try {
+            const res = await fetch('/api/energy/meters', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            if (res.ok) {
+                message.success("Đã xóa đồng hồ!");
+                fetchData();
+            } else {
+                const err = await res.json();
+                message.error(err.error);
+            }
+        } catch (e) { message.error("Lỗi hệ thống"); }
+    };
+
     // --- CỘT HIỂN THỊ (COLUMNS) ---
     const subColumns: TableProps<Substation>['columns'] = [
         { title: 'Mã trạm', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
@@ -144,7 +173,7 @@ export default function EnergyMetersPage() {
             render: (_, record) => canEdit ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingSub(record); subForm.setFieldsValue(record); setIsSubModalOpen(true); }} />
-                    <Popconfirm title="Xóa trạm này?" onConfirm={() => handleDeleteSubstation(record.id)}>
+                    <Popconfirm title="Xóa trạm này?" description="Hành động này không thể hoàn tác!" onConfirm={() => handleDeleteSubstation(record.id)} okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }}>
                         <Button size="small" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
                 </Space>
@@ -177,6 +206,9 @@ export default function EnergyMetersPage() {
             render: (_, record) => canEdit ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMeter(record); meterForm.setFieldsValue(record); setIsMeterModalOpen(true); }} />
+                    <Popconfirm title="Xóa đồng hồ này?" description="Hành động này không thể hoàn tác!" onConfirm={() => handleDeleteMeter(record.id)} okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }}>
+                        <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
                 </Space>
             ) : <span style={{ color: '#ccc' }}>Chỉ xem</span>
         }

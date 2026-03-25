@@ -31,6 +31,19 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  try {
+    const { id } = await request.json();
+    await prisma.substation.delete({ where: { id: Number(id) } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Không thể xóa trạm biến áp. Có thể đang được sử dụng bởi đồng hồ hoặc dữ liệu điện năng." },
+      { status: 400 },
+    );
+  }
+}
+
 export async function PUT(request: Request) {
   try {
     const { id, code, name, factoryId } = await request.json();

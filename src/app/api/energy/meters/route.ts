@@ -39,6 +39,17 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  try {
+    const { id } = await request.json();
+    await prisma.powerMeter.delete({ where: { id: Number(id) } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Không thể xóa đồng hồ. Có thể đang được sử dụng trong dữ liệu điện năng." }, { status: 400 });
+  }
+}
+
 export async function PUT(request: Request) {
   try {
     const data = await request.json();
