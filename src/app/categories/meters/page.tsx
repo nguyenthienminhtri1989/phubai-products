@@ -82,7 +82,7 @@ export default function EnergyMetersPage() {
 
     useEffect(() => { fetchData(); }, []);
 
-    // --- XỬ LÝ MÁY BIẾN ÁP (SUBSTATION) ---
+    // --- XỬ LÝ TRẠM BIẾN ÁP (SUBSTATION) ---
     const handleSaveSubstation = async (values: any) => {
         try {
             const method = editingSub ? 'PUT' : 'POST';
@@ -93,7 +93,7 @@ export default function EnergyMetersPage() {
             });
 
             if (res.ok) {
-                message.success("Đã lưu Máy biến áp!");
+                message.success("Đã lưu Trạm biến áp!");
                 setIsSubModalOpen(false); subForm.resetFields(); fetchData();
             } else {
                 const err = await res.json(); message.error(err.error);
@@ -136,15 +136,15 @@ export default function EnergyMetersPage() {
 
     // --- CỘT HIỂN THỊ (COLUMNS) ---
     const subColumns: TableProps<Substation>['columns'] = [
-        { title: 'Mã máy', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
-        { title: 'Tên máy biến áp', dataIndex: 'name', key: 'name' },
+        { title: 'Mã trạm', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
+        { title: 'Tên trạm biến áp', dataIndex: 'name', key: 'name' },
         { title: 'Nhà máy quản lý', dataIndex: ['factory', 'name'], key: 'factoryName' },
         {
             title: 'Thao tác', key: 'action',
             render: (_, record) => canEdit ? (
                 <Space>
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingSub(record); subForm.setFieldsValue(record); setIsSubModalOpen(true); }} />
-                    <Popconfirm title="Xóa máy này?" onConfirm={() => handleDeleteSubstation(record.id)}>
+                    <Popconfirm title="Xóa trạm này?" onConfirm={() => handleDeleteSubstation(record.id)}>
                         <Button size="small" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
                 </Space>
@@ -163,7 +163,7 @@ export default function EnergyMetersPage() {
         { title: 'Hệ số TU', dataIndex: 'tu', key: 'tu' },
         { title: 'Hệ số TI', dataIndex: 'ti', key: 'ti' },
         { title: 'Nhà máy', dataIndex: ['factory', 'name'], key: 'factoryName' },
-        { title: 'Thuộc Máy', dataIndex: ['substation', 'name'], key: 'substationName', render: (t: string) => t || '---' },
+        { title: 'Thuộc Trạm', dataIndex: ['substation', 'name'], key: 'substationName', render: (t: string) => t || '---' },
         {
             title: 'Nhóm đồng hồ',
             key: 'meterGroup',
@@ -191,11 +191,11 @@ export default function EnergyMetersPage() {
                             if (activeTab === '1') { setEditingSub(null); subForm.resetFields(); setIsSubModalOpen(true); }
                             else { setEditingMeter(null); meterForm.resetFields(); meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1 }); setIsMeterModalOpen(true); }
                         }}>
-                            Thêm mới {activeTab === '1' ? 'Máy biến áp' : 'Đồng hồ'}
+                            Thêm mới {activeTab === '1' ? 'Trạm biến áp' : 'Đồng hồ'}
                         </Button>
                     ) : null
                 }>
-                    <Tabs.TabPane tab={<span><PartitionOutlined /> Danh mục Máy Biến Áp</span>} key="1">
+                    <Tabs.TabPane tab={<span><PartitionOutlined /> Danh mục Trạm Biến Áp</span>} key="1">
                         <Space style={{ marginBottom: 16 }}>
                             <Select
                                 allowClear
@@ -254,11 +254,11 @@ export default function EnergyMetersPage() {
                 </Tabs>
             </Card>
 
-            {/* Modal Máy Biến Áp */}
-            <Modal title={editingSub ? "Sửa Máy Biến Áp" : "Thêm Máy Biến Áp"} open={isSubModalOpen} onOk={() => subForm.submit()} onCancel={() => setIsSubModalOpen(false)}>
+            {/* Modal Trạm Biến Áp */}
+            <Modal title={editingSub ? "Sửa Trạm Biến Áp" : "Thêm Trạm Biến Áp"} open={isSubModalOpen} onOk={() => subForm.submit()} onCancel={() => setIsSubModalOpen(false)}>
                 <Form form={subForm} layout="vertical" onFinish={handleSaveSubstation}>
-                    <Form.Item name="code" label="Mã Máy (Vd: TBA-01)" rules={[{ required: true }]}><Input /></Form.Item>
-                    <Form.Item name="name" label="Tên Máy" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Form.Item name="code" label="Mã Trạm (Vd: TBA-01)" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Form.Item name="name" label="Tên Trạm" rules={[{ required: true }]}><Input /></Form.Item>
                     <Form.Item name="factoryId" label="Nhà máy" rules={[{ required: true }]}>
                         <Select>{factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}</Select>
                     </Form.Item>
