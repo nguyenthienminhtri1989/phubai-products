@@ -54,6 +54,11 @@ export default function EnergyMetersPage() {
     const [subForm] = Form.useForm();
     const [meterForm] = Form.useForm();
 
+    // --- BỘ LỌC ---
+    const [filterSubFactory, setFilterSubFactory] = useState<number | undefined>(undefined);
+    const [filterMeterFactory, setFilterMeterFactory] = useState<number | undefined>(undefined);
+    const [filterMeterSubstation, setFilterMeterSubstation] = useState<number | undefined>(undefined);
+
     // --- FETCH DATA ---
     const fetchData = async () => {
         setLoading(true);
@@ -191,10 +196,60 @@ export default function EnergyMetersPage() {
                     ) : null
                 }>
                     <Tabs.TabPane tab={<span><PartitionOutlined /> Danh mục Máy Biến Áp</span>} key="1">
-                        <Table columns={subColumns} dataSource={substations} rowKey="id" loading={loading} />
+                        <Space style={{ marginBottom: 16 }}>
+                            <Select
+                                allowClear
+                                placeholder="Lọc theo Nhà máy"
+                                style={{ width: 200 }}
+                                value={filterSubFactory}
+                                onChange={setFilterSubFactory}
+                            >
+                                {factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}
+                            </Select>
+                        </Space>
+                        <Table
+                            columns={subColumns}
+                            dataSource={substations.filter(s =>
+                                filterSubFactory == null || s.factoryId === filterSubFactory
+                            )}
+                            rowKey="id"
+                            loading={loading}
+                        />
                     </Tabs.TabPane>
                     <Tabs.TabPane tab={<span><DashboardOutlined /> Danh mục Đồng hồ (Công tơ)</span>} key="2">
-                        <Table columns={meterColumns} dataSource={meters} rowKey="id" loading={loading} />
+                        <Space style={{ marginBottom: 16 }}>
+                            <Select
+                                allowClear
+                                placeholder="Lọc theo Nhà máy"
+                                style={{ width: 200 }}
+                                value={filterMeterFactory}
+                                onChange={(val) => { setFilterMeterFactory(val); setFilterMeterSubstation(undefined); }}
+                            >
+                                {factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}
+                            </Select>
+                            <Select
+                                allowClear
+                                placeholder="Lọc theo Máy biến áp"
+                                style={{ width: 220 }}
+                                value={filterMeterSubstation}
+                                onChange={setFilterMeterSubstation}
+                                disabled={!filterMeterFactory}
+                            >
+                                {substations
+                                    .filter(s => filterMeterFactory == null || s.factoryId === filterMeterFactory)
+                                    .map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)
+                                }
+                            </Select>
+                        </Space>
+                        <Table
+                            columns={meterColumns}
+                            dataSource={meters.filter(m =>
+                                (filterMeterFactory == null || m.factoryId === filterMeterFactory) &&
+                                (filterMeterSubstation == null || m.substationId === filterMeterSubstation)
+                            )}
+                            rowKey="id"
+                            loading={loading}
+                        />
                     </Tabs.TabPane>
                 </Tabs>
             </Card>
