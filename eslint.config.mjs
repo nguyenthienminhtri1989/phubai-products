@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 👇 THÊM DÒNG NÀY ĐỂ BỎ QUA KIỂM TRA LỖI THƯ MỤC CHỨA CRONJOB 👇
+    "scripts/**",
   ]),
 ]);
 
