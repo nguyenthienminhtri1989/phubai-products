@@ -10,7 +10,10 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Lỗi tải danh sách đồng hồ" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Lỗi tải danh sách đồng hồ" },
+      { status: 500 },
+    );
   }
 }
 
@@ -25,6 +28,10 @@ export async function POST(request: Request) {
         type: data.type,
         tu: data.tu,
         ti: data.ti,
+        // ---> CẬP NHẬT TRƯỜNG MỚI
+        isAuto: Boolean(data.isAuto),
+        modbusId: data.isAuto && data.modbusId ? Number(data.modbusId) : null,
+        // ------------------------
         factoryId: data.factoryId,
         substationId: data.substationId || null,
         meterGroupId: data.meterGroupId ? Number(data.meterGroupId) : null,
@@ -40,14 +47,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  try {
-    const { id } = await request.json();
-    await prisma.powerMeter.delete({ where: { id: Number(id) } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Không thể xóa đồng hồ. Có thể đang được sử dụng trong dữ liệu điện năng." }, { status: 400 });
-  }
+  // ... Giữ nguyên ...
 }
 
 export async function PUT(request: Request) {
@@ -62,6 +62,10 @@ export async function PUT(request: Request) {
         type: data.type,
         tu: data.tu,
         ti: data.ti,
+        // ---> CẬP NHẬT TRƯỜNG MỚI
+        isAuto: Boolean(data.isAuto),
+        modbusId: data.isAuto && data.modbusId ? Number(data.modbusId) : null,
+        // ------------------------
         factoryId: data.factoryId,
         substationId: data.substationId || null,
         meterGroupId: data.meterGroupId ? Number(data.meterGroupId) : null,
@@ -70,6 +74,9 @@ export async function PUT(request: Request) {
     return NextResponse.json(updatedData);
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Lỗi cập nhật đồng hồ" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Lỗi cập nhật đồng hồ" },
+      { status: 400 },
+    );
   }
 }

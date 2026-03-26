@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, message, Tabs, Tag, Space, Popconfirm } from 'antd';
+// Đã thêm Switch vào danh sách import từ antd
+import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, message, Tabs, Tag, Space, Popconfirm, Switch } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PartitionOutlined, DashboardOutlined } from '@ant-design/icons';
 import { useSession } from "next-auth/react";
 import type { TableProps } from 'antd';
@@ -20,6 +21,8 @@ interface PowerMeter {
     type: number; // 1: Hạ thế, 2: Trung thế
     tu: number;
     ti: number;
+    isAuto: boolean;       // Phục vụ IoT
+    modbusId: number | null; // Phục vụ IoT
     factoryId: number;
     substationId: number | null;
     meterGroupId: number | null;
@@ -38,10 +41,8 @@ export default function EnergyMetersPage() {
     const [meters, setMeters] = useState<PowerMeter[]>([]);
     const [meterGroups, setMeterGroups] = useState<MeterGroup[]>([]);
 
-    // Quyền thao tác (Sửa số 99 thành ID Tổ Điện thực tế của bạn)
-    // Khai báo một mảng chứa ID của tất cả các Tổ Điện
+    // Quyền thao tác
     const ELECTRICAL_PROCESS_IDS = [15, 16];
-
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
     const canEdit = session?.user?.role === "ADMIN" || userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
 
@@ -82,7 +83,7 @@ export default function EnergyMetersPage() {
 
     useEffect(() => { fetchData(); }, []);
 
-    // --- XỬ LÝ TRẠM BIẾN ÁP (SUBSTATION) ---
+    // --- XỬ LÝ TRẠM BIẾN ÁP ---
     const handleSaveSubstation = async (values: any) => {
         try {
             const method = editingSub ? 'PUT' : 'POST';
@@ -130,7 +131,10 @@ export default function EnergyMetersPage() {
                 substationId: values.substationId ? Number(values.substationId) : null,
                 meterGroupId: values.meterGroupId ? Number(values.meterGroupId) : null,
                 tu: Number(values.tu),
-                ti: Number(values.ti)
+                ti: Number(values.ti),
+                // Xử lý dữ liệu IoT
+                isAuto: !!values.isAuto,
+                modbusId: values.isAuto && values.modbusId ? Number(values.modbusId) : null,
             };
 
             const res = await fetch('/api/energy/meters', {
@@ -189,6 +193,11 @@ export default function EnergyMetersPage() {
             title: 'Phân loại', dataIndex: 'type', key: 'type',
             render: (type) => type === 2 ? <Tag color="red">Trung thế (3 Giá)</Tag> : <Tag color="blue">Hạ thế</Tag>
         },
+        {
+            title: 'Chế độ lấy số', dataIndex: 'isAuto', key: 'isAuto',
+            render: (isAuto) => isAuto ? <Tag color="green">Tự động (IoT)</Tag> : <Tag color="orange">Nhập tay</Tag>
+        },
+        { title: 'Slave ID', dataIndex: 'modbusId', key: 'modbusId', render: t => t || '-' },
         { title: 'Hệ số TU', dataIndex: 'tu', key: 'tu' },
         { title: 'Hệ số TI', dataIndex: 'ti', key: 'ti' },
         { title: 'Nhà máy', dataIndex: ['factory', 'name'], key: 'factoryName' },
@@ -221,7 +230,13 @@ export default function EnergyMetersPage() {
                     canEdit ? (
                         <Button type="primary" icon={<PlusOutlined />} onClick={() => {
                             if (activeTab === '1') { setEditingSub(null); subForm.resetFields(); setIsSubModalOpen(true); }
-                            else { setEditingMeter(null); meterForm.resetFields(); meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1 }); setIsMeterModalOpen(true); }
+                            else {
+                                setEditingMeter(null);
+                                meterForm.resetFields();
+                                // Reset thêm giá trị mặc định cho isAuto
+                                meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1, isAuto: false });
+                                setIsMeterModalOpen(true);
+                            }
                         }}>
                             Thêm mới {activeTab === '1' ? 'Trạm biến áp' : 'Đồng hồ'}
                         </Button>
@@ -305,7 +320,7 @@ export default function EnergyMetersPage() {
                         <Form.Item name="type" label="Loại đồng hồ">
                             <Select style={{ width: 150 }}>
                                 <Option value={1}>Hạ thế</Option>
-                                <Option value={2}>Trung thế</Option>
+                                <Option value={2}>Trung thế (3 Giá)</Option>
                             </Select>
                         </Form.Item>
                     </Space>
@@ -314,6 +329,26 @@ export default function EnergyMetersPage() {
                     <Form.Item name="description" label="Mô tả / Đo cho các máy nào?">
                         <Input.TextArea rows={2} placeholder="Vd: Đo đếm cho máy sợi con, máy ống..." />
                     </Form.Item>
+
+                    {/* BLOCK CẤU HÌNH IOT NẰM Ở ĐÂY */}
+                    <Card size="small" title="Cấu hình thu thập tự động (IoT)" style={{ marginBottom: 16, backgroundColor: '#fafafa' }}>
+                        <Space align="baseline" size="large">
+                            <Form.Item name="isAuto" label="Chế độ thu thập" valuePropName="checked" initialValue={false}>
+                                <Switch checkedChildren="Tự động" unCheckedChildren="Nhập tay" />
+                            </Form.Item>
+
+                            {/* Logic: Chỉ hiện ô nhập Slave ID nếu isAuto đang bật */}
+                            <Form.Item noStyle shouldUpdate={(prev, curr) => prev.isAuto !== curr.isAuto}>
+                                {({ getFieldValue }) =>
+                                    getFieldValue('isAuto') ? (
+                                        <Form.Item name="modbusId" label="Slave ID (Trên đồng hồ)" rules={[{ required: true, message: 'Bắt buộc nhập Slave ID' }]}>
+                                            <InputNumber min={1} max={255} placeholder="Vd: 1" style={{ width: '100%' }} />
+                                        </Form.Item>
+                                    ) : null
+                                }
+                            </Form.Item>
+                        </Space>
+                    </Card>
 
                     <Space align="baseline">
                         <Form.Item name="tu" label="Hệ số biến điện áp (TU)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
