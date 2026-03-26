@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-// Hàm hỗ trợ ép kiểu an toàn: Tránh việc biến null/undefined thành số 0 sai lệch
+// Hàm hỗ trợ ép kiểu an toàn
 const parseNum = (val: any) =>
   val !== undefined && val !== null && val !== "" ? Number(val) : null;
 
@@ -17,6 +17,9 @@ export async function POST(request: Request) {
     // Đóng gói dữ liệu cần lưu
     const dataPayload = {
       isReset: Boolean(isReset),
+
+      // ---> ĐÂY CHÍNH LÀ CHÌA KHÓA: ÉP CỨNG GHI NHẬN NGUỒN NHẬP TAY
+      dataSource: "MANUAL",
 
       // Hạ thế
       prevTotal: parseNum(values.prevTotal),
@@ -39,7 +42,8 @@ export async function POST(request: Request) {
       note: isReset ? "Đã thay đồng hồ / Reset" : null,
     };
 
-    // Dùng upsert: Nếu đã có data của ngày này -> Cập nhật. Chưa có -> Tạo mới.
+    // Dùng upsert: Nếu máy tự động (AUTO) đã chốt nhưng bị sai,
+    // khi user bấm LƯU thì sẽ đè thành (MANUAL) sửa sai cho máy.
     const record = await prisma.powerRecord.upsert({
       where: {
         recordDate_meterId: {

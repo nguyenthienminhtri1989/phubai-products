@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Divider, Space } from 'antd';
-import { SaveOutlined, ArrowRightOutlined, ThunderboltOutlined } from '@ant-design/icons';
+// ---> THÊM Alert VÀO ĐÂY
+import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Divider, Space, Alert } from 'antd';
+// ---> THÊM RobotOutlined, UserOutlined VÀO ĐÂY
+import { SaveOutlined, ArrowRightOutlined, ThunderboltOutlined, RobotOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
@@ -17,10 +19,11 @@ interface PowerMeter {
     type: number; // 1: Hạ thế, 2: Trung thế
     tu: number;
     ti: number;
-    todayRecord?: any; // Đã nhập hay chưa
+    isAuto: boolean; // ---> THÊM TRƯỜNG NÀY ĐỂ NHẬN DIỆN IOT
+    todayRecord?: any;
 }
 interface ElectricityPrice {
-    type: string; // 'NORMAL', 'PEAK', 'OFF_PEAK'
+    type: string;
     price: number;
 }
 
@@ -28,7 +31,6 @@ export default function EnergyDailyInputPage() {
     const { data: session } = useSession();
 
     // --- STATES ---
-    // Theo nghiệp vụ: 8h sáng chốt sổ -> Mặc định là ngày hôm qua
     const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs().subtract(1, 'day'));
     const [selectedFactoryId, setSelectedFactoryId] = useState<number | null>(null);
     const [selectedSubstationId, setSelectedSubstationId] = useState<number | null>(null);
@@ -43,11 +45,8 @@ export default function EnergyDailyInputPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentMeter, setCurrentMeter] = useState<PowerMeter | null>(null);
     const [form] = Form.useForm();
-
-    // Refs để focus nhanh
     const firstInputRef = useRef<any>(null);
 
-    // Phân quyền: Tổ Điện (15, 16) hoặc ADMIN mới được lưu
     const ELECTRICAL_PROCESS_IDS = [15, 16];
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
     const canEdit = session?.user?.role === "ADMIN" || userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
@@ -69,7 +68,7 @@ export default function EnergyDailyInputPage() {
         fetchMetadata();
     }, []);
 
-    // --- TẢI DANH SÁCH ĐỒNG HỒ (Khi chọn Trạm & Ngày) ---
+    // --- TẢI DANH SÁCH ĐỒNG HỒ ---
     const fetchMeters = async () => {
         if (!selectedSubstationId) return;
         setLoading(true);
@@ -94,11 +93,9 @@ export default function EnergyDailyInputPage() {
 
         if (meter.todayRecord) {
             message.info("Đồng hồ này đã được chốt chỉ số cho ngày này.");
-            // Nạp dữ liệu cũ lên nếu muốn sửa
-            // initValues = ... (Tùy bạn quyết định có cho sửa trực tiếp hay không)
+            // Tùy bạn nạp lại data cũ nếu muốn sửa
         } else {
             try {
-                // Gọi API tìm chỉ số chốt gần nhất trong quá khứ
                 const res = await fetch(`/api/energy/last-record?meterId=${meter.id}&date=${selectedDate.format('YYYY-MM-DD')}`);
                 if (res.ok) {
                     const lastRecord = await res.json();
@@ -111,7 +108,6 @@ export default function EnergyDailyInputPage() {
                             initValues.prevOffPeak = lastRecord.currOffPeak || 0;
                         }
                     } else {
-                        // Đồng hồ mới chưa từng nhập
                         initValues.isNewMeter = true;
                     }
                 }
@@ -125,10 +121,8 @@ export default function EnergyDailyInputPage() {
 
     // --- WATCH & TÍNH TOÁN REALTIME ---
     const watchIsReset = Form.useWatch('isReset', form);
-    // Hạ thế
     const currTotal = Form.useWatch('currTotal', form);
     const prevTotal = Form.useWatch('prevTotal', form);
-    // Trung thế
     const currN = Form.useWatch('currNormal', form); const prevN = Form.useWatch('prevNormal', form);
     const currP = Form.useWatch('currPeak', form); const prevP = Form.useWatch('prevPeak', form);
     const currO = Form.useWatch('currOffPeak', form); const prevO = Form.useWatch('prevOffPeak', form);
@@ -140,20 +134,17 @@ export default function EnergyDailyInputPage() {
         let consN = 0, consP = 0, consO = 0, totalCons = 0, totalCost = 0;
         let hasError = false;
 
-        // Lấy đơn giá
         const pNormal = prices.find(p => p.type === 'NORMAL')?.price || 0;
         const pPeak = prices.find(p => p.type === 'PEAK')?.price || 0;
         const pOffPeak = prices.find(p => p.type === 'OFF_PEAK')?.price || 0;
 
         if (currentMeter.type === 1) {
-            // 1. Hạ thế
             const curr = Number(currTotal) || 0; const prev = Number(prevTotal) || 0;
             if (curr < prev && !watchIsReset) hasError = true;
             const delta = watchIsReset ? curr : Math.max(0, curr - prev);
             totalCons = delta * multiplier;
-            totalCost = totalCons * pNormal; // Giả sử hạ thế tính giá bình thường hoặc không tính tiền tùy bạn
+            totalCost = totalCons * pNormal;
         } else {
-            // 2. Trung thế
             const cN = Number(currN) || 0; const pN = Number(prevN) || 0;
             const cP = Number(currP) || 0; const pP = Number(prevP) || 0;
             const cO = Number(currO) || 0; const pO = Number(prevO) || 0;
@@ -187,7 +178,8 @@ export default function EnergyDailyInputPage() {
                 isReset: values.isReset,
                 ...values,
                 consTotal: calculations.consTotal,
-                costTotal: calculations.costTotal
+                costTotal: calculations.costTotal,
+                // Chú ý: Backend sẽ ép dataSource thành "MANUAL"
             };
 
             const res = await fetch('/api/energy/daily-input', {
@@ -197,8 +189,8 @@ export default function EnergyDailyInputPage() {
             if (!res.ok) throw new Error('Lỗi lưu');
             message.success("Đã chốt chỉ số thành công!");
 
-            // Cập nhật UI
-            setMeters(prev => prev.map(m => m.id === currentMeter?.id ? { ...m, todayRecord: payload } : m));
+            // Cập nhật lại state ảo để UI hiện xanh lên ngay, đồng thời set dataSource là MANUAL
+            setMeters(prev => prev.map(m => m.id === currentMeter?.id ? { ...m, todayRecord: { ...payload, dataSource: "MANUAL" } } : m));
 
             if (saveAndNext) {
                 const idx = meters.findIndex(m => m.id === currentMeter?.id);
@@ -211,7 +203,7 @@ export default function EnergyDailyInputPage() {
 
     return (
         <div style={{ padding: 20 }}>
-            {/* HEADER BỘ LỌC */}
+            {/* HEADER BỘ LỌC (Giữ nguyên của bạn) */}
             <Card style={{ marginBottom: 16 }} size="small">
                 <Row gutter={16} align="middle">
                     <Col span={8}>
@@ -248,6 +240,8 @@ export default function EnergyDailyInputPage() {
                 <Row gutter={[12, 12]}>
                     {meters.map(m => {
                         const isDone = !!m.todayRecord;
+                        const isAutoRecord = m.todayRecord?.dataSource === "AUTO";
+
                         return (
                             <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
                                 <Card hoverable onClick={() => handleOpenMeter(m)} style={{ border: isDone ? '2px solid #52c41a' : '1px solid #d9d9d9', background: isDone ? '#f6ffed' : '#fff' }} bodyStyle={{ padding: 12 }}>
@@ -255,9 +249,21 @@ export default function EnergyDailyInputPage() {
                                         <b>{m.code}</b>
                                         {isDone && <SaveOutlined style={{ color: '#52c41a' }} />}
                                     </div>
-                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4, height: 36, overflow: 'hidden' }}>{m.name}</div>
+                                    <div style={{ fontSize: 12, color: '#666', marginTop: 4, height: 45, overflow: 'hidden' }}>
+                                        {m.name}
+                                        {/* ---> HIỂN THỊ TAG IOT / THỦ CÔNG */}
+                                        <div style={{ marginTop: 4 }}>
+                                            {m.isAuto
+                                                ? <Tag bordered={false} color="blue" style={{ margin: 0 }}><RobotOutlined /> Tự động</Tag>
+                                                : <Tag bordered={false} color="default" style={{ margin: 0 }}><UserOutlined /> Nhập tay</Tag>}
+                                        </div>
+                                    </div>
                                     <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 'bold' }}>
-                                        {isDone ? <span style={{ color: '#d48806' }}>Đã chốt</span> : <span style={{ color: '#ccc' }}>--</span>}
+                                        {isDone
+                                            ? <span style={{ color: isAutoRecord ? '#52c41a' : '#d48806' }}>
+                                                Đã chốt ({isAutoRecord ? 'Tự động' : 'Bằng tay'})
+                                            </span>
+                                            : <span style={{ color: '#ccc' }}>--</span>}
                                     </div>
                                 </Card>
                             </Col>
@@ -268,6 +274,18 @@ export default function EnergyDailyInputPage() {
 
             {/* MODAL NHẬP CHỈ SỐ */}
             <Modal open={isModalOpen} onCancel={() => setIsModalOpen(false)} footer={null} width={650} centered title={<span><ThunderboltOutlined style={{ color: '#faad14' }} /> {currentMeter?.name} <Tag color="blue">{currentMeter?.code}</Tag> (Hệ số: {currentMeter ? (currentMeter.tu * currentMeter.ti) : 1})</span>}>
+
+                {/* ---> CẢNH BÁO AN TOÀN CHO ĐỒNG HỒ TỰ ĐỘNG */}
+                {currentMeter?.isAuto && (
+                    <Alert
+                        message="Đồng hồ đang chạy Tự động (IoT)"
+                        description="Hệ thống sẽ tự động chốt số liệu cho đồng hồ này. Bạn CHỈ NÊN nhập tay trong trường hợp gateway rớt mạng hoặc gặp sự cố để đảm bảo tính liên tục của dữ liệu."
+                        type="warning"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
+
                 <Form form={form} layout="vertical">
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
                         <Form.Item name="isReset" valuePropName="checked" noStyle>
@@ -275,7 +293,7 @@ export default function EnergyDailyInputPage() {
                         </Form.Item>
                     </div>
 
-                    {/* RENDER FORM DỰA VÀO LOẠI ĐỒNG HỒ */}
+                    {/* ... (TOÀN BỘ PHẦN RENDER FORM HẠ THẾ & TRUNG THẾ GIỮ NGUYÊN CỦA BẠN) ... */}
                     {currentMeter?.type === 1 ? (
                         <Row gutter={16}>
                             <Col span={12}>
@@ -309,7 +327,7 @@ export default function EnergyDailyInputPage() {
                         </>
                     )}
 
-                    {/* KẾT QUẢ TÍNH TOÁN */}
+                    {/* KẾT QUẢ TÍNH TOÁN (Giữ nguyên) */}
                     <div style={{ padding: 15, background: calculations.error ? '#fff1f0' : '#e6f7ff', marginBottom: 20, borderRadius: 8, border: calculations.error ? '1px solid #ffccc7' : '1px solid #91d5ff' }}>
                         <Row gutter={16}>
                             <Col span={12} style={{ textAlign: 'center', borderRight: '1px solid #ccc' }}>
