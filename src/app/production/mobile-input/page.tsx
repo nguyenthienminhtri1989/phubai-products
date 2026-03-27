@@ -117,6 +117,10 @@ function MobileInputContent() {
     const [itemChangeSaving, setItemChangeSaving] = useState(false);
     const [totalOutput3Ca, setTotalOutput3Ca] = useState(0);
 
+    // Cảnh báo ca thiếu
+    const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
+    const [warningDismissed, setWarningDismissed] = useState(false);
+
     // ============================
     // FETCH DATA
     // ============================
@@ -263,6 +267,18 @@ function MobileInputContent() {
 
     const currentMachine = machines[currentIndex];
     const currentState = currentMachine ? inputStates[currentMachine.id] : null;
+
+    // Kiểm tra ca thiếu khi đổi máy, ngày, hoặc ca
+    useEffect(() => {
+        if (!currentMachine) return;
+        setMissingShifts([]);
+        setWarningDismissed(false);
+        const dateStr = selectedDate.format("YYYY-MM-DD");
+        fetch(`/api/production-logs/check-missing-shifts?machineId=${currentMachine.id}&recordDate=${dateStr}&shift=${selectedShift}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data?.hasMissing) setMissingShifts(data.missingShifts); })
+            .catch(() => { /* Bỏ qua lỗi kiểm tra ca thiếu */ });
+    }, [currentMachine?.id, selectedDate, selectedShift]);
 
     const calculatedOutput = useMemo(() => {
         if (!currentMachine || !currentState) return 0;
@@ -793,6 +809,30 @@ function MobileInputContent() {
                     </Button>
                 )}
             </div>
+
+            {/* Cảnh báo ca thiếu */}
+            {missingShifts.length > 0 && !warningDismissed && (
+                <div style={{ margin: "0 12px 8px", background: "#fffbe6", border: "1px solid #faad14", borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ fontWeight: 600, color: "#d48806", marginBottom: 4, fontSize: 13 }}>
+                        ⚠️ Chưa nhập sản lượng cho:
+                    </div>
+                    {missingShifts.map((s, i) => (
+                        <div key={i} style={{ fontSize: 12, color: "#595959", marginBottom: 2 }}>
+                            • {s.machineName} — Ca {s.shift} — {dayjs(s.date).format("DD/MM/YYYY")}
+                        </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: "#8c8c8c", marginTop: 6 }}>
+                        Sản lượng ca này có thể bị cộng dồn nếu các ca trên chưa được ghi nhận.
+                    </div>
+                    <Button
+                        type="link" size="small"
+                        onClick={() => setWarningDismissed(true)}
+                        style={{ padding: 0, marginTop: 4, color: "#8c8c8c", height: "auto", fontSize: 12 }}
+                    >
+                        [Bỏ qua]
+                    </Button>
+                </div>
+            )}
 
             {/* FORM */}
             <div style={styles.formArea}>

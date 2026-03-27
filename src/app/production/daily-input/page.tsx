@@ -56,6 +56,10 @@ export default function DailyInputPage() {
     const [newItemId, setNewItemId] = useState<number | null>(null);
     const [itemChangeSaving, setItemChangeSaving] = useState(false);
 
+    // Cảnh báo ca thiếu
+    const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
+    const [warningDismissed, setWarningDismissed] = useState(false);
+
     // Modal & Form
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentMachine, setCurrentMachine] = useState<Machine | null>(null);
@@ -264,8 +268,19 @@ export default function DailyInputPage() {
             } catch (e) { console.error(e); }
         }
         form.setFieldsValue(initValues);
+        // Reset cảnh báo ca thiếu
+        setMissingShifts([]);
+        setWarningDismissed(false);
+
         setIsModalOpen(true);
         setTimeout(() => inputRef.current?.focus(), 100);
+
+        // Kiểm tra ca thiếu sau khi mở modal (không block UI)
+        const dateStr = selectedDate.format('YYYY-MM-DD');
+        fetch(`/api/production-logs/check-missing-shifts?machineId=${machine.id}&recordDate=${dateStr}&shift=${selectedShift}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data?.hasMissing) setMissingShifts(data.missingShifts); })
+            .catch(() => { /* Bỏ qua lỗi kiểm tra ca thiếu */ });
     };
 
     const totalOutput = useMemo(() =>
@@ -560,7 +575,7 @@ export default function DailyInputPage() {
             {/* MODAL NHẬP LIỆU */}
             <Modal
                 open={isModalOpen}
-                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); }}
+                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); }}
                 footer={null}
                 width={isMobile ? '96vw' : 500}
                 style={isMobile ? { top: 8 } : undefined}
@@ -573,6 +588,30 @@ export default function DailyInputPage() {
             >
                 <Form form={form} layout="vertical">
                     <Form.Item name="itemId" hidden><Input /></Form.Item>
+
+                    {/* Cảnh báo ca thiếu */}
+                    {missingShifts.length > 0 && !warningDismissed && (
+                        <div style={{ background: '#fffbe6', border: '1px solid #faad14', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600, color: '#d48806', marginBottom: 6 }}>
+                                ⚠️ Chưa nhập sản lượng cho:
+                            </div>
+                            {missingShifts.map((s, i) => (
+                                <div key={i} style={{ fontSize: 13, color: '#595959', marginBottom: 2 }}>
+                                    • {s.machineName} — Ca {s.shift} — {dayjs(s.date).format('DD/MM/YYYY')}
+                                </div>
+                            ))}
+                            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 8 }}>
+                                Sản lượng ca này có thể bị cộng dồn nếu các ca trên chưa được ghi nhận.
+                            </div>
+                            <Button
+                                type="link" size="small"
+                                onClick={() => setWarningDismissed(true)}
+                                style={{ padding: 0, marginTop: 4, color: '#8c8c8c', height: 'auto' }}
+                            >
+                                [Bỏ qua]
+                            </Button>
+                        </div>
+                    )}
 
                     {/* Switches trạng thái máy */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, background: '#f5f5f5', padding: '10px 14px', borderRadius: 8 }}>
