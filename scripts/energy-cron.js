@@ -37,7 +37,9 @@ async function readModbusData(slaveId) {
     const buffer = data.buffer;
 
     // Giải mã Float 32-bit (áp dụng hàm đảo Byte ở trên)
-    const totalEnergy = parseSelecFloat(buffer, 0);
+    const rawEnergy = parseSelecFloat(buffer, 0);
+    // Làm tròn thành 0.02 rồi ép kiểu lại thành số (Number)
+    const totalEnergy = Number(rawEnergy.toFixed(2));
 
     return { totalEnergy };
   } catch (error) {
