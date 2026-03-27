@@ -8,23 +8,43 @@ const prisma = new PrismaClient();
 const GATEWAY_IP = "192.168.1.253";
 const GATEWAY_PORT = 502;
 
+// THÊM HÀM NÀY: Dùng để đảo Byte (từ CDAB về ABCD) giải mã Float cho đồng hồ Selec
+function parseSelecFloat(buffer, offset = 0) {
+  // Trích xuất 4 byte từ buffer do Modbus trả về (đang bị ngược là C D A B)
+  const byteC = buffer[offset + 0];
+  const byteD = buffer[offset + 1];
+  const byteA = buffer[offset + 2];
+  const byteB = buffer[offset + 3];
+
+  // Xếp lại thành chuẩn A B C D
+  const fixedBuffer = Buffer.alloc(4);
+  fixedBuffer[0] = byteA;
+  fixedBuffer[1] = byteB;
+  fixedBuffer[2] = byteC;
+  fixedBuffer[3] = byteD;
+
+  // Đọc ra số thực chuẩn
+  return fixedBuffer.readFloatBE(0);
+}
+
 // Hàm kết nối và đọc Modbus
 async function readModbusData(slaveId) {
   const client = new ModbusRTU();
   try {
     await client.connectTCP(GATEWAY_IP, { port: GATEWAY_PORT });
     client.setID(slaveId);
-    client.setTimeout(2000); // Timeout 2 giây để tránh treo hệ thống
+    client.setTimeout(2000);
 
-    // Đọc 16 thanh ghi bắt đầu từ 0x00 (để bao quát cả kWh ở 0x00 và kW ở 0x0E)
+    // Đọc 16 thanh ghi bắt đầu từ 0x00
     const data = await client.readInputRegisters(0, 16);
     const buffer = data.buffer;
 
-    // Giải mã Float 32-bit (Big-Endian chuẩn của Selec)
+    // ---> SỬ DỤNG HÀM GIẢI MÃ VỪA TẠO THAY CHO buffer.readFloatBE()
     // 0x00: byte 0-3 là Active Energy (kWh)
-    const totalEnergy = buffer.readFloatBE(0);
-    // 0x0E (14): 14 * 2 = 28. Byte 28-31 là Total kW
-    const activePower = buffer.readFloatBE(28);
+    const totalEnergy = parseSelecFloat(buffer, 0);
+
+    // 0x0E (Decimal 14): 14 * 2 = 28. Byte 28-31 là Total kW
+    const activePower = parseSelecFloat(buffer, 28);
 
     return { totalEnergy, activePower };
   } catch (error) {
