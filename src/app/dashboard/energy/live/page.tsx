@@ -11,7 +11,7 @@ const { Option } = Select;
 
 interface LiveData {
     timestamp: string;
-    totalEnergy: number; // Chỉ số điện (kWh)
+    totalEnergy: number;
     voltage: number;
     current: number;
     power: number;
@@ -19,22 +19,20 @@ interface LiveData {
 }
 
 export default function RealtimeDashboard() {
-    // Data nguồn
     const [factories, setFactories] = useState<any[]>([]);
     const [substations, setSubstations] = useState<any[]>([]);
     const [meters, setMeters] = useState<any[]>([]);
 
-    // State bộ lọc
     const [filterFactory, setFilterFactory] = useState<number | null>(null);
     const [filterSubstation, setFilterSubstation] = useState<number | null>(null);
     const [selectedMeter, setSelectedMeter] = useState<number | null>(null);
 
-    // State Live Data
     const [liveData, setLiveData] = useState<LiveData | null>(null);
-    const [loading, setLoading] = useState(false);
+
+    // Tách biệt trạng thái tải: Chỉ quay Spin ở lần đầu tiên
+    const [isInitialLoad, setIsInitialLoad] = useState(false);
     const [errorStatus, setErrorStatus] = useState(false);
 
-    // 1. Tải toàn bộ cấu trúc (Nhà máy, Trạm, Đồng hồ) 1 lần khi mở trang
     useEffect(() => {
         Promise.all([
             fetch("/api/factories").then(res => res.json()),
@@ -43,12 +41,10 @@ export default function RealtimeDashboard() {
         ]).then(([facs, subs, mets]) => {
             setFactories(facs);
             setSubstations(subs);
-            // Chỉ lấy các đồng hồ có cấu hình tự động (IoT)
             setMeters(mets.filter((m: any) => m.isAuto && m.gatewayIp));
         });
     }, []);
 
-    // 2. Lọc danh sách đồng hồ dựa trên Nhà máy và Trạm
     const filteredMeters = useMemo(() => {
         return meters.filter(m => {
             if (filterFactory && m.factoryId !== filterFactory) return false;
@@ -57,42 +53,53 @@ export default function RealtimeDashboard() {
         });
     }, [meters, filterFactory, filterSubstation]);
 
-    // Reset selected meter khi đổi bộ lọc
     useEffect(() => {
         if (filteredMeters.length > 0 && !filteredMeters.find(m => m.id === selectedMeter)) {
             setSelectedMeter(filteredMeters[0].id);
         } else if (filteredMeters.length === 0) {
             setSelectedMeter(null);
-            setLiveData(null); // Xóa data cũ trên màn hình
+            setLiveData(null);
         }
     }, [filteredMeters]);
 
-    // 3. Vòng lặp lấy dữ liệu (Polling 3s/lần)
+    // Vòng lặp lấy dữ liệu đã được tối ưu UX
     useEffect(() => {
         if (!selectedMeter) return;
 
-        const fetchLive = async () => {
+        let isMounted = true; // Chống rò rỉ bộ nhớ khi chuyển trang
+
+        const fetchLive = async (isFirstTime = false) => {
             try {
-                setLoading(true);
+                if (isFirstTime) setIsInitialLoad(true);
+
                 const res = await fetch(`/api/energy/live?meterId=${selectedMeter}`);
                 if (!res.ok) throw new Error("Mất kết nối");
 
                 const data = await res.json();
-                setLiveData(data);
-                setErrorStatus(false);
+
+                if (isMounted) {
+                    setLiveData(data);
+                    setErrorStatus(false);
+                }
             } catch (err) {
-                setErrorStatus(true);
+                if (isMounted) setErrorStatus(true);
             } finally {
-                setLoading(false);
+                if (isMounted && isFirstTime) setIsInitialLoad(false);
             }
         };
 
-        fetchLive();
-        const intervalId = setInterval(fetchLive, 3000);
-        return () => clearInterval(intervalId);
+        // 1. Gọi ngay lập tức khi chọn đồng hồ (kèm hiệu ứng loading)
+        fetchLive(true);
+
+        // 2. Thiết lập chạy ngầm mỗi 60 giây (không kèm hiệu ứng loading)
+        const intervalId = setInterval(() => fetchLive(false), 60000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(intervalId);
+        };
     }, [selectedMeter]);
 
-    // Tìm thông tin đồng hồ đang chọn để hiển thị tên
     const activeMeterInfo = meters.find(m => m.id === selectedMeter);
 
     return (
@@ -148,7 +155,7 @@ export default function RealtimeDashboard() {
                         {errorStatus ? (
                             <Badge status="error" text={<span style={{ color: "red", fontWeight: 600 }}>Mất kết nối Gateway</span>} />
                         ) : liveData ? (
-                            <Badge status="processing" text={<span style={{ color: "#1677ff" }}>Đang truyền dữ liệu (3s/lần)</span>} />
+                            <Badge status="processing" text={<span style={{ color: "#1677ff" }}>Đang theo dõi trực tiếp (60s/lần)</span>} />
                         ) : <Badge status="default" text="Đang chờ kết nối..." />}
                     </Col>
                 </Row>
@@ -162,7 +169,8 @@ export default function RealtimeDashboard() {
                     </div>
                 </Card>
             ) : (
-                <Spin spinning={loading && !liveData} indicator={<SyncOutlined spin />}>
+                // Ở ĐÂY ĐÃ THAY ĐỔI: Chỉ spinning khi isInitialLoad = true
+                <Spin spinning={isInitialLoad} indicator={<SyncOutlined spin />}>
                     <Row gutter={[16, 16]}>
 
                         {/* CỘT TRÁI: SỐ CHỮ ĐIỆN VÀ GAUGE CÔNG SUẤT */}
@@ -171,7 +179,6 @@ export default function RealtimeDashboard() {
                                 style={{ height: "100%", textAlign: "center", background: "#fff" }}
                                 title={<span style={{ fontSize: 18 }}>{activeMeterInfo?.name || "Đồng hồ đo điện"}</span>}
                             >
-                                {/* Số chữ điện (Total kWh) */}
                                 <div style={{ marginBottom: 40, padding: 20, background: "#f6ffed", border: "1px solid #b7eb8f", borderRadius: 8 }}>
                                     <div style={{ fontSize: 14, color: "#52c41a", fontWeight: 600, marginBottom: 8 }}>
                                         SỐ CHỮ ĐIỆN HIỆN TẠI (TOTAL ACTIVE ENERGY)
@@ -181,12 +188,11 @@ export default function RealtimeDashboard() {
                                     </div>
                                 </div>
 
-                                {/* Đồng hồ tốc độ giả lập (Gauge) cho Công suất */}
                                 <div style={{ marginTop: 20 }}>
                                     <Progress
                                         type="dashboard"
                                         steps={8}
-                                        percent={liveData ? (liveData.power / 200) * 100 : 0} // Giả sử max là 200kW để thanh Progress chạy, bạn có thể tự chỉnh số này
+                                        percent={liveData ? (liveData.power / 200) * 100 : 0}
                                         strokeColor={liveData && liveData.power > 150 ? "#cf1322" : "#1677ff"}
                                         gapDegree={90}
                                         size={250}
@@ -208,7 +214,6 @@ export default function RealtimeDashboard() {
                         <Col xs={24} lg={14}>
                             <Row gutter={[16, 16]}>
 
-                                {/* Hệ số công suất (Cos Phi) */}
                                 <Col xs={24}>
                                     <Card style={{ background: liveData && liveData.pf < 0.9 ? "#fff1f0" : "#f0f5ff", borderColor: liveData && liveData.pf < 0.9 ? "#ffa39e" : "#adc6ff" }}>
                                         <Statistic
@@ -226,7 +231,6 @@ export default function RealtimeDashboard() {
                                     </Card>
                                 </Col>
 
-                                {/* Điện áp và Dòng điện */}
                                 <Col xs={24} sm={12}>
                                     <Card>
                                         <Statistic
@@ -253,11 +257,12 @@ export default function RealtimeDashboard() {
                                     </Card>
                                 </Col>
 
-                                {/* Khối hiển thị thời gian chốt */}
                                 <Col xs={24}>
                                     <div style={{ textAlign: "right", marginTop: 16, color: "#888", fontSize: 13 }}>
-                                        <SyncOutlined spin={loading && !errorStatus} style={{ marginRight: 8 }} />
-                                        Dữ liệu cập nhật gần nhất: <b>{liveData ? new Date(liveData.timestamp).toLocaleTimeString('vi-VN') : "---"}</b>
+                                        <span style={{ marginRight: 8 }}>
+                                            Dữ liệu cập nhật gần nhất: <b>{liveData ? new Date(liveData.timestamp).toLocaleTimeString('vi-VN') : "---"}</b>
+                                        </span>
+                                        {/* Bỏ icon xoay khi đang lấy số nền để UX sạch hơn */}
                                     </div>
                                 </Col>
                             </Row>

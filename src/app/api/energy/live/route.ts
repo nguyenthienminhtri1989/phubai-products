@@ -18,6 +18,9 @@ function parseSelecFloat(buffer: Buffer, offset = 0) {
   return fixedBuffer.readFloatBE(0);
 }
 
+// Hàm tạo nhịp nghỉ cho Gateway
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const meterId = searchParams.get("meterId");
@@ -39,23 +42,35 @@ export async function GET(req: NextRequest) {
 
   const client = new ModbusRTU();
   try {
-    await client.connectTCP(meter.gatewayIp, { port: meter.gatewayPort });
+    // Cắt bỏ khoảng trắng thừa nếu nhập nhầm ở IP
+    await client.connectTCP(meter.gatewayIp.trim(), {
+      port: meter.gatewayPort,
+    });
     client.setID(meter.modbusId);
-    client.setTimeout(1500);
+    client.setTimeout(2500); // Tăng thời gian chờ lên một chút cho an toàn
 
-    // 1. Đọc Số chữ điện (Total kWh) - Bắt đầu từ 0x00 (Đọc 2 thanh ghi)
+    // 1. Đọc Số chữ điện (0x00)
     const data0 = await client.readInputRegisters(0, 2);
     const totalEnergy = parseSelecFloat(data0.buffer, 0);
 
-    // 2. Đọc Hệ số công suất (0x0C) và Công suất tức thời (0x0E) - Đọc 4 thanh ghi
+    await delay(50); // Cho Gateway nghỉ 50 mili-giây
+
+    // 2. Đọc Hệ số công suất (0x0C) và Công suất tức thời (0x0E)
     const data1 = await client.readInputRegisters(12, 4);
     const pf = parseSelecFloat(data1.buffer, 0);
     const kw = parseSelecFloat(data1.buffer, 4);
 
-    // 3. Đọc Điện áp (0x28) và Dòng điện (0x2E) - Đọc 8 thanh ghi
-    const data2 = await client.readInputRegisters(40, 8);
-    const voltage = parseSelecFloat(data2.buffer, 0);
-    const current = parseSelecFloat(data2.buffer, 12);
+    await delay(50);
+
+    // 3. Đọc Điện áp (0x28)
+    const dataV = await client.readInputRegisters(40, 2);
+    const voltage = parseSelecFloat(dataV.buffer, 0);
+
+    await delay(50);
+
+    // 4. Đọc Dòng điện (0x2E)
+    const dataI = await client.readInputRegisters(46, 2);
+    const current = parseSelecFloat(dataI.buffer, 0);
 
     // Nhân hệ số TU, TI
     const totalKw = kw * (meter.tu * meter.ti);
@@ -64,14 +79,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
-      totalEnergy: Number(totalEnergy.toFixed(1)), // Trả về số điện cộng dồn
+      totalEnergy: Number(totalEnergy.toFixed(1)),
       voltage: Number(totalVoltage.toFixed(1)),
       current: Number(totalCurrent.toFixed(1)),
       power: Number(totalKw.toFixed(2)),
       pf: Number(pf.toFixed(2)),
     });
   } catch (error: any) {
-    console.error(`[Lỗi Live Modbus ID ${meter.modbusId}]:`, error.message);
+    console.error(`[Lỗi Live Modbus ID ${meter?.modbusId}]:`, error.message);
     return NextResponse.json(
       { error: "Mất kết nối tới đồng hồ" },
       { status: 503 },
