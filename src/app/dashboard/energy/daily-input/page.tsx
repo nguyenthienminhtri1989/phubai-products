@@ -76,7 +76,15 @@ export default function EnergyDailyInputPage() {
             const dateStr = selectedDate.format('YYYY-MM-DD');
             const res = await fetch(`/api/energy/daily-status?substationId=${selectedSubstationId}&date=${dateStr}`);
             if (res.ok) {
-                setMeters(await res.json());
+                const data = await res.json();
+                setMeters(data);
+                const autoCount = data.filter((m: PowerMeter) => m.todayRecord?.dataSource === 'AUTO').length;
+                if (autoCount > 0) {
+                    message.success({
+                        content: `Thu thập tự động thành công: ${autoCount} đồng hồ IoT đã được chốt số liệu ngày ${selectedDate.format('DD/MM/YYYY')}.`,
+                        duration: 5,
+                    });
+                }
             }
         } catch (error) { message.error("Lỗi tải danh sách đồng hồ"); }
         finally { setLoading(false); }

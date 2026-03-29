@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-// Đã thêm Switch vào danh sách import từ antd
-import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, message, Tabs, Tag, Space, Popconfirm, Switch } from 'antd';
+import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, message, Tabs, Tag, Space, Popconfirm, Switch, Row, Col } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PartitionOutlined, DashboardOutlined } from '@ant-design/icons';
 import { useSession } from "next-auth/react";
 import type { TableProps } from 'antd';
@@ -23,6 +22,8 @@ interface PowerMeter {
     ti: number;
     isAuto: boolean;       // Phục vụ IoT
     modbusId: number | null; // Phục vụ IoT
+    gatewayIp: string | null; // Phục vụ IoT (Đa Gateway)
+    gatewayPort: number;      // Phục vụ IoT
     factoryId: number;
     substationId: number | null;
     meterGroupId: number | null;
@@ -135,6 +136,8 @@ export default function EnergyMetersPage() {
                 // Xử lý dữ liệu IoT
                 isAuto: !!values.isAuto,
                 modbusId: values.isAuto && values.modbusId ? Number(values.modbusId) : null,
+                gatewayIp: values.isAuto && values.gatewayIp ? values.gatewayIp : null,
+                gatewayPort: values.isAuto && values.gatewayPort ? Number(values.gatewayPort) : 502,
             };
 
             const res = await fetch('/api/energy/meters', {
@@ -186,7 +189,7 @@ export default function EnergyMetersPage() {
     ];
 
     const meterColumns: TableProps<PowerMeter>['columns'] = [
-        { title: 'Mã đồng hồ', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
+        { title: 'Mã', dataIndex: 'code', key: 'code', render: text => <b>{text}</b> },
         { title: 'Tên đồng hồ', dataIndex: 'name', key: 'name' },
         { title: 'Khu vực đo đếm', dataIndex: 'description', key: 'description', render: t => t || <span style={{ color: '#ccc' }}>---</span> },
         {
@@ -195,21 +198,20 @@ export default function EnergyMetersPage() {
         },
         {
             title: 'Chế độ lấy số', dataIndex: 'isAuto', key: 'isAuto',
-            render: (isAuto) => isAuto ? <Tag color="green">Tự động (IoT)</Tag> : <Tag color="orange">Nhập tay</Tag>
+            render: (isAuto, record) => isAuto ? (
+                <div>
+                    <Tag color="green">Tự động (IoT)</Tag>
+                    {/* Hiển thị thêm thông tin IP ở bảng cho dễ kiểm soát */}
+                    <div style={{ fontSize: 12, marginTop: 4, color: '#888' }}>
+                        {record.gatewayIp}:{record.gatewayPort} (ID: {record.modbusId})
+                    </div>
+                </div>
+            ) : <Tag color="orange">Nhập tay</Tag>
         },
-        { title: 'Slave ID', dataIndex: 'modbusId', key: 'modbusId', render: t => t || '-' },
         { title: 'Hệ số TU', dataIndex: 'tu', key: 'tu' },
         { title: 'Hệ số TI', dataIndex: 'ti', key: 'ti' },
         { title: 'Nhà máy', dataIndex: ['factory', 'name'], key: 'factoryName' },
         { title: 'Thuộc Trạm', dataIndex: ['substation', 'name'], key: 'substationName', render: (t: string) => t || '---' },
-        {
-            title: 'Nhóm đồng hồ',
-            key: 'meterGroup',
-            render: (_: unknown, record: PowerMeter) =>
-                record.meterGroup
-                    ? <Tag color="purple">{record.meterGroup.groupCode} — {record.meterGroup.groupName}</Tag>
-                    : <span style={{ color: '#ccc' }}>—</span>,
-        },
         {
             title: 'Thao tác', key: 'action',
             render: (_, record) => canEdit ? (
@@ -233,8 +235,8 @@ export default function EnergyMetersPage() {
                             else {
                                 setEditingMeter(null);
                                 meterForm.resetFields();
-                                // Reset thêm giá trị mặc định cho isAuto
-                                meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1, isAuto: false });
+                                // Đã cập nhật giá trị mặc định cho cổng là 502
+                                meterForm.setFieldsValue({ type: 1, tu: 1, ti: 1, isAuto: false, gatewayPort: 502 });
                                 setIsMeterModalOpen(true);
                             }
                         }}>
@@ -244,59 +246,23 @@ export default function EnergyMetersPage() {
                 }>
                     <Tabs.TabPane tab={<span><PartitionOutlined /> Danh mục Trạm Biến Áp</span>} key="1">
                         <Space style={{ marginBottom: 16 }}>
-                            <Select
-                                allowClear
-                                placeholder="Lọc theo Nhà máy"
-                                style={{ width: 200 }}
-                                value={filterSubFactory}
-                                onChange={setFilterSubFactory}
-                            >
+                            <Select allowClear placeholder="Lọc theo Nhà máy" style={{ width: 200 }} value={filterSubFactory} onChange={setFilterSubFactory}>
                                 {factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}
                             </Select>
                         </Space>
-                        <Table
-                            columns={subColumns}
-                            dataSource={substations.filter(s =>
-                                filterSubFactory == null || s.factoryId === filterSubFactory
-                            )}
-                            rowKey="id"
-                            loading={loading}
-                        />
+                        <Table columns={subColumns} dataSource={substations.filter(s => filterSubFactory == null || s.factoryId === filterSubFactory)} rowKey="id" loading={loading} />
                     </Tabs.TabPane>
+
                     <Tabs.TabPane tab={<span><DashboardOutlined /> Danh mục Đồng hồ (Công tơ)</span>} key="2">
                         <Space style={{ marginBottom: 16 }}>
-                            <Select
-                                allowClear
-                                placeholder="Lọc theo Nhà máy"
-                                style={{ width: 200 }}
-                                value={filterMeterFactory}
-                                onChange={(val) => { setFilterMeterFactory(val); setFilterMeterSubstation(undefined); }}
-                            >
+                            <Select allowClear placeholder="Lọc theo Nhà máy" style={{ width: 200 }} value={filterMeterFactory} onChange={(val) => { setFilterMeterFactory(val); setFilterMeterSubstation(undefined); }}>
                                 {factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}
                             </Select>
-                            <Select
-                                allowClear
-                                placeholder="Lọc theo Máy biến áp"
-                                style={{ width: 220 }}
-                                value={filterMeterSubstation}
-                                onChange={setFilterMeterSubstation}
-                                disabled={!filterMeterFactory}
-                            >
-                                {substations
-                                    .filter(s => filterMeterFactory == null || s.factoryId === filterMeterFactory)
-                                    .map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)
-                                }
+                            <Select allowClear placeholder="Lọc theo Máy biến áp" style={{ width: 220 }} value={filterMeterSubstation} onChange={setFilterMeterSubstation} disabled={!filterMeterFactory}>
+                                {substations.filter(s => filterMeterFactory == null || s.factoryId === filterMeterFactory).map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}
                             </Select>
                         </Space>
-                        <Table
-                            columns={meterColumns}
-                            dataSource={meters.filter(m =>
-                                (filterMeterFactory == null || m.factoryId === filterMeterFactory) &&
-                                (filterMeterSubstation == null || m.substationId === filterMeterSubstation)
-                            )}
-                            rowKey="id"
-                            loading={loading}
-                        />
+                        <Table columns={meterColumns} dataSource={meters.filter(m => (filterMeterFactory == null || m.factoryId === filterMeterFactory) && (filterMeterSubstation == null || m.substationId === filterMeterSubstation))} rowKey="id" loading={loading} />
                     </Tabs.TabPane>
                 </Tabs>
             </Card>
@@ -313,56 +279,72 @@ export default function EnergyMetersPage() {
             </Modal>
 
             {/* Modal Đồng Hồ */}
-            <Modal title={editingMeter ? "Sửa Đồng hồ" : "Thêm Đồng hồ"} open={isMeterModalOpen} onOk={() => meterForm.submit()} onCancel={() => setIsMeterModalOpen(false)}>
+            <Modal title={editingMeter ? "Sửa Đồng hồ" : "Thêm Đồng hồ"} open={isMeterModalOpen} width={650} onOk={() => meterForm.submit()} onCancel={() => setIsMeterModalOpen(false)}>
                 <Form form={meterForm} layout="vertical" onFinish={handleSaveMeter}>
-                    <Space align="baseline">
-                        <Form.Item name="code" label="Mã đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
-                        <Form.Item name="type" label="Loại đồng hồ">
-                            <Select style={{ width: 150 }}>
-                                <Option value={1}>Hạ thế</Option>
-                                <Option value={2}>Trung thế (3 Giá)</Option>
-                            </Select>
-                        </Form.Item>
-                    </Space>
-                    <Form.Item name="name" label="Tên đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="code" label="Mã đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="type" label="Loại đồng hồ" initialValue={1}>
+                                <Select>
+                                    <Option value={1}>Hạ thế</Option>
+                                    <Option value={2}>Trung thế (3 Giá)</Option>
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                    </Row>
 
+                    <Form.Item name="name" label="Tên đồng hồ" rules={[{ required: true }]}><Input /></Form.Item>
                     <Form.Item name="description" label="Mô tả / Đo cho các máy nào?">
                         <Input.TextArea rows={2} placeholder="Vd: Đo đếm cho máy sợi con, máy ống..." />
                     </Form.Item>
 
-                    {/* BLOCK CẤU HÌNH IOT NẰM Ở ĐÂY */}
-                    <Card size="small" title="Cấu hình thu thập tự động (IoT)" style={{ marginBottom: 16, backgroundColor: '#fafafa' }}>
-                        <Space align="baseline" size="large">
-                            <Form.Item name="isAuto" label="Chế độ thu thập" valuePropName="checked" initialValue={false}>
-                                <Switch checkedChildren="Tự động" unCheckedChildren="Nhập tay" />
-                            </Form.Item>
+                    {/* BLOCK CẤU HÌNH IOT ĐÃ ĐƯỢC NÂNG CẤP */}
+                    <Card size="small" title="Cấu hình thu thập tự động (IoT qua Gateway RS485)" style={{ marginBottom: 16, backgroundColor: '#f5fbff', borderColor: '#91caff' }}>
+                        <Form.Item name="isAuto" label="Chế độ thu thập" valuePropName="checked" initialValue={false}>
+                            <Switch checkedChildren="Tự động" unCheckedChildren="Nhập tay" />
+                        </Form.Item>
 
-                            {/* Logic: Chỉ hiện ô nhập Slave ID nếu isAuto đang bật */}
-                            <Form.Item noStyle shouldUpdate={(prev, curr) => prev.isAuto !== curr.isAuto}>
-                                {({ getFieldValue }) =>
-                                    getFieldValue('isAuto') ? (
-                                        <Form.Item name="modbusId" label="Slave ID (Trên đồng hồ)" rules={[{ required: true, message: 'Bắt buộc nhập Slave ID' }]}>
-                                            <InputNumber min={1} max={255} placeholder="Vd: 1" style={{ width: '100%' }} />
-                                        </Form.Item>
-                                    ) : null
-                                }
-                            </Form.Item>
-                        </Space>
+                        <Form.Item noStyle shouldUpdate={(prev, curr) => prev.isAuto !== curr.isAuto}>
+                            {({ getFieldValue }) =>
+                                getFieldValue('isAuto') ? (
+                                    <Row gutter={16}>
+                                        <Col span={12}>
+                                            <Form.Item name="gatewayIp" label="IP / Tên miền Gateway" rules={[{ required: true, message: 'Nhập IP Gateway' }]}>
+                                                <Input placeholder="Vd: 192.168.1.253" />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col span={6}>
+                                            <Form.Item name="gatewayPort" label="Port" initialValue={502} rules={[{ required: true }]}>
+                                                <InputNumber min={1} style={{ width: '100%' }} />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col span={6}>
+                                            <Form.Item name="modbusId" label="Slave ID" rules={[{ required: true, message: 'Nhập Slave ID' }]}>
+                                                <InputNumber min={1} max={255} placeholder="Vd: 1" style={{ width: '100%' }} />
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                ) : null
+                            }
+                        </Form.Item>
                     </Card>
 
-                    <Space align="baseline">
-                        <Form.Item name="tu" label="Hệ số biến điện áp (TU)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
-                        <Form.Item name="ti" label="Hệ số biến dòng điện (TI)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
-                    </Space>
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="tu" label="Hệ số biến điện áp (TU)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="ti" label="Hệ số biến dòng điện (TI)" initialValue={1} rules={[{ required: true }]}><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
+                        </Col>
+                    </Row>
 
                     <Form.Item name="factoryId" label="Nhà máy quản lý" rules={[{ required: true }]}>
                         <Select>{factories.map(f => <Option key={f.id} value={f.id}>{f.name}</Option>)}</Select>
                     </Form.Item>
 
-                    <Form.Item
-                        shouldUpdate={(prev, curr) => prev.type !== curr.type || prev.factoryId !== curr.factoryId}
-                        noStyle
-                    >
+                    <Form.Item shouldUpdate={(prev, curr) => prev.type !== curr.type || prev.factoryId !== curr.factoryId} noStyle>
                         {({ getFieldValue }) => {
                             const selectedFac = getFieldValue('factoryId');
                             return (

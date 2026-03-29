@@ -28,9 +28,12 @@ export async function POST(request: Request) {
         type: data.type,
         tu: data.tu,
         ti: data.ti,
-        // ---> CẬP NHẬT TRƯỜNG MỚI
+        // ---> CẬP NHẬT TRƯỜNG IOT MỚI (Hỗ trợ Đa Gateway)
         isAuto: Boolean(data.isAuto),
         modbusId: data.isAuto && data.modbusId ? Number(data.modbusId) : null,
+        gatewayIp: data.isAuto && data.gatewayIp ? data.gatewayIp : null,
+        gatewayPort:
+          data.isAuto && data.gatewayPort ? Number(data.gatewayPort) : 502,
         // ------------------------
         factoryId: data.factoryId,
         substationId: data.substationId || null,
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  // ... Giữ nguyên ...
+  // ... Giữ nguyên nội dung hàm DELETE của bạn ...
 }
 
 export async function PUT(request: Request) {
@@ -62,9 +65,12 @@ export async function PUT(request: Request) {
         type: data.type,
         tu: data.tu,
         ti: data.ti,
-        // ---> CẬP NHẬT TRƯỜNG MỚI
+        // ---> CẬP NHẬT TRƯỜNG IOT MỚI (Hỗ trợ Đa Gateway)
         isAuto: Boolean(data.isAuto),
         modbusId: data.isAuto && data.modbusId ? Number(data.modbusId) : null,
+        gatewayIp: data.isAuto && data.gatewayIp ? data.gatewayIp : null,
+        gatewayPort:
+          data.isAuto && data.gatewayPort ? Number(data.gatewayPort) : 502,
         // ------------------------
         factoryId: data.factoryId,
         substationId: data.substationId || null,

@@ -308,6 +308,10 @@ model PowerMeter {
   isAuto       Boolean  @default(false) // true: Đọc qua Gateway, false: Nhập tay
   modbusId     Int?     // Slave ID của đồng hồ (VD: 1, 2...) dùng cho RS485
 
+  // 👇 THÊM 2 TRƯỜNG NÀY 👇
+  gatewayIp    String?  // Lưu IP (192.168.1.253) hoặc Tên miền DDNS (nhamay3.dyndns.org)
+  gatewayPort  Int      @default(502) // Cổng Modbus TCP (Thường là 502)
+
   factoryId    Int      
   factory      Factory  @relation(fields: [factoryId], references: [id])
 
