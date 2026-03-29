@@ -260,9 +260,14 @@ export default function EnergyDailyInputPage() {
                                     </div>
                                     <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 'bold' }}>
                                         {isDone
-                                            ? <span style={{ color: isAutoRecord ? '#52c41a' : '#d48806' }}>
-                                                Đã chốt ({isAutoRecord ? 'Tự động' : 'Bằng tay'})
-                                            </span>
+                                            ? <>
+                                                <div style={{ fontSize: 15, color: isAutoRecord ? '#52c41a' : '#d48806' }}>
+                                                    {Number(m.todayRecord?.consTotal ?? 0).toLocaleString('en-US')} <small style={{ fontWeight: 'normal', fontSize: 11 }}>kWh</small>
+                                                </div>
+                                                <div style={{ fontSize: 11, color: isAutoRecord ? '#52c41a' : '#d48806', fontWeight: 'normal' }}>
+                                                    Đã chốt ({isAutoRecord ? 'Tự động' : 'Bằng tay'})
+                                                </div>
+                                            </>
                                             : <span style={{ color: '#ccc' }}>--</span>}
                                     </div>
                                 </Card>
