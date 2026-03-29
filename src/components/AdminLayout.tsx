@@ -177,6 +177,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
         { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
         { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
+        { key: "/dashboard/energy/live", label: "Giám sát trực tiếp" },
       ],
     } as any);
   }

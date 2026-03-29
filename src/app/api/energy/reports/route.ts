@@ -16,12 +16,16 @@ export async function GET(req: NextRequest) {
     if (!startDate || !endDate) {
       return NextResponse.json(
         { error: "startDate và endDate là bắt buộc" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const start = new Date(startDate);
     const end = new Date(endDate);
+
+    // VÁ LỖI 1: Đẩy mốc 'end' đến giây cuối cùng của ngày (23:59:59.999)
+    // để đảm bảo lấy trọn vẹn dữ liệu của ngày cuối cùng được chọn
+    end.setHours(23, 59, 59, 999);
 
     // Build meter filter
     const meterFilter: Record<string, unknown> = { isActive: true };
@@ -50,7 +54,9 @@ export async function GET(req: NextRequest) {
             type: true,
             factory: { select: { id: true, name: true } },
             substation: { select: { id: true, name: true } },
-            meterGroup: { select: { id: true, groupCode: true, groupName: true } },
+            meterGroup: {
+              select: { id: true, groupCode: true, groupName: true },
+            },
           },
         },
       },
@@ -58,7 +64,10 @@ export async function GET(req: NextRequest) {
     });
 
     // Previous period for trend comparison
-    const daysDiff = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
+    const daysDiff = Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1,
+    );
     const prevEnd = new Date(start);
     prevEnd.setDate(prevEnd.getDate() - 1);
     const prevStart = new Date(prevEnd);
@@ -79,40 +88,67 @@ export async function GET(req: NextRequest) {
     });
 
     // ── Summary ──────────────────────────────────────────────────────────────
-    const totalConsumption = records.reduce((s, r) => s + (r.consTotal ?? 0), 0);
-    const totalCost        = records.reduce((s, r) => s + (r.costTotal ?? 0), 0);
-    const totalPeak        = records.reduce((s, r) => s + (r.consPeak ?? 0), 0);
-    const totalNormal      = records.reduce((s, r) => s + (r.consNormal ?? 0), 0);
-    const totalOffPeak     = records.reduce((s, r) => s + (r.consOffPeak ?? 0), 0);
+    const totalConsumption = records.reduce(
+      (s, r) => s + (r.consTotal ?? 0),
+      0,
+    );
+    const totalCost = records.reduce((s, r) => s + (r.costTotal ?? 0), 0);
+    const totalPeak = records.reduce((s, r) => s + (r.consPeak ?? 0), 0);
+    const totalNormal = records.reduce((s, r) => s + (r.consNormal ?? 0), 0);
+    const totalOffPeak = records.reduce((s, r) => s + (r.consOffPeak ?? 0), 0);
 
-    const uniqueDates  = new Set(records.map(r => r.recordDate.toISOString().slice(0, 10)));
+    // VÁ LỖI 2: Chuyển đổi múi giờ để đếm số ngày chính xác theo mốc giờ Việt Nam
+    const uniqueDates = new Set(
+      records.map((r) => {
+        // Cộng 7 tiếng (7 * 60 * 60 * 1000) vào giờ UTC để ra giờ VN
+        const localDate = new Date(r.recordDate.getTime() + 7 * 3600 * 1000);
+        return localDate.toISOString().slice(0, 10);
+      }),
+    );
+
     const daysWithData = uniqueDates.size;
-    const avgPerDay    = daysWithData > 0 ? totalConsumption / daysWithData : 0;
+    const avgPerDay = daysWithData > 0 ? totalConsumption / daysWithData : 0;
 
-    const prevTotalCons = prevRecords.reduce((s, r) => s + (r.consTotal ?? 0), 0);
-    const trendPercent  = prevTotalCons > 0
-      ? ((totalConsumption - prevTotalCons) / prevTotalCons) * 100
-      : null;
+    const prevTotalCons = prevRecords.reduce(
+      (s, r) => s + (r.consTotal ?? 0),
+      0,
+    );
+    const trendPercent =
+      prevTotalCons > 0
+        ? ((totalConsumption - prevTotalCons) / prevTotalCons) * 100
+        : null;
 
     // ── By Date / Month ───────────────────────────────────────────────────────
     type DateBucket = {
-      consTotal: number; consPeak: number;
-      consNormal: number; consOffPeak: number; costTotal: number;
+      consTotal: number;
+      consPeak: number;
+      consNormal: number;
+      consOffPeak: number;
+      costTotal: number;
     };
     const dateMap = new Map<string, DateBucket>();
 
     for (const r of records) {
-      const dateStr = r.recordDate.toISOString().slice(0, 10);
+      // VÁ LỖI 2 (Tiếp tục): Ép về giờ local Việt Nam trước khi lấy chuỗi Ngày cho biểu đồ
+      const localDate = new Date(r.recordDate.getTime() + 7 * 3600 * 1000);
+      const dateStr = localDate.toISOString().slice(0, 10); // Đảm bảo ra đúng YYYY-MM-DD
+
       const key = groupBy === "month" ? dateStr.slice(0, 7) : dateStr;
       if (!dateMap.has(key)) {
-        dateMap.set(key, { consTotal: 0, consPeak: 0, consNormal: 0, consOffPeak: 0, costTotal: 0 });
+        dateMap.set(key, {
+          consTotal: 0,
+          consPeak: 0,
+          consNormal: 0,
+          consOffPeak: 0,
+          costTotal: 0,
+        });
       }
       const b = dateMap.get(key)!;
-      b.consTotal   += r.consTotal   ?? 0;
-      b.consPeak    += r.consPeak    ?? 0;
-      b.consNormal  += r.consNormal  ?? 0;
+      b.consTotal += r.consTotal ?? 0;
+      b.consPeak += r.consPeak ?? 0;
+      b.consNormal += r.consNormal ?? 0;
       b.consOffPeak += r.consOffPeak ?? 0;
-      b.costTotal   += r.costTotal   ?? 0;
+      b.costTotal += r.costTotal ?? 0;
     }
 
     const byDate = Array.from(dateMap.entries())
@@ -121,37 +157,47 @@ export async function GET(req: NextRequest) {
 
     // ── By Meter ──────────────────────────────────────────────────────────────
     type MeterBucket = {
-      meterId: number; meterCode: string; meterName: string;
-      meterType: number; groupName: string;
-      factoryName: string; substationName: string;
-      consTotal: number; costTotal: number;
+      meterId: number;
+      meterCode: string;
+      meterName: string;
+      meterType: number;
+      groupName: string;
+      factoryName: string;
+      substationName: string;
+      consTotal: number;
+      costTotal: number;
     };
     const meterMap = new Map<number, MeterBucket>();
 
     for (const r of records) {
       if (!meterMap.has(r.meterId)) {
         meterMap.set(r.meterId, {
-          meterId:       r.meterId,
-          meterCode:     r.meter.code,
-          meterName:     r.meter.name,
-          meterType:     r.meter.type,
-          groupName:     r.meter.meterGroup?.groupName ?? "Chưa phân nhóm",
-          factoryName:   r.meter.factory.name,
+          meterId: r.meterId,
+          meterCode: r.meter.code,
+          meterName: r.meter.name,
+          meterType: r.meter.type,
+          groupName: r.meter.meterGroup?.groupName ?? "Chưa phân nhóm",
+          factoryName: r.meter.factory.name,
           substationName: r.meter.substation?.name ?? "—",
-          consTotal:     0,
-          costTotal:     0,
+          consTotal: 0,
+          costTotal: 0,
         });
       }
       const b = meterMap.get(r.meterId)!;
       b.consTotal += r.consTotal ?? 0;
       b.costTotal += r.costTotal ?? 0;
     }
-    const byMeter = Array.from(meterMap.values()).sort((a, b) => b.consTotal - a.consTotal);
+    const byMeter = Array.from(meterMap.values()).sort(
+      (a, b) => b.consTotal - a.consTotal,
+    );
 
     // ── By Group ──────────────────────────────────────────────────────────────
     type GroupBucket = {
-      groupId: number | null; groupCode: string; groupName: string;
-      consTotal: number; costTotal: number;
+      groupId: number | null;
+      groupCode: string;
+      groupName: string;
+      consTotal: number;
+      costTotal: number;
     };
     const groupMap = new Map<string, GroupBucket>();
 
@@ -159,7 +205,7 @@ export async function GET(req: NextRequest) {
       const key = r.meter.meterGroup?.id?.toString() ?? "none";
       if (!groupMap.has(key)) {
         groupMap.set(key, {
-          groupId:   r.meter.meterGroup?.id  ?? null,
+          groupId: r.meter.meterGroup?.id ?? null,
           groupCode: r.meter.meterGroup?.groupCode ?? "—",
           groupName: r.meter.meterGroup?.groupName ?? "Chưa phân nhóm",
           consTotal: 0,
@@ -170,7 +216,9 @@ export async function GET(req: NextRequest) {
       b.consTotal += r.consTotal ?? 0;
       b.costTotal += r.costTotal ?? 0;
     }
-    const byGroup = Array.from(groupMap.values()).sort((a, b) => b.consTotal - a.consTotal);
+    const byGroup = Array.from(groupMap.values()).sort(
+      (a, b) => b.consTotal - a.consTotal,
+    );
 
     return NextResponse.json({
       summary: {
