@@ -109,7 +109,7 @@ cron.schedule("0 * * * *", async () => {
 // JOB 2: CHỐT SỔ ĐÚNG 8H00 SÁNG HÀNG NGÀY (Chuẩn giờ Việt Nam)
 // =========================================================================
 cron.schedule(
-  "0 10 * * *",
+  "0 8 * * *",
   async () => {
     console.log(
       `\n[${new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}] Bắt đầu tiến trình CHỐT SỔ 8H SÁNG...`,
