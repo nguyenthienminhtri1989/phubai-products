@@ -91,8 +91,8 @@ export default function RealtimeDashboard() {
         // 1. Gọi ngay lập tức khi chọn đồng hồ (kèm hiệu ứng loading)
         fetchLive(true);
 
-        // 2. Thiết lập chạy ngầm mỗi 60 giây (không kèm hiệu ứng loading)
-        const intervalId = setInterval(() => fetchLive(false), 60000);
+        // 2. Thiết lập chạy ngầm mỗi 5 phút (300,000 ms)
+        const intervalId = setInterval(() => fetchLive(false), 300000);
 
         return () => {
             isMounted = false;
@@ -155,7 +155,7 @@ export default function RealtimeDashboard() {
                         {errorStatus ? (
                             <Badge status="error" text={<span style={{ color: "red", fontWeight: 600 }}>Mất kết nối Gateway</span>} />
                         ) : liveData ? (
-                            <Badge status="processing" text={<span style={{ color: "#1677ff" }}>Đang theo dõi trực tiếp (60s/lần)</span>} />
+                            <Badge status="processing" text={<span style={{ color: "#1677ff" }}>Đang theo dõi trực tiếp (5 phút/lần)</span>} />
                         ) : <Badge status="default" text="Đang chờ kết nối..." />}
                     </Col>
                 </Row>
