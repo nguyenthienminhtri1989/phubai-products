@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const { recordDate, meterId, isReset, consTotal, costTotal, ...values } =
       body;
 
-    const dateObj = new Date(recordDate);
+    const dateObj = new Date(`${recordDate}T12:00:00.000+07:00`);
     const mId = Number(meterId);
 
     // Đóng gói dữ liệu cần lưu

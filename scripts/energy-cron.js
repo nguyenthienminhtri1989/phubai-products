@@ -109,7 +109,7 @@ cron.schedule("0 * * * *", async () => {
 // JOB 2: CHỐT SỔ ĐÚNG 8H00 SÁNG HÀNG NGÀY (Chuẩn giờ Việt Nam)
 // =========================================================================
 cron.schedule(
-  "15 9 * * *",
+  "0 10 * * *",
   async () => {
     console.log(
       `\n[${new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}] Bắt đầu tiến trình CHỐT SỔ 8H SÁNG...`,
@@ -119,7 +119,7 @@ cron.schedule(
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Ho_Chi_Minh",
     }); // Định dạng YYYY-MM-DD
-    const yesterday = new Date(`${todayStr}T00:00:00.000+07:00`);
+    const yesterday = new Date(`${todayStr}T12:00:00.000+07:00`); // Lấy 12h trưa để tránh lỗi múi giờ
     yesterday.setDate(yesterday.getDate() - 1);
 
     try {
