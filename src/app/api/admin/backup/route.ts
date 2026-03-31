@@ -71,7 +71,7 @@ export async function POST(req: Request) {
         // Mặc định Prisma đặt tên bảng trùng với tên Model (ví dụ: "User", "Factory").
         // Nếu DB của bạn có dùng @@map("users"), hãy đổi "User" thành "users" ở mảng bên dưới.
         const tables = [
-          "ProductionLog",
+          "production_logs",
           "Machine",
           "User",
           "Process",
