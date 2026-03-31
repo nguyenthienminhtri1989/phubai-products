@@ -17,7 +17,7 @@ export default function BackupPage() {
 
     // --- XỬ LÝ BACKUP (TẢI VỀ) ---
     const handleBackup = async () => {
-        messageApi.open({ type: "loading", content: "Đang chuẩn bị gói dữ liệu từ các nhà máy...", duration: 0 });
+        messageApi.open({ type: "loading", content: "Đang chuẩn bị gói dữ liệu (tất cả bảng)...", duration: 0 });
         setLoading(true);
 
         try {
@@ -131,7 +131,15 @@ export default function BackupPage() {
                     bordered={false}
                     style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                 >
-                    <p>Tải xuống toàn bộ dữ liệu hiện tại (Máy móc, Mặt hàng, Nhật ký sản xuất, Tài khoản...) dưới dạng file <b>.json</b>.</p>
+                    <p>Tải xuống toàn bộ dữ liệu hiện tại dưới dạng file <b>.json</b>, bao gồm:</p>
+                    <ul className="text-gray-600 text-sm list-disc list-inside mb-2 space-y-0.5">
+                        <li>Nhà máy, Công đoạn, Máy móc, Mặt hàng</li>
+                        <li>Tài khoản, Phân quyền công đoạn</li>
+                        <li>Nhật ký sản xuất, Sơ đồ line, Dừng máy</li>
+                        <li><b>Đồng hồ điện, Trạm biến áp, Chỉ số điện hàng ngày</b></li>
+                        <li>Giá điện, Nhóm đồng hồ, Telemetry IoT</li>
+                        <li>Bảo dưỡng, Ca làm việc, Nguồn IoT</li>
+                    </ul>
                     <p className="text-gray-500 text-sm mb-4">Dùng file này để lưu trữ dự phòng hoặc chuyển dữ liệu sang máy khác.</p>
 
                     <Button
