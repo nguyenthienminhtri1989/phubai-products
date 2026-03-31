@@ -6,13 +6,14 @@ import { auth } from "@/auth";
 export async function GET() {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN")
+    if (session?.user?.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Chỉ Admin mới được backup" },
         { status: 403 },
       );
+    }
 
-    // Lấy song song dữ liệu từ các bảng
+    // Lấy dữ liệu song song từ tất cả các bảng
     const [factories, processes, items, machines, users, productionLogs] =
       await Promise.all([
         prisma.factory.findMany(),
@@ -23,10 +24,9 @@ export async function GET() {
         prisma.productionLog.findMany(),
       ]);
 
-    // Gom lại thành 1 object JSON
     const backupData = {
       timestamp: new Date().toISOString(),
-      version: "1.0",
+      version: "1.1",
       data: {
         factories,
         processes,
@@ -39,7 +39,7 @@ export async function GET() {
 
     return NextResponse.json(backupData);
   } catch (error) {
-    console.error(error);
+    console.error("Backup Error:", error);
     return NextResponse.json({ error: "Lỗi khi tạo backup" }, { status: 500 });
   }
 }
@@ -48,64 +48,83 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN")
+    if (session?.user?.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Chỉ Admin mới được restore" },
         { status: 403 },
       );
+    }
 
     const body = await req.json();
     const { factories, processes, items, machines, users, productionLogs } =
       body.data;
 
-    // Sử dụng transaction để đảm bảo toàn vẹn dữ liệu (Thất bại là rollback hết)
-    await prisma.$transaction(async (tx) => {
-      // BƯỚC 1: Dọn dẹp dữ liệu cũ (Tùy chọn: Xóa hết để nạp lại cho sạch)
-      // Phải xóa theo thứ tự ngược lại của lúc tạo để tránh lỗi khóa ngoại
-      await tx.productionLog.deleteMany();
-      await tx.machine.deleteMany();
-      await tx.user.deleteMany();
-      await tx.process.deleteMany();
-      await tx.item.deleteMany();
-      await tx.factory.deleteMany();
+    // Sử dụng transaction với thời gian chờ lâu hơn (30s)
+    await prisma.$transaction(
+      async (tx) => {
+        // BƯỚC 1: Tạm thời vô hiệu hóa kiểm tra khóa ngoại (Chỉ dùng cho PostgreSQL)
+        // Lệnh này giúp tránh lỗi "Foreign Key Constraint" khi đang nạp dữ liệu dở dang
+        await tx.$executeRawUnsafe(`SET CONSTRAINTS ALL DEFERRED;`);
 
-      // BƯỚC 2: Nạp dữ liệu mới (Theo đúng thứ tự phụ thuộc)
+        // BƯỚC 2: Xóa sạch dữ liệu cũ và reset ID (TRUNCATE CASCADE)
+        // Lưu ý: Đảm bảo tên các bảng trong mảng này khớp CẢ CHỮ HOA CHỮ THƯỜNG với tên bảng thật trong PostgreSQL.
+        // Mặc định Prisma đặt tên bảng trùng với tên Model (ví dụ: "User", "Factory").
+        // Nếu DB của bạn có dùng @@map("users"), hãy đổi "User" thành "users" ở mảng bên dưới.
+        const tables = [
+          "ProductionLog",
+          "Machine",
+          "User",
+          "Process",
+          "Item",
+          "Factory",
+        ];
+        for (const table of tables) {
+          await tx.$executeRawUnsafe(
+            `TRUNCATE TABLE "${table}" RESTART IDENTITY CASCADE;`,
+          );
+        }
 
-      // 2.1. Nhà máy
-      if (factories?.length > 0)
-        await tx.factory.createMany({ data: factories });
+        // BƯỚC 3: Nạp dữ liệu mới
+        if (factories?.length > 0)
+          await tx.factory.createMany({ data: factories });
+        if (items?.length > 0) await tx.item.createMany({ data: items });
+        if (processes?.length > 0)
+          await tx.process.createMany({ data: processes });
+        if (users?.length > 0) await tx.user.createMany({ data: users });
+        if (machines?.length > 0)
+          await tx.machine.createMany({ data: machines });
 
-      // 2.2. Mặt hàng & Công đoạn
-      if (items?.length > 0) await tx.item.createMany({ data: items });
-      if (processes?.length > 0)
-        await tx.process.createMany({ data: processes });
-
-      // 2.3. User (Cần Công đoạn)
-      if (users?.length > 0) await tx.user.createMany({ data: users });
-
-      // 2.4. Máy móc (Cần Công đoạn & Mặt hàng)
-      if (machines?.length > 0) await tx.machine.createMany({ data: machines });
-
-      // 2.5. Nhật ký (Cần Máy, User, Item)
-      // Lưu ý: Nhật ký có thể rất nhiều, nếu > 5000 bản ghi có thể cần chia nhỏ (batching).
-      // Ở đây ta giả định dữ liệu chưa quá lớn.
-      if (productionLogs?.length > 0) {
-        // Format lại Date string về Date object
-        const formattedLogs = productionLogs.map((log: any) => ({
-          ...log,
-          recordDate: new Date(log.recordDate),
-          createdAt: new Date(log.createdAt),
-          updatedAt: new Date(log.updatedAt),
-        }));
-        await tx.productionLog.createMany({ data: formattedLogs });
-      }
-    });
+        // BƯỚC 4: Nạp nhật ký sản xuất (Chia nhỏ lô / Batching để tránh tràn bộ nhớ)
+        if (productionLogs?.length > 0) {
+          const batchSize = 1000;
+          for (let i = 0; i < productionLogs.length; i += batchSize) {
+            const batch = productionLogs
+              .slice(i, i + batchSize)
+              .map((log: any) => ({
+                ...log,
+                // Xử lý an toàn các trường thời gian
+                recordDate: log.recordDate ? new Date(log.recordDate) : null,
+                createdAt: log.createdAt ? new Date(log.createdAt) : undefined,
+                updatedAt: log.updatedAt ? new Date(log.updatedAt) : undefined,
+              }));
+            await tx.productionLog.createMany({ data: batch });
+          }
+        }
+      },
+      {
+        timeout: 30000, // Tăng timeout lên 30 giây để xử lý lượng dữ liệu lớn
+      },
+    );
 
     return NextResponse.json({ message: "Khôi phục dữ liệu thành công!" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Restore Error:", error);
     return NextResponse.json(
-      { error: "Lỗi khôi phục dữ liệu (Có thể do sai cấu trúc file)" },
+      {
+        error:
+          error.message ||
+          "Lỗi khôi phục dữ liệu (Có thể do sai cấu trúc file)",
+      },
       { status: 500 },
     );
   }

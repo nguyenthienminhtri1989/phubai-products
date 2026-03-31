@@ -5,36 +5,45 @@ import { Card, Button, Upload, message, Modal, Alert, Typography, Divider, Steps
 import { CloudDownloadOutlined, CloudUploadOutlined, InboxOutlined, WarningOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { Dragger } = Upload;
 
 export default function BackupPage() {
     const { data: session } = useSession();
     const [loading, setLoading] = useState(false);
 
+    // Sử dụng messageApi để quản lý trạng thái loading tốt hơn
+    const [messageApi, contextHolder] = message.useMessage();
+
     // --- XỬ LÝ BACKUP (TẢI VỀ) ---
     const handleBackup = async () => {
+        messageApi.open({ type: "loading", content: "Đang chuẩn bị gói dữ liệu từ các nhà máy...", duration: 0 });
         setLoading(true);
+
         try {
             const res = await fetch("/api/admin/backup");
             const data = await res.json();
 
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error || "Lỗi Server");
 
             // Tạo file JSON ảo để tải về
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            // Đặt tên file theo ngày giờ: backup-2026-02-05.json
-            a.download = `backup-phubai-${new Date().toISOString().slice(0, 10)}.json`;
+
+            // Đặt tên file theo ngày giờ cho dễ quản lý
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.download = `backup-phubai-${dateStr}.json`;
             a.click();
             window.URL.revokeObjectURL(url);
 
-            message.success("Đã tải xuống file Backup thành công!");
-        } catch (error) {
+            messageApi.destroy();
+            messageApi.success("Đã tải xuống file Backup thành công!");
+        } catch (error: any) {
             console.error(error);
-            message.error("Lỗi khi tạo backup");
+            messageApi.destroy();
+            messageApi.error(error.message || "Lỗi khi tạo backup");
         } finally {
             setLoading(false);
         }
@@ -60,6 +69,7 @@ export default function BackupPage() {
                     okType: "danger",
                     cancelText: "Hủy",
                     onOk: async () => {
+                        messageApi.open({ type: "loading", content: "Đang xóa dữ liệu cũ và khôi phục dữ liệu mới...", duration: 0 });
                         setLoading(true);
                         try {
                             const res = await fetch("/api/admin/backup", {
@@ -68,33 +78,43 @@ export default function BackupPage() {
                                 body: JSON.stringify(jsonContent),
                             });
 
-                            if (!res.ok) throw new Error("Lỗi server");
+                            const result = await res.json();
+                            if (!res.ok) throw new Error(result.error || "Lỗi server khi khôi phục");
 
-                            message.success("Khôi phục dữ liệu thành công!");
-                            // Tùy chọn: Reload trang
-                            window.location.reload();
-                        } catch (err) {
+                            messageApi.destroy();
+                            messageApi.success("Khôi phục dữ liệu thành công!");
+
+                            // Reload trang sau 1.5s để cập nhật lại dữ liệu hiển thị
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } catch (err: any) {
                             console.error(err);
-                            message.error("File lỗi hoặc cấu trúc không hợp lệ");
+                            messageApi.destroy();
+                            messageApi.error(err.message || "File lỗi hoặc cấu trúc không hợp lệ");
                         } finally {
                             setLoading(false);
                         }
-                    }
+                    },
                 });
-
             } catch (err) {
                 console.error(err);
                 message.error("File không đúng định dạng JSON");
             }
         };
         reader.readAsText(file);
-        return false; // Chặn upload mặc định của Antd
+
+        // Trả về false để chặn hành vi tự động gọi API upload mặc định của thư viện Ant Design
+        return false;
     };
 
-    if (session?.user?.role !== "ADMIN") return <div className="p-10 text-center">Bạn không có quyền truy cập trang này</div>;
+    if (session?.user?.role !== "ADMIN") {
+        return <div className="p-10 text-center">Bạn không có quyền truy cập trang này</div>;
+    }
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
+            {contextHolder}
             <Title level={2}>Sao lưu & Phục hồi Dữ liệu</Title>
             <Alert
                 message="Vùng nguy hiểm"
@@ -108,7 +128,7 @@ export default function BackupPage() {
                 {/* CỘT BACKUP */}
                 <Card
                     title={<><CloudDownloadOutlined /> Sao lưu (Export)</>}
-                    variant="borderless"
+                    bordered={false}
                     style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                 >
                     <p>Tải xuống toàn bộ dữ liệu hiện tại (Máy móc, Mặt hàng, Nhật ký sản xuất, Tài khoản...) dưới dạng file <b>.json</b>.</p>
@@ -129,7 +149,7 @@ export default function BackupPage() {
                 {/* CỘT RESTORE */}
                 <Card
                     title={<><CloudUploadOutlined /> Phục hồi (Import)</>}
-                    variant="borderless"
+                    bordered={false}
                     style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                 >
                     <p>Khôi phục dữ liệu từ file <b>.json</b> đã backup trước đó.</p>
@@ -146,9 +166,7 @@ export default function BackupPage() {
                             <InboxOutlined />
                         </p>
                         <p className="ant-upload-text">Kéo thả file JSON vào đây</p>
-                        <p className="ant-upload-hint">
-                            Hoặc bấm để chọn file từ máy tính
-                        </p>
+                        <p className="ant-upload-hint">Hoặc bấm để chọn file từ máy tính</p>
                     </Dragger>
                 </Card>
             </div>
@@ -162,9 +180,9 @@ export default function BackupPage() {
                     current={-1}
                     style={{ marginTop: 10 }}
                     items={[
-                        { title: 'Bấm Tải xuống Backup' },
-                        { title: 'Thực hiện cập nhật Code/DB' },
-                        { title: 'Nếu mất dữ liệu -> Upload file để Restore' },
+                        { title: "Bấm Tải xuống Backup" },
+                        { title: "Thực hiện cập nhật Code/DB" },
+                        { title: "Nếu mất dữ liệu -> Upload file để Restore" },
                     ]}
                 />
             </div>
