@@ -72,11 +72,11 @@ export async function POST(req: Request) {
         // Nếu DB của bạn có dùng @@map("users"), hãy đổi "User" thành "users" ở mảng bên dưới.
         const tables = [
           "production_logs",
-          "Machine",
-          "User",
-          "Process",
-          "Item",
-          "Factory",
+          "machines",
+          "users",
+          "processes",
+          "items",
+          "factories",
         ];
         for (const table of tables) {
           await tx.$executeRawUnsafe(
