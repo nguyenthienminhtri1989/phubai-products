@@ -14,15 +14,24 @@ datasource db {
 // ==========================================
 
 model Factory {
-  id        Int       @id @default(autoincrement())
-  name      String    // Tên nhà máy (NM1, NM2...)
-  note      String?   // Ghi chú
+  id   Int     @id @default(autoincrement())
+  name String // Tên nhà máy (NM1, NM2...)
+  note String? // Ghi chú
 
-  processes Process[] // 1 Nhà máy có nhiều Công đoạn
-  // 👇 THÊM 2 DÒNG NÀY VÀO ĐÂY 👇
-  substations Substation[]
-  powerMeters PowerMeter[]
+  processes       Process[] // 1 Nhà máy có nhiều Công đoạn
+  substations     Substation[]
+  powerMeters     PowerMeter[]
   productionLines ProductionLine[]
+
+  // KD-SX relations
+  salesOrders        SalesOrder[]
+  monthlyInputParams MonthlyInputParam[]
+  monthlyPlans       MonthlyPlan[]
+  monthlyActuals     MonthlyActual[]
+  summarySnapshots   MonthlySummarySnapshot[]
+
+  // Định mức năng suất
+  benchmarkVersions BenchmarkVersion[]
 
   @@map("factories")
 }
@@ -31,14 +40,17 @@ model Factory {
 // 2. CÔNG ĐOẠN
 // ==========================================
 model Process {
-  id        Int       @id @default(autoincrement())
-  name      String    // Tên công đoạn (bông chải, ghép thô...)
-  
-  factoryId Int
-  factory   Factory   @relation(fields: [factoryId], references: [id])
+  id   Int    @id @default(autoincrement())
+  name String // Tên công đoạn (bông chải, ghép thô...)
 
-  machines      Machine[]     // 1 Công đoạn quản lý nhiều Máy
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  machines      Machine[] // 1 Công đoạn quản lý nhiều Máy
   userProcesses UserProcess[] // Phân quyền: User nào thuộc công đoạn nào
+
+  // Định mức năng suất
+  productivityBenchmarks ProductivityBenchmark[]
 
   @@map("processes")
 }
@@ -48,28 +60,37 @@ model Process {
 // ==========================================
 
 model Item {
-  id           Int     @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // Các trường thông tin cơ bản
-  name         String  @unique // Tên đầy đủ (Không được trùng)
-  code         String? // Mã viết tắt (nếu cần sau này, tạm để optional)
-  
+  name String  @unique // Tên đầy đủ (Không được trùng)
+  code String? // Mã viết tắt (nếu cần sau này, tạm để optional)
+
   // Các thông số kỹ thuật (Optional - Không bắt buộc)
-  ne           Int?    // Chi số (Số nguyên 3 chữ số)
+  ne           Int? // Chi số (Số nguyên 3 chữ số)
   composition  String? // Thành phần
-  twist        Int?    // Độ săn (Số nguyên)
+  twist        Int? // Độ săn (Số nguyên)
   weavingStyle String? // Kiểu dệt
   material     String? // Nguyên liệu
-  
+
   // Quan hệ (Giữ nguyên logic cũ)
-  runningOnMachines Machine[]       // Đang chạy trên máy nào?
+  runningOnMachines Machine[] // Đang chạy trên máy nào?
   productionLogs    ProductionLog[] // Lịch sử sản xuất
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   productionLines ProductionLine[]
   iotMaps         IotItemMap[]
+
+  // KD-SX relations
+  salesOrderItems  SalesOrderItem[]
+  rawMaterialRates RawMaterialRate[]
+  planLineItems    PlanLineItem[]
+  actualLineItems  ActualLineItem[]
+
+  // Định mức năng suất
+  productivityBenchmarks ProductivityBenchmark[]
 
   @@map("items")
 }
@@ -79,40 +100,40 @@ model Item {
 // ==========================================
 
 model Machine {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique // Tên máy (Máy 01, Máy 02...)
-  isActive    Boolean  @default(true) // True: Đang dùng, False: Đã thanh lý (Thay máy mới)
+  id       Int     @id @default(autoincrement())
+  name     String  @unique // Tên máy (Máy 01, Máy 02...)
+  isActive Boolean @default(true) // True: Đang dùng, False: Đã thanh lý (Thay máy mới)
 
   // --- Phân cấp ---
-  processId   Int
-  process     Process  @relation(fields: [processId], references: [id])
+  processId Int
+  process   Process @relation(fields: [processId], references: [id])
 
   // --- Cấu hình tính toán (Quan trọng) ---
   // 1: Nhập thẳng kg
   // 2: (Cuối - Đầu)
   // 3: (Cuối - Đầu) * Số cọc / (Chi số * K)
   // 4: (Cuối - Đầu) / Chi số
-  formulaType Int      @default(1) 
+  formulaType Int @default(1)
 
-  spindleCount Int?    // Số cọc (Chỉ dùng cho FormulaType = 3, máy khác để Null)
+  spindleCount Int? // Số cọc (Chỉ dùng cho FormulaType = 3, máy khác để Null)
 
   // --- Trạng thái hiện tại ---
-  currentItemId Int?   // Máy đang chạy hàng nào? (Dùng để gợi ý khi nhập liệu)
-  currentItem   Item?  @relation(fields: [currentItemId], references: [id])
+  currentItemId Int? // Máy đang chạy hàng nào? (Dùng để gợi ý khi nhập liệu)
+  currentItem   Item? @relation(fields: [currentItemId], references: [id])
 
   // 2. Chi số đang chạy là bao nhiêu?
   // Dành cho máy loại 3, 4. 
   // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
-  currentNE     Float?
+  currentNE Float?
 
   maintenanceTasks MaintenanceTask[]
 
   // --- Dữ liệu lịch sử ---
   productionLogs ProductionLog[]
-  linksFrom ProductionLineLink[] @relation("LinkFrom")
-  linksTo   ProductionLineLink[] @relation("LinkTo")
-  stopLogs  MachineStopLog[]
-  iotMaps   IotMachineMap[]
+  linksFrom      ProductionLineLink[] @relation("LinkFrom")
+  linksTo        ProductionLineLink[] @relation("LinkTo")
+  stopLogs       MachineStopLog[]
+  iotMaps        IotMachineMap[]
 
   @@map("machines")
 }
@@ -122,48 +143,46 @@ model Machine {
 // ==========================================
 
 model ProductionLog {
-  id          Int      @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // 1. Thông tin Máy & Thời gian
-  machineId   Int
-  recordDate  DateTime @db.Date // Chỉ lưu ngày
-  shift       Int      // 1, 2, 3
-  
+  machineId  Int
+  recordDate DateTime @db.Date // Chỉ lưu ngày
+  shift      Int // 1, 2, 3
+
   // 2. Thông tin Mặt hàng (Sửa lỗi quan hệ với Item)
-  itemId      Int
-  item        Item     @relation(fields: [itemId], references: [id]) 
-  
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
   // 3. Chỉ số & Sản lượng
-  startIndex  Float?   @default(0) // <--- Cột mới thêm
+  startIndex  Float? @default(0) // <--- Cột mới thêm
   endIndex    Float?
-  inputNE     Float?   
-  finalOutput Float    
-  
-  note        String?
+  inputNE     Float?
+  finalOutput Float
+
+  note String?
 
   // 4. Quan hệ với User (Sửa lỗi createdLogs trong User)
   // Thêm dòng này để Prisma biết ai là người tạo bản ghi
-  createdById Int?     // Có thể để null nếu chưa bắt buộc
-  createdBy   User?    @relation(fields: [createdById], references: [id])
-  
-  // 5. Quan hệ với Máy
-  machine     Machine  @relation(fields: [machineId], references: [id])
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdById Int? // Có thể để null nếu chưa bắt buộc
+  createdBy   User? @relation(fields: [createdById], references: [id])
 
-  // THÊM ĐOẠN NÀY VÀO CUỐI MODEL:
-  // 1. Index cho việc lọc theo khoảng thời gian (quan trọng nhất)
-  @@index([recordDate])
-  
-  // 2. Index composite: Khi lọc kết hợp Ngày + Máy + Ca (Performance cực cao)
-  @@index([recordDate, machineId])
-  @@index([machineId, shift])
-  @@index([itemId])
+  // 5. Quan hệ với Máy
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca + 1 Mặt hàng chỉ có 1 bản ghi
   // (Cho phép nhiều mặt hàng trong cùng 1 ca khi đổi hàng giữa ca)
   @@unique([machineId, recordDate, shift, itemId])
+  // THÊM ĐOẠN NÀY VÀO CUỐI MODEL:
+  // 1. Index cho việc lọc theo khoảng thời gian (quan trọng nhất)
+  @@index([recordDate])
+  // 2. Index composite: Khi lọc kết hợp Ngày + Máy + Ca (Performance cực cao)
+  @@index([recordDate, machineId])
+  @@index([machineId, shift])
+  @@index([itemId])
   @@map("production_logs")
 }
 
@@ -172,24 +191,24 @@ model ProductionLog {
 // ==========================================
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
-  password  String   // Lưu hash (đã mã hóa)
-  fullName  String
-  
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  password String // Lưu hash (đã mã hóa)
+  fullName String
+
   // --- PHÂN QUYỀN ---
-  role        String   @default("USER") // "ADMIN" hoặc "USER"
-  accessLevel String   @default("READ_ONLY") // "READ_ONLY", "OPERATOR", "MANAGER"
-  
+  role        String @default("USER") // "ADMIN" hoặc "USER"
+  accessLevel String @default("READ_ONLY") // "READ_ONLY", "OPERATOR", "MANAGER"
+
   // --- TRẠNG THÁI ---
-  isActive    Boolean  @default(false)  // false: Chờ duyệt, true: Được dùng
+  isActive Boolean @default(false) // false: Chờ duyệt, true: Được dùng
 
   // --- PHẠM VI CÔNG VIỆC ---
   userProcesses UserProcess[] // User thuộc các công đoạn nào?
 
-  createdLogs ProductionLog[] // Quan hệ: Ai nhập dòng này?
-  createdAt   DateTime @default(now())
-  createdLines ProductionLine[]
+  createdLogs   ProductionLog[] // Quan hệ: Ai nhập dòng này?
+  createdAt     DateTime         @default(now())
+  createdLines  ProductionLine[]
   reportedStops MachineStopLog[]
 
   @@map("users")
@@ -209,27 +228,27 @@ model UserProcess {
 // Bảng Danh mục Hạng mục bảo dưỡng (Maintenance Task)
 // Lưu trữ các cấu hình định kỳ cho từng máy
 model MaintenanceTask {
-  id                String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Điều chỉnh machineId thành kiểu Int để khớp với Machine.id
-  machineId         Int      
-  
-  taskName          String   
-  description       String?  
-  intervalMonths    Float    
-  lastPerformedDate DateTime? 
-  nextDueDate       DateTime  
-  leadTimeDays      Int      @default(30) 
-  emailNotify       Boolean  @default(true)
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  machineId Int
+
+  taskName          String
+  description       String?
+  intervalMonths    Float
+  lastPerformedDate DateTime?
+  nextDueDate       DateTime
+  leadTimeDays      Int       @default(30)
+  emailNotify       Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Thiết lập mối quan hệ chính thức với bảng Machine
   // Lưu ý: Tên field là 'machine', khớp với lệnh include trong API
-  machine           Machine  @relation(fields: [machineId], references: [id])
-  
-  history           MaintenanceHistory[]
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  history MaintenanceHistory[]
 
   @@index([machineId])
   @@index([nextDueDate])
@@ -246,15 +265,15 @@ model MaintenanceTask {
 // Bảng Nhật ký bảo dưỡng (Maintenance History)
 // Lưu vết mỗi lần thực hiện xong
 model MaintenanceHistory {
-  id                String   @id @default(cuid())
-  taskId            String
-  performedDate     DateTime @default(now()) // Ngày thực hiện thực tế
-  performedBy       String?  // Tên công nhân/kỹ thuật viên
-  notes             String?  // Ghi chú tình trạng lúc đó
-  cost              Float?   @default(0)
-  
+  id            String   @id @default(cuid())
+  taskId        String
+  performedDate DateTime @default(now()) // Ngày thực hiện thực tế
+  performedBy   String? // Tên công nhân/kỹ thuật viên
+  notes         String? // Ghi chú tình trạng lúc đó
+  cost          Float?   @default(0)
+
   // Quan hệ
-  task              MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([performedDate])
@@ -268,9 +287,9 @@ model MaintenanceHistory {
 model ElectricityPrice {
   id          Int      @id @default(autoincrement())
   type        String   @unique // NORMAL, PEAK, OFF_PEAK
-  name        String   // Bình thường, Cao điểm, Thấp điểm
-  price       Float    // Vd: 1833, 3398, 1190
-  description String?  // Ghi chú khung giờ (Vd: 04:00 - 09:30...)
+  name        String // Bình thường, Cao điểm, Thấp điểm
+  price       Float // Vd: 1833, 3398, 1190
+  description String? // Ghi chú khung giờ (Vd: 04:00 - 09:30...)
   updatedAt   DateTime @updatedAt
 
   @@map("electricity_prices")
@@ -278,104 +297,104 @@ model ElectricityPrice {
 
 // 2. Danh mục Trạm biến áp
 model Substation {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique // Mã trạm (Vd: TBA-01)
-  name        String   // Tên trạm (Vd: Trạm biến áp Nhà máy 1)
-  
+  id   Int    @id @default(autoincrement())
+  code String @unique // Mã trạm (Vd: TBA-01)
+  name String // Tên trạm (Vd: Trạm biến áp Nhà máy 1)
+
   // Liên kết với Nhà máy
-  factoryId   Int
-  factory     Factory  @relation(fields: [factoryId], references: [id])
-  
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
   // Quan hệ 1 trạm có nhiều đồng hồ hạ thế
-  meters      PowerMeter[] 
+  meters PowerMeter[]
 
   @@map("substations")
 }
 
 // 3. Danh mục Đồng hồ điện / Công tơ (Bao gồm cả Trung thế & Hạ thế)
 model PowerMeter {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique // Mã đồng hồ
-  name         String   // Tên đồng hồ (Vd: Công tơ tổng NM1)
-  description  String?  // Mô tả về đồng hồ
-  
-  type         Int      @default(1) // 1: Hạ thế, 2: Trung thế
-  tu           Float    @default(1.0)
-  ti           Float    @default(1.0)
-  isActive     Boolean  @default(true) 
+  id          Int     @id @default(autoincrement())
+  code        String  @unique // Mã đồng hồ
+  name        String // Tên đồng hồ (Vd: Công tơ tổng NM1)
+  description String? // Mô tả về đồng hồ
+
+  type     Int     @default(1) // 1: Hạ thế, 2: Trung thế
+  tu       Float   @default(1.0)
+  ti       Float   @default(1.0)
+  isActive Boolean @default(true)
 
   // ---> CÁC TRƯỜNG PHỤC VỤ IOT BẮT BUỘC PHẢI CÓ
-  isAuto       Boolean  @default(false) // true: Đọc qua Gateway, false: Nhập tay
-  modbusId     Int?     // Slave ID của đồng hồ (VD: 1, 2...) dùng cho RS485
+  isAuto   Boolean @default(false) // true: Đọc qua Gateway, false: Nhập tay
+  modbusId Int? // Slave ID của đồng hồ (VD: 1, 2...) dùng cho RS485
 
   // 👇 THÊM 2 TRƯỜNG NÀY 👇
-  gatewayIp    String?  // Lưu IP (192.168.1.253) hoặc Tên miền DDNS (nhamay3.dyndns.org)
-  gatewayPort  Int      @default(502) // Cổng Modbus TCP (Thường là 502)
+  gatewayIp   String? // Lưu IP (192.168.1.253) hoặc Tên miền DDNS (nhamay3.dyndns.org)
+  gatewayPort Int     @default(502) // Cổng Modbus TCP (Thường là 502)
 
-  factoryId    Int      
-  factory      Factory  @relation(fields: [factoryId], references: [id])
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
 
-  substationId Int?    
+  substationId Int?
   substation   Substation? @relation(fields: [substationId], references: [id])
 
   meterGroupId Int?
   meterGroup   MeterGroupCategory? @relation(fields: [meterGroupId], references: [id])
 
-  records      PowerRecord[]
-  telemetries  PowerTelemetry[] // ---> Liên kết với bảng hứng dữ liệu thô
+  records     PowerRecord[]
+  telemetries PowerTelemetry[] // ---> Liên kết với bảng hứng dữ liệu thô
 
   @@map("power_meters")
 }
 
 // ---> BẢNG MỚI: Hứng dữ liệu IoT liên tục
 model PowerTelemetry {
-  id          BigInt   @id @default(autoincrement())
-  timestamp   DateTime @default(now())
-  
-  meterId     Int
-  meter       PowerMeter @relation(fields: [meterId], references: [id])
-  
-  totalEnergy Float?   // Tổng kWh (Tương ứng thanh ghi 0x00)
-  activePower Float?   // Tổng kW (Tương ứng thanh ghi 0x0E mà bạn muốn lấy)
-  
+  id        BigInt   @id @default(autoincrement())
+  timestamp DateTime @default(now())
+
+  meterId Int
+  meter   PowerMeter @relation(fields: [meterId], references: [id])
+
+  totalEnergy Float? // Tổng kWh (Tương ứng thanh ghi 0x00)
+  activePower Float? // Tổng kW (Tương ứng thanh ghi 0x0E mà bạn muốn lấy)
+
   @@index([timestamp, meterId])
   @@map("power_telemetries")
 }
 
 // 4. Bảng Ghi nhận Chỉ số điện Hàng ngày
 model PowerRecord {
-  id          String   @id @default(cuid())
-  recordDate  DateTime @db.Date 
-  
-  meterId     Int
-  meter       PowerMeter @relation(fields: [meterId], references: [id])
+  id         String   @id @default(cuid())
+  recordDate DateTime @db.Date
 
-  isReset     Boolean  @default(false)
-  
+  meterId Int
+  meter   PowerMeter @relation(fields: [meterId], references: [id])
+
+  isReset Boolean @default(false)
+
   // ---> CỜ PHÂN BIỆT NGUỒN DỮ LIỆU
-  dataSource  String   @default("MANUAL") // "AUTO" hoặc "MANUAL"
+  dataSource String @default("MANUAL") // "AUTO" hoặc "MANUAL"
 
-  prevTotal   Float?   
-  currTotal   Float?   
-  consTotal   Float?   
+  prevTotal Float?
+  currTotal Float?
+  consTotal Float?
 
-  prevNormal  Float?
-  currNormal  Float?
-  consNormal  Float?   
+  prevNormal Float?
+  currNormal Float?
+  consNormal Float?
 
-  prevPeak    Float?
-  currPeak    Float?
-  consPeak    Float?   
+  prevPeak Float?
+  currPeak Float?
+  consPeak Float?
 
   prevOffPeak Float?
   currOffPeak Float?
-  consOffPeak Float?   
+  consOffPeak Float?
 
-  costTotal   Float?   @default(0)
-  note        String?  
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  costTotal Float?  @default(0)
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([recordDate, meterId])
   @@map("power_records")
@@ -389,33 +408,33 @@ model PowerRecord {
 
 // 1. Bang chinh: Luu thong tin dot line san xuat
 model ProductionLine {
-  id          Int       @id @default(autoincrement())
-  name        String    // Ten line (VD: "Line CVC30 - NM1")
-  
+  id   Int    @id @default(autoincrement())
+  name String // Ten line (VD: "Line CVC30 - NM1")
+
   // Mat hang dang chay tren line nay
-  itemId      Int
-  item        Item      @relation(fields: [itemId], references: [id])
-  
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
   // Thuoc nha may nao
-  factoryId   Int
-  factory     Factory   @relation(fields: [factoryId], references: [id])
-  
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
   // Loai tuyen: 1 = Khong chai ky, 2 = Co chai ky
-  routeType   Int       @default(1)
-  
+  routeType Int @default(1)
+
   // Thoi gian hieu luc (Luu theo dot)
-  startDate   DateTime  @db.Date
-  endDate     DateTime? @db.Date  // null = dang hieu luc
-  
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date // null = dang hieu luc
+
   // Ai tao
   createdById Int?
-  createdBy   User?     @relation(fields: [createdById], references: [id])
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  createdBy   User? @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Quan he: 1 line co nhieu lien ket may
-  links       ProductionLineLink[]
+  links ProductionLineLink[]
 
   @@index([factoryId])
   @@index([itemId])
@@ -425,27 +444,27 @@ model ProductionLine {
 
 // 2. Bang chi tiet: Luu tung lien ket may-sang-may
 model ProductionLineLink {
-  id            Int     @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // Thuoc line nao
-  lineId        Int
-  line          ProductionLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
-  
+  lineId Int
+  line   ProductionLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+
   // May nguon (VD: Chai Tho 01)
   fromMachineId Int
   fromMachine   Machine @relation("LinkFrom", fields: [fromMachineId], references: [id])
-  
-  // May dich (VD: Ghep A1)
-  toMachineId   Int
-  toMachine     Machine @relation("LinkTo", fields: [toMachineId], references: [id])
-  
-  // Thu tu cong doan (1 = Chai Tho->Ghep, 2 = Ghep A->Ghep B, ...)
-  stepOrder     Int
 
+  // May dich (VD: Ghep A1)
+  toMachineId Int
+  toMachine   Machine @relation("LinkTo", fields: [toMachineId], references: [id])
+
+  // Thu tu cong doan (1 = Chai Tho->Ghep, 2 = Ghep A->Ghep B, ...)
+  stepOrder Int
+
+  @@unique([lineId, fromMachineId, toMachineId]) // Khong trung lien ket trong 1 line
   @@index([lineId])
   @@index([fromMachineId])
   @@index([toMachineId])
-  @@unique([lineId, fromMachineId, toMachineId]) // Khong trung lien ket trong 1 line
   @@map("production_line_links")
 }
 
@@ -472,50 +491,50 @@ model ProductionLineLink {
 
 // 1. Danh mục nguyên nhân dừng máy
 model StopCategory {
-  id        Int      @id @default(autoincrement())
-  name      String   // Vd: "Hỏng máy", "Thiếu nguyên liệu"
-  color     String   @default("#ff4d4f") // Màu hex cho biểu đồ/tag
-  isActive  Boolean  @default(true)
-  isDefault Boolean  @default(false) // Dữ liệu seed = true, không được xóa
+  id        Int     @id @default(autoincrement())
+  name      String // Vd: "Hỏng máy", "Thiếu nguyên liệu"
+  color     String  @default("#ff4d4f") // Màu hex cho biểu đồ/tag
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false) // Dữ liệu seed = true, không được xóa
 
   createdAt DateTime @default(now())
 
-  stopLogs  MachineStopLog[]
+  stopLogs MachineStopLog[]
 
   @@map("stop_categories")
 }
 
 // 2. Ghi nhận dừng máy
 model MachineStopLog {
-  id              Int       @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // Máy nào dừng
-  machineId       Int
-  machine         Machine   @relation(fields: [machineId], references: [id])
+  machineId Int
+  machine   Machine @relation(fields: [machineId], references: [id])
 
   // Nguyên nhân
-  categoryId      Int
-  category        StopCategory @relation(fields: [categoryId], references: [id])
+  categoryId Int
+  category   StopCategory @relation(fields: [categoryId], references: [id])
 
   // Thời gian
-  startTime       DateTime  // Lúc máy dừng
+  startTime       DateTime // Lúc máy dừng
   endTime         DateTime? // Lúc máy chạy lại (null = vẫn đang dừng)
-  durationMinutes Int?      // Tự tính: khoảng cách phút
+  durationMinutes Int? // Tự tính: khoảng cách phút
 
   // Chi tiết
-  description     String?   // Mô tả thêm
-  severity        String    @default("medium") // low, medium, high, critical
+  description String? // Mô tả thêm
+  severity    String  @default("medium") // low, medium, high, critical
 
   // Ngữ cảnh
-  recordDate      DateTime  @db.Date  // Ngày xảy ra
-  shift           Int?      // Ca làm việc (1, 2, 3)
+  recordDate DateTime @db.Date // Ngày xảy ra
+  shift      Int? // Ca làm việc (1, 2, 3)
 
   // Người báo cáo
-  reportedById    Int
-  reportedBy      User      @relation(fields: [reportedById], references: [id])
+  reportedById Int
+  reportedBy   User @relation(fields: [reportedById], references: [id])
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([machineId])
   @@index([recordDate])
@@ -587,7 +606,7 @@ model IotImportLog {
   updatedRows  Int       @default(0)
   skippedRows  Int       @default(0)
   errorRows    Int       @default(0)
-  status       String    // "SUCCESS" | "PARTIAL" | "FAILED"
+  status       String // "SUCCESS" | "PARTIAL" | "FAILED"
   errorDetail  Json?
   importedById Int?
   importedAt   DateTime  @default(now())
@@ -601,9 +620,9 @@ model IotImportLog {
 // ==========================================
 
 model ShiftCategory {
-  code      String   @id              // Mã ca (VD: CA1, CA2) — do user nhập thủ công
-  name      String   @unique          // Tên ca (VD: Ca sáng, Ca chiều) — không được trùng
-  note      String?                   // Ghi chú (tùy chọn)
+  code String  @id // Mã ca (VD: CA1, CA2) — do user nhập thủ công
+  name String  @unique // Tên ca (VD: Ca sáng, Ca chiều) — không được trùng
+  note String? // Ghi chú (tùy chọn)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -616,9 +635,9 @@ model ShiftCategory {
 // ==========================================
 
 model EnergyTypeCategory {
-  code      String   @id              // Mã loại điện (VD: DL, MT) — do user nhập thủ công
-  name      String   @unique          // Tên loại điện (VD: Điện lực, Điện mặt trời) — không được trùng
-  note      String?                   // Ghi chú (tùy chọn)
+  code String  @id // Mã loại điện (VD: DL, MT) — do user nhập thủ công
+  name String  @unique // Tên loại điện (VD: Điện lực, Điện mặt trời) — không được trùng
+  note String? // Ghi chú (tùy chọn)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -631,15 +650,407 @@ model EnergyTypeCategory {
 // ==========================================
 
 model MeterGroupCategory {
-  id        Int      @id @default(autoincrement())
-  groupCode String   @unique // Mã nhóm (VD: MG01, HT-NM1)
-  groupName String   @unique // Tên nhóm (VD: Hạ thế Nhà máy 1)
-  note      String?          // Ghi chú (tùy chọn)
+  id        Int     @id @default(autoincrement())
+  groupCode String  @unique // Mã nhóm (VD: MG01, HT-NM1)
+  groupName String  @unique // Tên nhóm (VD: Hạ thế Nhà máy 1)
+  note      String? // Ghi chú (tùy chọn)
 
-  powerMeters PowerMeter[]   // Quan hệ ngược: nhóm này chứa những đồng hồ nào
+  powerMeters PowerMeter[] // Quan hệ ngược: nhóm này chứa những đồng hồ nào
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("meter_group_categories")
+}
+
+// ==========================================
+// MODULE KD-SX (KẾ HOẠCH KINH DOANH SẢN XUẤT)
+// ==========================================
+
+// --- Enums ---
+
+enum PlanStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
+
+enum FixedCostType {
+  TIEN_LUONG           // Chi phí tiền lương
+  TRICH_TRUOC_LUONG    // Trích trước tiền lương
+  TIEN_AN_CA           // Tiền ăn ca
+  BHXH_YT_TN_KPCD     // BHXH, YT, TN, KPCĐ
+  TIEN_DIEN            // Tiền điện
+  KHAU_HAO             // Khấu hao
+  ONG_CONE_BAO_PP      // Ống cone, thùng CT, bao PP...
+  CHI_PHI_VAT_LIEU     // CP vật liệu + CP khác
+  CHI_PHI_QUAN_LY      // CP quản lý doanh nghiệp
+  LAI_VAY_VCD          // Lãi vay vốn cố định
+  LAI_VAY_VLD          // Lãi vay vốn lưu động
+  LO_CHENH_LECH_TY_GIA // Lỗ chênh lệch tỷ giá
+  DOANH_THU_HDTC       // Doanh thu hoạt động tài chính (cộng vào lợi nhuận)
+  KHAC                 // Khác
+}
+
+enum SnapshotType {
+  KH // Kế hoạch
+  TH // Thực hiện
+}
+
+// --- Nhóm Hợp đồng ---
+
+// 1. Danh mục khách hàng
+model Customer {
+  id   Int     @id @default(autoincrement())
+  name String // Tên khách hàng
+  code String? @unique // Mã KH (nếu có)
+  note String?
+
+  salesOrders SalesOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customers")
+}
+
+// 2. Hợp đồng bán hàng
+model SalesOrder {
+  id      Int    @id @default(autoincrement())
+  orderNo String @unique // Số HĐ: "431PB25", "05PB26", "14/HĐMB-PB26"
+
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  signedDate DateTime? @db.Date
+  note       String?
+  isActive   Boolean   @default(true)
+
+  items SalesOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([customerId])
+  @@map("sales_orders")
+}
+
+// 3. Chi tiết hợp đồng (từng loại sợi + số lượng + đơn giá)
+model SalesOrderItem {
+  id      Int        @id @default(autoincrement())
+  orderId Int
+  order   SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
+  plannedQty Float // Số lượng HĐ (kg)
+  unitPrice  Float // Đơn giá (USD/kg)
+  note       String?
+
+  planLineItems   PlanLineItem[]
+  actualLineItems ActualLineItem[]
+
+  @@index([orderId])
+  @@index([itemId])
+  @@map("sales_order_items")
+}
+
+// --- Nhóm Thông số tháng ---
+
+// 4. Thông số đầu vào tháng (giá NVL, tỷ giá, tỷ lệ phối trộn)
+model MonthlyInputParam {
+  id        Int     @id @default(autoincrement())
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+  yearMonth String // "2026-01"
+
+  // Tỷ giá (VNĐ/USD)
+  exchangeRate Float
+
+  // Giá nguyên liệu (USD/kg)
+  cottonUsaPrice      Float?
+  cottonBrazilPrice   Float?
+  cottonAusPrice      Float?
+  cottonPimaPrice     Float?
+  cottonSupimaPrice   Float?
+  cottonCmiaPrice     Float?
+  peBenmaPrice        Float?
+  lenzingViscosePrice Float?
+  livaEcoPrice        Float?
+
+  // Tỷ lệ phối trộn bông (0.0–1.0)
+  cottonUsaRatio    Float?
+  cottonBrazilRatio Float?
+  cottonAusRatio    Float?
+
+  // Phí về kho (USD/kg) — thường 0.02
+  warehouseFee Float? @default(0.02)
+
+  // Giá bông bình quân tính toán (USD/kg) — lưu snapshot
+  avgCottonPrice Float?
+
+  // Giá phế liệu (VNĐ/kg)
+  wastePrice Float?
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, yearMonth])
+  @@index([factoryId])
+  @@map("monthly_input_params")
+}
+
+// 5. Định mức tiêu hao nguyên liệu (có lịch sử theo Item)
+model RawMaterialRate {
+  id     Int  @id @default(autoincrement())
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
+  // Định mức Cotton (kg NVL / kg thành phẩm)
+  cottonRate Float?
+
+  // Định mức PE (kg NVL / kg TP) — chỉ cho sợi CVCM/CRC
+  peRate Float?
+
+  // Tỷ lệ phế (0.0–1.0)
+  wasteRate Float?
+
+  // Tỷ lệ chi phí bán hàng (USD/kg)
+  sellingCostRate Float?
+
+  // Đơn giá gia công sợi xe đôi (USD/kg) — chỉ cho sợi /2
+  doubleTwistGcRate Float?
+
+  // Thời gian hiệu lực
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date // null = đang hiệu lực
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([effectiveFrom])
+  @@map("raw_material_rates")
+}
+
+// --- Nhóm Kế hoạch (KH) ---
+
+// 6. Kế hoạch tháng
+model MonthlyPlan {
+  id        Int        @id @default(autoincrement())
+  factoryId Int
+  factory   Factory    @relation(fields: [factoryId], references: [id])
+  yearMonth String // "2026-01"
+  status    PlanStatus @default(DRAFT)
+  note      String?
+
+  lineItems  PlanLineItem[]
+  fixedCosts FixedCostEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, yearMonth])
+  @@index([factoryId])
+  @@map("monthly_plans")
+}
+
+// 7. Chi tiết từng dòng sợi trong kế hoạch
+model PlanLineItem {
+  id     Int         @id @default(autoincrement())
+  planId Int
+  plan   MonthlyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  salesOrderItemId Int?
+  salesOrderItem   SalesOrderItem? @relation(fields: [salesOrderItemId], references: [id])
+
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
+  qty          Float // Số lượng kế hoạch (kg)
+  unitPriceUsd Float // Đơn giá (USD/kg)
+
+  // Snapshot giá trị tính toán tại thời điểm tạo — KHÔNG tính lại on-the-fly
+  revenueVnd       Float? // Doanh thu (VNĐ)
+  cottonCostVnd    Float? // CP NVL Cotton (VNĐ)
+  peCostVnd        Float? // CP NVL PE (VNĐ)
+  sellingCostVnd   Float? // CP Bán hàng (VNĐ)
+  gcDoubleTwistVnd Float? // CP GC sợi xe đôi (VNĐ)
+  wasteRecoveryVnd Float? // Phế thu hồi (VNĐ) — giá trị dương, trừ vào chi phí
+  grossProfitVnd   Float? // Lợi nhuận gộp (VNĐ)
+
+  note String?
+
+  @@index([planId])
+  @@index([itemId])
+  @@map("plan_line_items")
+}
+
+// 8. Chi phí cố định — dùng chung cho KH và TH, phân biệt qua FK
+model FixedCostEntry {
+  id       Int           @id @default(autoincrement())
+  costType FixedCostType
+
+  // Đúng 1 trong 2 FK phải có giá trị (validate ở service layer)
+  monthlyPlanId   Int?
+  monthlyPlan     MonthlyPlan?   @relation(fields: [monthlyPlanId], references: [id], onDelete: Cascade)
+  monthlyActualId Int?
+  monthlyActual   MonthlyActual? @relation(fields: [monthlyActualId], references: [id], onDelete: Cascade)
+
+  amountVnd Float // Số tiền (VNĐ)
+  note      String?
+
+  @@index([monthlyPlanId])
+  @@index([monthlyActualId])
+  @@map("fixed_cost_entries")
+}
+
+// --- Nhóm Thực hiện (TH) ---
+
+// 9. Thực hiện tháng
+model MonthlyActual {
+  id        Int     @id @default(autoincrement())
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+  yearMonth String // "2026-01"
+  note      String?
+
+  lineItems  ActualLineItem[]
+  fixedCosts FixedCostEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, yearMonth])
+  @@index([factoryId])
+  @@map("monthly_actuals")
+}
+
+// 10. Chi tiết từng dòng sợi thực hiện
+model ActualLineItem {
+  id       Int           @id @default(autoincrement())
+  actualId Int
+  actual   MonthlyActual @relation(fields: [actualId], references: [id], onDelete: Cascade)
+
+  salesOrderItemId Int?
+  salesOrderItem   SalesOrderItem? @relation(fields: [salesOrderItemId], references: [id])
+
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
+  qty          Float // Sản lượng thực (kg) — tổng hợp từ ProductionLog
+  unitPriceUsd Float // Đơn giá thực tế (USD/kg)
+
+  // Snapshot giá trị tính toán tại thời điểm tạo
+  revenueVnd       Float?
+  cottonCostVnd    Float?
+  peCostVnd        Float?
+  sellingCostVnd   Float?
+  gcDoubleTwistVnd Float?
+  wasteRecoveryVnd Float?
+  grossProfitVnd   Float?
+
+  note String?
+
+  @@index([actualId])
+  @@index([itemId])
+  @@map("actual_line_items")
+}
+
+// ==========================================
+// MODULE ĐỊNH MỨC NĂNG SUẤT
+// ==========================================
+
+// Phiên bản định mức — mỗi lần kỹ thuật cập nhật tạo 1 version mới
+model BenchmarkVersion {
+  id            Int       @id @default(autoincrement())
+  versionName   String    // "v1.0 - 2026", "v1.1 - Sau cải tiến tháng 3"
+  factoryId     Int
+  factory       Factory   @relation(fields: [factoryId], references: [id])
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date  // null = đang hiệu lực
+  approvedBy    String?   // tên người duyệt
+  note          String?   // lý do cập nhật
+  isActive      Boolean   @default(true)
+
+  benchmarks    ProductivityBenchmark[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([effectiveFrom])
+  @@map("benchmark_versions")
+}
+
+// Định mức từng mặt hàng trên từng công đoạn
+model ProductivityBenchmark {
+  id                Int              @id @default(autoincrement())
+  versionId         Int
+  version           BenchmarkVersion @relation(fields: [versionId], references: [id])
+
+  // Liên kết với danh mục hiện có
+  itemId            Int
+  item              Item             @relation(fields: [itemId], references: [id])
+  processId         Int
+  process           Process          @relation(fields: [processId], references: [id])
+
+  // Thông tin loại máy (không phải máy cụ thể — là loại máy trong công đoạn đó)
+  machineModel      String  // "G32", "Murata Qpro-EX", "Rieter RSB-D50"
+  speedUnit         String  // "rpm" (vòng/phút) hoặc "mpm" (m/phút)
+
+  // Thông số kỹ thuật đầu vào
+  nm                Float   // chỉ số Nm
+  ne                Float   // chỉ số Ne
+  twist             Float?  // độ săn (x/m) — null với máy ghép/ống
+  speedValue        Float   // tốc độ (v/p hoặc m/p)
+  spindleOrHeadCount Int?   // số cọc (máy sợi con) hoặc số đầu ra (máy ghép)
+
+  // Kết quả tính toán — lưu snapshot
+  theoreticalOutput Float   // NS lý thuyết (kg/ca) — tính từ công thức
+  efficiency        Float   // hiệu suất chuẩn (0.80 – 0.95)
+  stdOutputPerShift Float   // ĐỊNH MỨC = theoreticalOutput × efficiency (kg/ca/máy)
+
+  note              String? // ghi chú kỹ thuật
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([versionId, itemId, processId, machineModel])
+  @@index([versionId])
+  @@index([itemId])
+  @@index([processId])
+  @@map("productivity_benchmarks")
+}
+
+// --- Dashboard Cache ---
+
+// 11. Cache tổng hợp 3 nhà máy cho dashboard Ban GĐ
+model MonthlySummarySnapshot {
+  id        Int          @id @default(autoincrement())
+  factoryId Int
+  factory   Factory      @relation(fields: [factoryId], references: [id])
+  yearMonth String // "2026-01"
+  type      SnapshotType // KH hoặc TH
+
+  // Tổng hợp
+  totalQtyKg      Float? // Tổng sản lượng (kg)
+  totalRevenueVnd Float? // Tổng doanh thu (VNĐ)
+  totalCostVnd    Float? // Tổng chi phí (VNĐ)
+  totalProfitVnd  Float? // Tổng lợi nhuận (VNĐ)
+
+  refreshedAt DateTime @default(now()) @updatedAt
+
+  @@unique([factoryId, yearMonth, type])
+  @@index([factoryId])
+  @@map("monthly_summary_snapshots")
 }

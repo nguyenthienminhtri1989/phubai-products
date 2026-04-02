@@ -33,6 +33,10 @@ import {
   CommentOutlined,
   ClockCircleOutlined,
   GroupOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
+  CalendarOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -204,6 +208,36 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     } as any);
   }
 
+  // 3b2. Menu KD-SX (Admin + Manager)
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+    baseMenuItems.push({
+      key: "sub-kdsx",
+      icon: <BarChartOutlined />,
+      label: "KH Kinh doanh - SX",
+      children: [
+        { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
+        { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
+        { key: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
+        { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
+        { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
+      ],
+    } as any);
+  }
+
+  // 3b3. Menu Định mức Năng suất (Admin + Manager)
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+    baseMenuItems.push({
+      key: "sub-benchmark",
+      icon: <LineChartOutlined />,
+      label: "Định mức Năng suất",
+      children: [
+        { key: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
+        { key: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
+        { key: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
+      ],
+    } as any);
+  }
+
   // 3c. Menu Import IoT (Admin + Manager)
   if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER" || userRole === "MANAGER") {
     baseMenuItems.push({
@@ -282,7 +316,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile", "sub-reports"]}
+          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile", "sub-reports", "sub-kdsx", "sub-benchmark"]}
           items={baseMenuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {

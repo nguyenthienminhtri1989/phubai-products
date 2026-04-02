@@ -1,0 +1,101 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { calcTheoreticalOutput } from "@/utils/benchmark";
+
+export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const versionId = searchParams.get("versionId");
+  const itemId = searchParams.get("itemId");
+  const processId = searchParams.get("processId");
+
+  const where: Record<string, unknown> = {};
+  if (versionId) where.versionId = parseInt(versionId);
+  if (itemId) where.itemId = parseInt(itemId);
+  if (processId) where.processId = parseInt(processId);
+
+  const benchmarks = await prisma.productivityBenchmark.findMany({
+    where,
+    orderBy: [{ processId: "asc" }, { itemId: "asc" }],
+    include: {
+      item: { select: { id: true, name: true } },
+      process: { select: { id: true, name: true } },
+      version: { select: { id: true, versionName: true, isActive: true } },
+    },
+  });
+
+  return NextResponse.json(benchmarks);
+}
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userRole = (session.user as any)?.role;
+  const accessLevel = (session.user as any)?.accessLevel;
+  if (userRole !== "ADMIN" && accessLevel !== "MANAGER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await req.json();
+  const {
+    versionId, itemId, processId, machineModel, speedUnit,
+    nm, ne, twist, speedValue, spindleOrHeadCount,
+    efficiency, note,
+  } = body;
+
+  if (!versionId || !itemId || !processId || !machineModel || !speedUnit || !nm || !ne || !speedValue || !efficiency) {
+    return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
+  }
+
+  // Kiểm tra phiên bản đang active thì không cho thêm
+  const version = await prisma.benchmarkVersion.findUnique({ where: { id: parseInt(versionId) } });
+  if (!version) return NextResponse.json({ error: "Không tìm thấy phiên bản" }, { status: 404 });
+  if (version.isActive) {
+    return NextResponse.json({ error: "Không thể sửa phiên bản đang active. Hãy nhân bản trước." }, { status: 400 });
+  }
+
+  // Backend tự tính — không dùng số frontend gửi lên
+  let theoreticalOutput: number;
+  try {
+    theoreticalOutput = calcTheoreticalOutput({
+      speedValue: parseFloat(speedValue),
+      speedUnit,
+      nm: parseFloat(nm),
+      twist: twist ? parseFloat(twist) : undefined,
+      spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : undefined,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 });
+  }
+
+  const efficiencyVal = parseFloat(efficiency);
+  const stdOutputPerShift = theoreticalOutput * efficiencyVal;
+
+  const benchmark = await prisma.productivityBenchmark.create({
+    data: {
+      versionId: parseInt(versionId),
+      itemId: parseInt(itemId),
+      processId: parseInt(processId),
+      machineModel,
+      speedUnit,
+      nm: parseFloat(nm),
+      ne: parseFloat(ne),
+      twist: twist ? parseFloat(twist) : null,
+      speedValue: parseFloat(speedValue),
+      spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : null,
+      theoreticalOutput,
+      efficiency: efficiencyVal,
+      stdOutputPerShift,
+      note: note || null,
+    },
+    include: {
+      item: { select: { id: true, name: true } },
+      process: { select: { id: true, name: true } },
+    },
+  });
+
+  return NextResponse.json(benchmark, { status: 201 });
+}

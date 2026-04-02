@@ -131,7 +131,7 @@ Bộ tính năng tối ưu cho công nhân nhà máy sử dụng điện thoại
 
 ### 8.4. Quick Input (Nhập nhanh 1 máy) (`/production/quick-input`)
 
-- **File:** `src/app/production/quick-input/page.tsx` *(trang cũ, vẫn còn hoạt động)*
+- **File:** `src/app/production/quick-input/page.tsx` _(trang cũ, vẫn còn hoạt động)_
 - **Mục đích:** Nhập nhanh cho 1 máy cụ thể (thường từ QR link cũ)
 - **Sidebar:** Ẩn sidebar khi ở trang `/production/mobile-input` (xem `AdminLayout.tsx` line 55)
 
@@ -152,15 +152,16 @@ Module ghi nhận các sự kiện dừng máy, giải thích bất thường s�
 
 ### 9.2. API Routes
 
-| Route | Methods | Mô tả |
-|-------|---------|-------|
-| `/api/production/stop-categories` | GET, POST | Lấy danh sách / Tạo mới (Admin) |
-| `/api/production/stop-categories/[id]` | PUT, DELETE | Sửa / Xóa (Admin, isDefault không xóa được) |
-| `/api/production/machine-stops` | GET, POST | Lịch sử (phân trang, nhiều filter) / Tạo mới |
-| `/api/production/machine-stops/[id]` | PUT, DELETE | Cập nhật (set endTime khi máy chạy lại) / Xóa |
-| `/api/production/machine-stops/stats` | GET | Thống kê tổng hợp (count, downtime, top máy, by category) |
+| Route                                  | Methods     | Mô tả                                                     |
+| -------------------------------------- | ----------- | --------------------------------------------------------- |
+| `/api/production/stop-categories`      | GET, POST   | Lấy danh sách / Tạo mới (Admin)                           |
+| `/api/production/stop-categories/[id]` | PUT, DELETE | Sửa / Xóa (Admin, isDefault không xóa được)               |
+| `/api/production/machine-stops`        | GET, POST   | Lịch sử (phân trang, nhiều filter) / Tạo mới              |
+| `/api/production/machine-stops/[id]`   | PUT, DELETE | Cập nhật (set endTime khi máy chạy lại) / Xóa             |
+| `/api/production/machine-stops/stats`  | GET         | Thống kê tổng hợp (count, downtime, top máy, by category) |
 
 **Validation bắt buộc:**
+
 - `startTime` không được trong tương lai.
 - `endTime` phải sau `startTime` và không được trong tương lai.
 - Category phải tồn tại và `isActive = true`.
@@ -188,11 +189,11 @@ Module ghi nhận các sự kiện dừng máy, giải thích bất thường s�
 
 ### 9.5. Severity (Mức độ)
 
-| Giá trị | Nhãn | Màu |
-|---------|------|-----|
-| `low` | Nhẹ | Xanh |
-| `medium` | Trung bình | Cam |
-| `high` | Nặng | Đỏ |
+| Giá trị    | Nhãn         | Màu    |
+| ---------- | ------------ | ------ |
+| `low`      | Nhẹ          | Xanh   |
+| `medium`   | Trung bình   | Cam    |
+| `high`     | Nặng         | Đỏ     |
 | `critical` | Nghiêm trọng | Đỏ đậm |
 
 ### 9.6. Menu mới trong AdminLayout
@@ -227,10 +228,11 @@ Module nhập tự động dữ liệu sản lượng từ file Excel xuất b�
 ### 10.3. Logic Parse Excel
 
 **Detect cột tự động** (sau khi normalize: trim + lowercase + bỏ dấu):
+
 - Ngày: chứa `ngay`, `date`, `ngày`
 - Ca: chứa `ca`, `shift`
 - Máy: chứa `may`, `máy`, `machine`
-- Mặt hàng: chứa `mat hang`, `hang`, `item`, `san pham` *(optional)*
+- Mặt hàng: chứa `mat hang`, `hang`, `item`, `san pham` _(optional)_
 - Sản lượng: chứa `san luong`, `output`, `sl`, `quantity`
 
 **Parse ngày** hỗ trợ 3 dạng: Excel serial number, `DD/MM/YYYY`, `YYYY-MM-DD`, `DD-MM-YYYY`.
@@ -241,18 +243,19 @@ Module nhập tự động dữ liệu sản lượng từ file Excel xuất b�
 
 ### 10.4. API Routes
 
-| Route | Methods | Mô tả |
-|-------|---------|-------|
-| `/api/iot/sources` | GET, POST | Danh sách sources / Tạo mới |
-| `/api/iot/sources/[id]` | PUT, DELETE | Sửa / Xóa (block nếu đã có import log) |
-| `/api/iot/mapping` | GET, POST, DELETE | Xem mapping / Bulk upsert / Xóa từng entry |
-| `/api/iot/parse-excel` | POST | Phân tích file Excel, trả về rows + unmapped lists |
-| `/api/iot/import` | POST | Ghi vào ProductionLog, tạo IotImportLog |
-| `/api/iot/import-logs` | GET | Lịch sử import (kèm tên người thực hiện) |
+| Route                   | Methods           | Mô tả                                              |
+| ----------------------- | ----------------- | -------------------------------------------------- |
+| `/api/iot/sources`      | GET, POST         | Danh sách sources / Tạo mới                        |
+| `/api/iot/sources/[id]` | PUT, DELETE       | Sửa / Xóa (block nếu đã có import log)             |
+| `/api/iot/mapping`      | GET, POST, DELETE | Xem mapping / Bulk upsert / Xóa từng entry         |
+| `/api/iot/parse-excel`  | POST              | Phân tích file Excel, trả về rows + unmapped lists |
+| `/api/iot/import`       | POST              | Ghi vào ProductionLog, tạo IotImportLog            |
+| `/api/iot/import-logs`  | GET               | Lịch sử import (kèm tên người thực hiện)           |
 
 ### 10.5. Files
 
 **API:**
+
 - `src/app/api/iot/sources/route.ts` — GET list, POST create
 - `src/app/api/iot/sources/[id]/route.ts` — PUT update, DELETE
 - `src/app/api/iot/mapping/route.ts` — GET/POST/DELETE mapping
@@ -261,12 +264,14 @@ Module nhập tự động dữ liệu sản lượng từ file Excel xuất b�
 - `src/app/api/iot/import-logs/route.ts` — GET lịch sử
 
 **Components:**
+
 - `src/components/iot-import/ImportWizard.tsx` — Wizard 4 bước (component chính)
 - `src/components/iot-import/MappingStep.tsx` — Bước 2: khớp tên máy/mặt hàng/ca
 - `src/components/iot-import/PreviewStep.tsx` — Bước 3: KPI cards + bảng preview với filter tabs
 - `src/components/iot-import/ImportHistory.tsx` — Bảng lịch sử + drawer chi tiết lỗi
 
 **Pages:**
+
 - `src/app/iot-import/page.tsx` — Trang chính (2 tabs: Import | Lịch sử)
 - `src/app/iot-import/sources/page.tsx` — Quản lý sources, xem/xóa mapping
 
@@ -298,7 +303,411 @@ Module nhập tự động dữ liệu sản lượng từ file Excel xuất b�
 
 ---
 
+# MODULE KD-SX — Kế hoạch Kinh doanh Sản xuất
+
+## Tổng quan
+
+Module KD-SX số hóa toàn bộ quy trình lập kế hoạch kinh doanh hàng tháng của 3 nhà máy sản xuất sợi (NM1.2, NMG37, NM3), thay thế file Excel "KẾ_HOẠCH_KD-SX" đang dùng trước đây. Dữ liệu nguồn được phân tích từ 12 tháng thực tế (T7/2025 – T6/2026).
+
+---
+
+## Nguồn dữ liệu gốc (Excel)
+
+File Excel gốc có 2 loại sheet lặp theo tháng:
+
+**Sheet DT (Doanh thu)** — mỗi dòng là 1 loại sợi:
+
+- Cột: STT | Loại sợi | Hợp đồng | Số lượng (kg) | Đơn giá (USD/kg) | Doanh thu | CP NVL Cotton | CP NVL PE | CP Bán hàng | CP GC sợi xe đôi | Phế thu hồi
+- Phần dưới: tổng chi phí cố định tháng (lương, điện, khấu hao, lãi vay...) và lợi nhuận ước tính
+- Bảng thông số: giá bông các loại, tỷ giá, tỷ lệ phối trộn, định mức tiêu hao theo từng nhóm sợi
+
+**Sheet SL (Sản lượng)** — sản lượng thực tế theo ngày/máy:
+
+- Hàng = máy, cột = ngày trong tháng
+- 1 máy có thể chạy nhiều mặt hàng khác nhau (đổi hàng giữa tháng)
+- Cuối sheet: tổng hợp lũy kế theo mặt hàng, so sánh với đơn hàng, tính còn lại
+
+**Sheet TH (Tổng hợp)** — bảng tổng hợp 3 nhà máy, cột KH và TH:
+
+- Mỗi nhà máy: Sản lượng (tấn) | Doanh thu (tỷ đồng) | Chi phí (tỷ đồng) | Lợi nhuận (tỷ đồng)
+
+---
+
+## Nghiệp vụ tính toán
+
+### Công thức chính
+
+```
+Doanh thu (VNĐ)   = Số lượng (kg) × Đơn giá (USD/kg) × Tỷ giá (VNĐ/USD)
+
+CP Cotton (VNĐ)   = Số lượng × Định mức Cotton × Giá bông BQ × Tỷ giá
+CP PE (VNĐ)       = Số lượng × Định mức PE × Giá Benma × Tỷ giá
+                    └─ Chỉ áp dụng cho sợi CVCM (có thành phần PE)
+
+CP GC xe đôi      = Chỉ áp dụng sợi /2 (30/2 COCD, 40/2 COCM...)
+Phế thu hồi       = Giá trị DƯƠNG — trừ vào tổng chi phí
+
+Lợi nhuận gộp     = DT − CP NVL − CP Bán hàng − CP GC + Phế thu hồi
+Lợi nhuận ròng    = LN gộp − Tổng CP cố định + Doanh thu HĐTC
+
+Giá bông BQ       = (tỷ lệ USA × giá USA) + (tỷ lệ BRA × giá BRA) + 0.02
+```
+
+### Thông số thay đổi hàng tháng
+
+- Giá bông các loại (USD/kg): USA/Brazil ~1.73–1.81, Pima ~3.78, CMIA ~1.70, Úc ~1.71–1.87, Supima ~3.66
+- Giá PE Benma: ~1.02–1.14 USD/kg
+- Tỷ lệ phối trộn bông (VD: 60% USA + 40% Brazil, hoặc 100% Úc từ T6/2026)
+- Tỷ giá: 25,600–26,200 VNĐ/USD
+
+### Định mức tiêu hao tham khảo (kg NL / kg TP)
+
+| Nhóm sợi        | Cotton     | PE         |
+| --------------- | ---------- | ---------- |
+| COCD (Chải kỹ)  | ~1.12–1.13 | —          |
+| COCM (Chải thô) | ~1.33–1.44 | —          |
+| CVCM            | ~1.33–1.35 | ~0.30–0.45 |
+| CRC             | Theo HĐ    | Theo HĐ    |
+
+### Chi phí cố định tháng (14 loại — enum FixedCostType)
+
+Tiền lương, Trích trước lương, Tiền ăn ca, BHXH/YT/TN/KPCĐ, Tiền điện, Khấu hao, Ống cone/bao PP, CP vật liệu khác, CP quản lý DN, Lãi vay VCĐ, Lãi vay VLĐ, Lỗ CL tỷ giá, Doanh thu HĐTC, Khác.
+
+---
+
+## Schema Database (Prisma)
+
+Module KD-SX được tích hợp vào schema ERP hiện tại theo nguyên tắc **strictly additive** — không xóa/sửa model cũ, chỉ thêm mới.
+
+### Thay đổi model cũ
+
+```prisma
+// Factory — thêm 5 relations
+monthlyPlans     MonthlyPlan[]
+monthlyActuals   MonthlyActual[]
+fixedCostEntries FixedCostEntry[]
+inputParams      MonthlyInputParam[]
+summarySnapshots MonthlySummarySnapshot[]
+
+// Item — thêm 3 fields optional (không ảnh hưởng dữ liệu cũ) + 3 relations
+yarnCategory String?   // "COCD" | "COCM" | "CVCM" | "CRC"
+yarnCount    String?   // "16", "30", "40", "60"
+yarnPly      Int?      // 1 hoặc 2
+
+rawMaterialRates RawMaterialRate[]
+planLineItems    PlanLineItem[]
+actualLineItems  ActualLineItem[]
+salesOrderItems  SalesOrderItem[]
+
+// Machine — KHÔNG thay đổi
+// Nguồn sản lượng cho KD-SX lấy từ ProductionLog (GROUP BY), không tạo bảng mới
+```
+
+### Models mới — 11 models + 3 enums
+
+```
+① Hợp đồng bán hàng
+   Customer → SalesOrder (contractCode: "431PB25") → SalesOrderItem
+
+② Thông số tháng
+   MonthlyInputParam  — giá NVL + tỷ giá (unique: factoryId + yearMonth)
+   RawMaterialRate    — định mức tiêu hao theo Item, có effectiveFrom/To
+
+③ Kế hoạch (KH)
+   MonthlyPlan (factoryId + yearMonth, status: DRAFT|SUBMITTED|APPROVED)
+     ├── PlanLineItem[]   — mỗi dòng sợi, lưu snapshot giá trị tính toán
+     └── FixedCostEntry[] — 14 loại CP cố định
+
+④ Thực hiện (TH)
+   MonthlyActual (factoryId + yearMonth)
+     ├── ActualLineItem[]  — mirror PlanLineItem, qty tổng hợp từ ProductionLog
+     └── FixedCostEntry[]  — dùng chung model với KH
+
+⑤ Dashboard
+   MonthlySummarySnapshot — cache tổng hợp (factoryId + yearMonth + type: KH|TH)
+
+Enums: PlanStatus, SummaryType, FixedCostType
+```
+
+---
+
+## Quy tắc quan trọng khi code
+
+### 1. Lưu snapshot — KHÔNG tính lại on-the-fly
+
+`PlanLineItem` và `ActualLineItem` lưu sẵn `revenueVnd`, `cottonCostVnd`... tại thời điểm tạo. Giá NVL/tỷ giá thay đổi hàng tháng — nếu tính lại bằng giá hiện tại thì lịch sử tháng trước sẽ sai.
+
+### 2. yearMonth luôn là String "YYYY-MM"
+
+Không dùng `DateTime` để tránh timezone issues. Validate bằng `/^\d{4}-\d{2}$/`.
+
+### 3. FixedCostEntry có 2 optional FK — validate ở service layer
+
+```typescript
+// Phải có đúng 1 trong 2, không được cả hai null hoặc cả hai có giá trị
+if (!monthlyPlanId && !monthlyActualId) throw Error("Phải thuộc KH hoặc TH");
+if (monthlyPlanId && monthlyActualId)
+  throw Error("Không thể thuộc cả KH và TH");
+```
+
+### 4. Nguồn sản lượng cho ActualLineItem — lấy từ ProductionLog
+
+```typescript
+const actualQty = await prisma.productionLog.groupBy({
+  by: ["itemId"],
+  where: {
+    machine: { process: { factoryId } },
+    recordDate: { gte: startOfMonth, lte: endOfMonth },
+  },
+  _sum: { finalOutput: true },
+});
+```
+
+### 5. Lấy định mức đúng thời điểm
+
+```typescript
+const rate = await prisma.rawMaterialRate.findFirst({
+  where: {
+    itemId,
+    effectiveFrom: { lte: planDate },
+    OR: [{ effectiveTo: null }, { effectiveTo: { gte: planDate } }],
+  },
+  orderBy: { effectiveFrom: "desc" },
+});
+```
+
+### 6. Cập nhật MonthlySummarySnapshot sau mọi thay đổi KH/TH
+
+Gọi `refreshSummarySnapshot(factoryId, yearMonth, type)` sau mỗi tạo/cập nhật `MonthlyPlan` hoặc `MonthlyActual`.
+
+---
+
+## Cấu trúc thư mục
+
+```
+app/(erp)/kdsx/
+  page.tsx                          — Dashboard tổng hợp 3 NM (Ban GĐ)
+  [factoryId]/[yearMonth]/
+    ke-hoach/page.tsx               — Xem/chỉnh kế hoạch tháng
+    thuc-hien/page.tsx              — Xem thực hiện tháng
+
+app/api/kdsx/
+  monthly-plan/
+    route.ts                        — GET list, POST tạo mới
+    [id]/route.ts                   — GET, PUT, DELETE
+    [id]/submit/route.ts            — POST: DRAFT → SUBMITTED
+    [id]/approve/route.ts           — POST: SUBMITTED → APPROVED
+  monthly-actual/
+    route.ts
+    [id]/route.ts
+    [id]/sync-from-production/route.ts  — POST: tổng hợp từ ProductionLog
+  summary/route.ts                  — GET dashboard 3 NM
+  input-params/route.ts             — GET, POST/PUT giá NVL tháng
+  sales-orders/route.ts
+  customers/route.ts
+```
+
+---
+
+## Quy trình nghiệp vụ
+
+```
+Kế toán: Cập nhật thông số tháng (giá NVL, tỷ giá)
+    ↓
+Kế toán: Tạo MonthlyPlan → nhập từng PlanLineItem + FixedCostEntry
+    ↓  (status: DRAFT)
+Kế toán: Trình duyệt → status: SUBMITTED (khóa chỉnh sửa)
+    ↓
+Ban GĐ: Phê duyệt → status: APPROVED
+    ↓
+Cuối tháng — Kế toán: Tạo MonthlyActual + sync từ ProductionLog
+    ↓
+Dashboard: So sánh KH vs TH qua MonthlySummarySnapshot
+```
+
+---
+
+## Dữ liệu thực tế tham khảo (T1/2026 — NM3)
+
+| Chỉ số             | Giá trị                   |
+| ------------------ | ------------------------- |
+| Tổng sản lượng KH  | 437,820 kg                |
+| Doanh thu ước tính | 35.125 tỷ VNĐ             |
+| Tổng chi phí       | 35.672 tỷ VNĐ             |
+| Lợi nhuận          | −0.457 tỷ (lỗ nhẹ do Tết) |
+| Tỷ giá             | 26,100 VNĐ/USD            |
+| Giá bông BQ        | ~1.773 USD/kg             |
+| Số loại sợi        | 21 loại                   |
+
+Xu hướng 12 tháng: T2/2026 thấp nhất (−1.64 tỷ, nghỉ Tết), T6/2026 cao nhất (+5.55 tỷ, chuyển sang sợi CVCM cao cấp).
+
 _Lưu ý cho AI: Khi nhận được file này, hãy đóng vai trò là Senior Backend/Software Architect, chỉ phát triển tính năng mới dựa trên nền tảng kiến trúc đã có, không thiết kế lại hệ thống._
 
 ---
-_Cập nhật lần cuối: 2026-03-15 — Thêm Module 6: Import IoT Excel (IotSource, mapping, wizard 4 bước)_
+
+_Cập nhật lần cuối: 2026-04-01 — Thêm Module 7: Kế hoạch Kinh doanh Sản xuất (KD-SX)_
+
+---
+
+## KD-SX — Kế hoạch Kinh doanh Sản xuất (Full Implementation)
+
+**Status:** ✅ Completed 2026-03-31
+
+### What was built
+
+Module số hóa toàn bộ quy trình lập Kế hoạch và Thực hiện kinh doanh hàng tháng cho 3 nhà máy sản xuất sợi, thay thế file Excel "KẾ_HOẠCH_KD-SX". Tính toán doanh thu, chi phí biến đổi (NVL cotton/PE, bán hàng, GC xe đôi, phế thu hồi) và chi phí cố định (14 loại), so sánh KH vs TH qua snapshot dashboard.
+
+### Files created/modified
+
+```
+src/lib/kdsx/calculator.ts                                 — calculateLineItem() + refreshSummarySnapshot() + ALL_FIXED_COST_TYPES
+src/components/kdsx/FixedCostTable.tsx                     — Bảng nhập 14 loại chi phí cố định
+src/app/kdsx/page.tsx                                      — Dashboard tổng hợp 3 NM (KH vs TH)
+src/app/kdsx/customers/page.tsx                            — Quản lý khách hàng
+src/app/kdsx/sales-orders/page.tsx                         — Quản lý đơn hàng (hợp đồng)
+src/app/kdsx/plans/page.tsx                                — Danh sách kế hoạch tháng
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx        — Chi tiết kế hoạch (nhập line items + fixed costs)
+src/app/kdsx/actuals/page.tsx                              — Danh sách thực hiện tháng
+src/app/kdsx/actuals/[factoryId]/[yearMonth]/page.tsx      — Chi tiết thực hiện (sync từ ProductionLog)
+src/app/api/kdsx/customers/route.ts                        — CRUD khách hàng
+src/app/api/kdsx/customers/[id]/route.ts                   — GET/PUT/DELETE khách hàng
+src/app/api/kdsx/sales-orders/route.ts                     — CRUD đơn hàng
+src/app/api/kdsx/sales-orders/[id]/route.ts                — GET/PUT/DELETE đơn hàng
+src/app/api/kdsx/input-params/route.ts                     — GET/POST/PUT thông số tháng (giá NVL, tỷ giá)
+src/app/api/kdsx/raw-material-rates/route.ts               — CRUD định mức tiêu hao NVL
+src/app/api/kdsx/raw-material-rates/[id]/route.ts          — GET/PUT/DELETE định mức
+src/app/api/kdsx/monthly-plans/route.ts                    — Tạo/list kế hoạch tháng
+src/app/api/kdsx/monthly-plans/[id]/route.ts               — GET/PUT/DELETE kế hoạch
+src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts    — CRUD dòng sợi trong kế hoạch
+src/app/api/kdsx/monthly-plans/[id]/line-items/[lineItemId]/route.ts — Sửa/xóa từng dòng
+src/app/api/kdsx/monthly-plans/[id]/fixed-costs/route.ts   — CRUD chi phí cố định KH
+src/app/api/kdsx/monthly-plans/[id]/submit/route.ts        — DRAFT → SUBMITTED
+src/app/api/kdsx/monthly-plans/[id]/approve/route.ts       — SUBMITTED → APPROVED
+src/app/api/kdsx/monthly-plans/[id]/revert/route.ts        — SUBMITTED → DRAFT
+src/app/api/kdsx/monthly-plans/[id]/unapprove/route.ts     — APPROVED → SUBMITTED
+src/app/api/kdsx/monthly-actuals/route.ts                  — Tạo/list thực hiện tháng
+src/app/api/kdsx/monthly-actuals/[id]/route.ts             — GET/PUT/DELETE thực hiện
+src/app/api/kdsx/monthly-actuals/[id]/fixed-costs/route.ts — CRUD chi phí cố định TH
+src/app/api/kdsx/monthly-actuals/[id]/sync/route.ts        — Tổng hợp sản lượng từ ProductionLog
+src/app/api/kdsx/summary/route.ts                          — Dashboard snapshot 3 NM
+src/app/api/kdsx/fixed-costs/route.ts                      — Xem chi phí cố định tổng hợp
+prisma/migrations/20260331000000_add_kdsx_module/          — 11 models mới + 3 enums
+prisma/migrations/20260401000001_update_fixed_cost_type_enum/ — Rename enum FixedCostType (14 giá trị đúng nghiệp vụ)
+```
+
+### Key business logic implemented
+
+- `calculateLineItem()`: tính revenueVnd, cottonCostVnd, peCostVnd, sellingCostVnd, gcDoubleTwistVnd, wasteRecoveryVnd, grossProfitVnd từ qty + unitPriceUsd + rates + params — không tính on-the-fly, lưu snapshot
+- `refreshSummarySnapshot()`: sau mọi thay đổi KH/TH, tổng hợp lại `MonthlySummarySnapshot` (upsert)
+- `DOANH_THU_HDTC` là khoản **thu**, được cộng vào lợi nhuận, **không tính vào chi phí**
+- `FixedCostEntry` phải có đúng 1 trong 2 FK: `monthlyPlanId` XOR `monthlyActualId`
+- Nguồn sản lượng TH: GROUP BY từ `ProductionLog` qua endpoint `/sync`, không nhập tay
+- APPROVED plan không thể sửa/xóa line items; phải revert về SUBMITTED trước
+- `RawMaterialRate` dùng `effectiveFrom`/`effectiveTo` để lấy đúng định mức theo tháng
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | /api/kdsx/customers | Danh sách / tạo khách hàng |
+| GET/PUT/DELETE | /api/kdsx/customers/[id] | Sửa / xóa khách hàng |
+| GET/POST | /api/kdsx/sales-orders | Danh sách / tạo đơn hàng |
+| GET/PUT/DELETE | /api/kdsx/sales-orders/[id] | Sửa / xóa đơn hàng |
+| GET/POST | /api/kdsx/input-params | Thông số tháng (giá NVL, tỷ giá) |
+| GET/POST | /api/kdsx/raw-material-rates | Định mức tiêu hao NVL |
+| GET/PUT/DELETE | /api/kdsx/raw-material-rates/[id] | Sửa / xóa định mức |
+| GET/POST | /api/kdsx/monthly-plans | Danh sách / tạo kế hoạch tháng |
+| GET/PUT/DELETE | /api/kdsx/monthly-plans/[id] | Chi tiết / sửa / xóa kế hoạch |
+| GET/POST | /api/kdsx/monthly-plans/[id]/line-items | Dòng sợi trong kế hoạch |
+| PUT/DELETE | /api/kdsx/monthly-plans/[id]/line-items/[lineItemId] | Sửa / xóa dòng sợi |
+| GET/POST | /api/kdsx/monthly-plans/[id]/fixed-costs | Chi phí cố định kế hoạch |
+| POST | /api/kdsx/monthly-plans/[id]/submit | DRAFT → SUBMITTED |
+| POST | /api/kdsx/monthly-plans/[id]/approve | SUBMITTED → APPROVED |
+| POST | /api/kdsx/monthly-plans/[id]/revert | SUBMITTED → DRAFT |
+| POST | /api/kdsx/monthly-plans/[id]/unapprove | APPROVED → SUBMITTED |
+| GET/POST | /api/kdsx/monthly-actuals | Danh sách / tạo thực hiện tháng |
+| GET/PUT/DELETE | /api/kdsx/monthly-actuals/[id] | Chi tiết / sửa / xóa thực hiện |
+| GET/POST | /api/kdsx/monthly-actuals/[id]/fixed-costs | Chi phí cố định thực hiện |
+| POST | /api/kdsx/monthly-actuals/[id]/sync | Sync sản lượng từ ProductionLog |
+| GET | /api/kdsx/summary | Dashboard tổng hợp 3 nhà máy |
+
+### Known limitations / not yet implemented
+
+- Chưa có export Excel báo cáo KH/TH theo format file gốc
+- Chưa có tính năng copy kế hoạch tháng trước sang tháng mới
+- Chưa phân quyền chi tiết theo nhà máy (hiện Admin xem tất, User chỉ xem NM của mình qua processId)
+
+### Data notes
+
+- `yearMonth` luôn String `"YYYY-MM"`, validate `/^\d{4}-\d{2}$/`
+- `amountVnd` trong `FixedCostEntry` lưu VNĐ tuyệt đối — UI hiển thị tỷ (÷1e9), phải ×1e9 khi gửi API
+- Enum `FixedCostType` có 14 giá trị: TIEN_LUONG, TRICH_TRUOC_LUONG, TIEN_AN_CA, BHXH_YT_TN_KPCD, TIEN_DIEN, KHAU_HAO, ONG_CONE_BAO_PP, CHI_PHI_VAT_LIEU, CHI_PHI_QUAN_LY, LAI_VAY_VCD, LAI_VAY_VLD, LO_CHENH_LECH_TY_GIA, DOANH_THU_HDTC, KHAC
+
+---
+
+## PRODUCTIVITY-BENCHMARK — Định mức Năng suất Lý thuyết
+
+**Status:** ✅ Completed 2026-04-01
+
+### What was built
+
+Module lưu trữ và quản lý định mức năng suất lý thuyết (kg/ca/máy) theo từng tổ hợp mặt hàng × công đoạn × model máy, quản lý theo phiên bản có hiệu lực. Hỗ trợ xem công suất thiết kế toàn nhà máy và so sánh năng suất thực tế vs lý thuyết.
+
+### Files created/modified
+
+```
+src/utils/benchmark.ts                                          — calcTheoreticalOutput() dùng chung API + frontend
+src/app/dashboard/productivity-benchmark/page.tsx              — Trang chính: 2 tab (Quản lý phiên bản + Nhập định mức)
+src/app/dashboard/productivity-benchmark/capacity/page.tsx     — Xem công suất thiết kế toàn nhà máy
+src/app/dashboard/productivity-benchmark/comparison/page.tsx   — So sánh NS thực tế vs lý thuyết
+src/app/api/productivity-benchmark/versions/route.ts           — GET list / POST tạo phiên bản
+src/app/api/productivity-benchmark/versions/[id]/route.ts      — GET / PUT / DELETE phiên bản
+src/app/api/productivity-benchmark/versions/[id]/activate/route.ts — Activate phiên bản (deactivate cũ)
+src/app/api/productivity-benchmark/versions/[id]/clone/route.ts    — Nhân bản phiên bản
+src/app/api/productivity-benchmark/benchmarks/route.ts         — GET list / POST tạo định mức
+src/app/api/productivity-benchmark/benchmarks/[id]/route.ts    — GET / PUT / DELETE định mức
+src/app/api/productivity-benchmark/benchmarks/bulk/route.ts    — POST nhập nhiều định mức cùng lúc
+src/app/api/productivity-benchmark/capacity/route.ts           — GET công suất tổng hợp
+src/app/api/productivity-benchmark/comparison/route.ts         — GET so sánh thực tế vs lý thuyết
+prisma/migrations/20260401000000_add_productivity_benchmark/   — 2 bảng: benchmark_versions, productivity_benchmarks
+```
+
+### Key business logic implemented
+
+- `calcTheoreticalOutput()` — công thức tính theo 2 loại tốc độ:
+  - `speedUnit="rpm"` (máy sợi con/thô): `NS_LT = speed × 480 / (twist × Nm × 1000) × spindleCount`
+  - `speedUnit="mpm"` (máy ghép/ống): `NS_LT = speed × 480 / (Nm × 1000) × headCount`
+- `stdOutputPerShift = theoreticalOutput × efficiency` — backend tự tính, không tin số frontend gửi lên
+- Phiên bản `isActive=true` → không cho sửa/xóa benchmark, phải nhân bản (`clone`) trước khi chỉnh
+- Khi activate phiên bản mới: dùng `$transaction` để deactivate tất cả phiên bản cũ cùng nhà máy + activate mới đồng thời — đảm bảo atomic
+- Unique constraint `(versionId, itemId, processId, machineModel)` — mỗi tổ hợp chỉ có 1 định mức trong 1 phiên bản
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | /api/productivity-benchmark/versions | Danh sách / tạo phiên bản |
+| GET/PUT/DELETE | /api/productivity-benchmark/versions/[id] | Chi tiết / sửa / xóa phiên bản |
+| POST | /api/productivity-benchmark/versions/[id]/activate | Kích hoạt phiên bản |
+| POST | /api/productivity-benchmark/versions/[id]/clone | Nhân bản phiên bản |
+| GET/POST | /api/productivity-benchmark/benchmarks | Danh sách / tạo định mức |
+| PUT/DELETE | /api/productivity-benchmark/benchmarks/[id] | Sửa / xóa định mức |
+| POST | /api/productivity-benchmark/benchmarks/bulk | Nhập nhiều định mức cùng lúc |
+| GET | /api/productivity-benchmark/capacity | Công suất thiết kế tổng hợp |
+| GET | /api/productivity-benchmark/comparison | So sánh NS thực tế vs lý thuyết |
+
+### Known limitations / not yet implemented
+
+- Chưa có export Excel cho báo cáo so sánh NS
+- Chưa tích hợp cảnh báo tự động khi NS thực tế < ngưỡng % so với lý thuyết
+- `comparison` chỉ so sánh tổng hợp theo tháng, chưa drill-down theo từng máy
+
+### Data notes
+
+- `prisma migrate dev` bị lỗi non-interactive trên môi trường này — dùng `prisma migrate deploy` thay thế
+- `speedUnit`: `"rpm"` cho máy sợi con/thô (cần `twist` + `spindleOrHeadCount`); `"mpm"` cho máy ghép/ống (chỉ cần `headCount`, mặc định = 1 nếu không truyền)
+- `efficiency` lưu dạng thập phân 0–1 (VD: 0.85 = 85%)
+
+---
+
+_Cập nhật lần cuối: 2026-04-01 — Thêm KD-SX full implementation + Module Định mức Năng suất_
