@@ -1046,3 +1046,33 @@ src/components/kdsx/OrderProgressTab.tsx       — Added surplus indicator (+X k
 ### Known limitations
 
 - `var(--color-text-success)` CSS variable not guaranteed in all themes; using hardcoded `#52c41a` instead
+
+---
+
+## KẾ HOẠCH THÁNG — Hỗ trợ dòng "Dự phòng (DP)"
+
+**Status:** ✅ Completed 2026-04-03
+
+### What was built
+
+Cho phép nhập dòng sợi trong kế hoạch tháng mà không cần gắn với hợp đồng cụ thể — gọi là dòng "Dự phòng (DP)". Phòng KD dùng khi nhà máy sản xuất dư năng lực để tồn kho hoặc chuẩn bị cho HĐ đột xuất.
+
+### Files created/modified
+
+```
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx  — Thêm Checkbox DP, disable Select HĐ khi DP, cột HĐ hiển thị Tag "Dự phòng"
+src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts  — Không cần sửa (salesOrderItemId đã là Int? optional)
+```
+
+### Key business logic implemented
+
+- `isDP = true` → `salesOrderItemId = null` (không gắn HĐ); `isDP = false` → bắt buộc chọn HĐ
+- Khi checkbox DP được check → Select HĐ bị disabled và clear
+- Khi mở modal edit dòng DP (salesOrderItemId = null) → checkbox tự tick, Select disabled
+- Cột "HĐ" trong bảng: `salesOrderItemId !== null` → hiện orderNo; `null` → hiện `<Tag>Dự phòng</Tag>`
+- `grossMarginVnd` tính đúng vì dùng `unitPriceUsd` nhập tay + rates của item, không phụ thuộc vào HĐ
+
+### Known limitations
+
+- Không có field `contractCode = 'DP'` trong DB (schema không có field này trong PlanLineItem); DP được nhận diện bằng `salesOrderItemId IS NULL`
+- Allocation engine không thay đổi — lượng SX không có HĐ nhận tự vào surplus pool như bình thường

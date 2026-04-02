@@ -11,6 +11,7 @@ import {
   Input,
   InputNumber,
   Select,
+  Checkbox,
   Space,
   Popconfirm,
   message,
@@ -119,6 +120,7 @@ export default function PlanDetailPage({
   const [paramModal, setParamModal] = useState(false);
   const [paramForm] = Form.useForm();
   const [lineItemForm] = Form.useForm();
+  const [isDP, setIsDP] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasParam, setHasParam] = useState(false);
 
@@ -230,6 +232,8 @@ export default function PlanDetailPage({
     try {
       const values = await lineItemForm.validateFields();
       setSaving(true);
+      const { isDP: _isDP, ...rest } = values;
+      const body = { ...rest, salesOrderItemId: isDP ? null : (values.salesOrderItemId ?? null) };
       const url = editingLineItem
         ? `/api/kdsx/monthly-plans/${plan.id}/line-items/${editingLineItem.id}`
         : `/api/kdsx/monthly-plans/${plan.id}/line-items`;
@@ -237,7 +241,7 @@ export default function PlanDetailPage({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -371,15 +375,19 @@ export default function PlanDetailPage({
       return;
     }
     setEditingLineItem(null);
+    setIsDP(false);
     lineItemForm.resetFields();
     setLineItemModal(true);
   }
 
   function openEditLineItem(li: PlanLineItem) {
     setEditingLineItem(li);
+    const dp = !li.salesOrderItemId;
+    setIsDP(dp);
     lineItemForm.setFieldsValue({
       itemId: li.itemId,
-      salesOrderItemId: li.salesOrderItemId,
+      isDP: dp,
+      salesOrderItemId: li.salesOrderItemId ?? undefined,
       qty: li.qty,
       unitPriceUsd: li.unitPriceUsd,
       note: li.note,
@@ -398,7 +406,10 @@ export default function PlanDetailPage({
     {
       title: "HĐ",
       key: "order",
-      render: (_: unknown, r: PlanLineItem) => r.salesOrderItem?.order.orderNo || "-",
+      render: (_: unknown, r: PlanLineItem) =>
+        r.salesOrderItemId
+          ? r.salesOrderItem?.order.orderNo ?? "-"
+          : <Tag>Dự phòng</Tag>,
     },
     { title: "SL (kg)", dataIndex: "qty", key: "qty", render: (v: number) => v.toLocaleString() },
     { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
@@ -725,7 +736,7 @@ export default function PlanDetailPage({
         title={editingLineItem ? "Sửa dòng sợi" : "Thêm dòng sợi"}
         open={lineItemModal}
         onOk={handleSaveLineItem}
-        onCancel={() => setLineItemModal(false)}
+        onCancel={() => { setLineItemModal(false); setIsDP(false); }}
         confirmLoading={saving}
         okText="Lưu & Tính toán"
         cancelText="Hủy"
@@ -745,7 +756,21 @@ export default function PlanDetailPage({
               placeholder="Chọn loại sợi"
             />
           </Form.Item>
-          <Form.Item name="salesOrderItemId" label="Hợp đồng (tùy chọn)">
+          <Form.Item name="isDP" valuePropName="checked" style={{ marginBottom: 8 }}>
+            <Checkbox
+              onChange={(e) => {
+                setIsDP(e.target.checked);
+                if (e.target.checked) lineItemForm.setFieldValue("salesOrderItemId", undefined);
+              }}
+            >
+              Dự phòng (DP) — không gắn với hợp đồng cụ thể
+            </Checkbox>
+          </Form.Item>
+          <Form.Item
+            name="salesOrderItemId"
+            label="Hợp đồng"
+            rules={[{ required: !isDP, message: "Vui lòng chọn hợp đồng hoặc đánh dấu Dự phòng" }]}
+          >
             <Select
               options={salesOrderItems.map((oi) => ({
                 label: `${oi.order.orderNo} — ${items.find((i) => i.id === oi.itemId)?.name ?? oi.itemId} — ${oi.unitPrice} USD/kg`,
@@ -753,8 +778,9 @@ export default function PlanDetailPage({
               }))}
               showSearch
               optionFilterProp="label"
-              placeholder="Chọn dòng HĐ"
+              placeholder={isDP ? "Không áp dụng (Dự phòng)" : "Chọn dòng HĐ"}
               allowClear
+              disabled={isDP}
             />
           </Form.Item>
           <Row gutter={16}>
