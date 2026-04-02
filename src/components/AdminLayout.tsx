@@ -219,6 +219,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
         { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
         { key: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
+        { key: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
         { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
         { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
         { key: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },

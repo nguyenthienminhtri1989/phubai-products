@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const body = await req.json();
-  const { orderNo, customerId, factoryId, signedDate, note, isActive } = body;
+  const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, isActive } = body;
 
   const order = await prisma.salesOrder.update({
     where: { id: Number(id) },
@@ -88,6 +88,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       customerId: customerId ? Number(customerId) : undefined,
       factoryId: factoryId ? Number(factoryId) : undefined,
       signedDate: signedDate ? new Date(signedDate) : null,
+      deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+      startDate: startDate ? new Date(startDate) : null,
       note: note ?? null,
       isActive: isActive !== undefined ? Boolean(isActive) : undefined,
     },
