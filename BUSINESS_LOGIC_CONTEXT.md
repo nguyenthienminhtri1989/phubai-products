@@ -938,3 +938,49 @@ src/app/sales-orders/[id]/page.tsx                      — Updated: fetch from 
 
 - Corrected Part 3 (UI redesign for /sales-orders tracking pages) not yet implemented
 - Cancel in UI still shows a "reason" text box but the reason field is not stored (status PATCH only sets status=CANCELLED)
+
+---
+
+## THEO DÕI TIẾN ĐỘ ĐƠN HÀNG — Corrected Part 3: UI
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+Extended existing KD-SX sales-orders form with delivery/start date fields; created a tabbed detail page for individual orders; built the `OrderProgressTab` component with a progress table and cumulative Recharts chart; created the `/kdsx/order-progress` card-grid dashboard for phòng kinh doanh; updated sidebar navigation.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/sales-orders/[id]/route.ts         — PUT: added deliveryDate, startDate handling
+src/app/kdsx/sales-orders/page.tsx                  — Added deliveryDate/startDate fields, status column, Tiến độ link
+src/app/kdsx/sales-orders/[id]/page.tsx             — NEW: tabbed detail (Thông tin + Tiến độ), DONE/CANCEL actions
+src/components/kdsx/OrderProgressTab.tsx             — NEW: progress table + cumulative chart + recalculate button
+src/app/kdsx/order-progress/page.tsx                — NEW: card dashboard with factory/status filters + isAtRisk flags
+src/components/AdminLayout.tsx                      — Added /kdsx/order-progress to KD-SX menu group
+```
+
+### Key business logic implemented
+
+- `?tab=progress` URL param auto-opens progress tab (used by "Xem chi tiết →" from dashboard)
+- Progress tab is lazy-loaded via `next/dynamic` to avoid chart library overhead on initial page
+- Card border color: green=on track, orange=isAtRisk, red=OVERDUE
+- Recalculate button defaults to last 90 days for the order's factory
+- Progress bar capped at 100% even if allocatedQty > plannedQty
+- Ideal progress line computed from startDate → deliveryDate (linear); falls back to first allocation date if no startDate
+
+### API endpoints used (all existing from Parts 1 & 2)
+
+| Method | Path                                          | Used by                      |
+| ------ | --------------------------------------------- | ---------------------------- |
+| GET    | /api/kdsx/sales-orders                        | List page                    |
+| GET    | /api/kdsx/sales-orders/[id]                   | Detail page + OrderProgressTab |
+| PUT    | /api/kdsx/sales-orders/[id]                   | Edit form (now + deliveryDate) |
+| PATCH  | /api/kdsx/sales-orders/[id]/status            | Complete/Cancel buttons      |
+| POST   | /api/kdsx/sales-orders/recalculate            | Recalculate button           |
+| GET    | /api/kdsx/sales-orders/progress               | Dashboard card grid          |
+
+### Known limitations
+
+- `/sales-orders` (old tracking page) still exists and is linked in sidebar — can be removed if confirmed redundant
+- Cancel action no longer stores a cancel reason (removed in Part 2 redesign)
