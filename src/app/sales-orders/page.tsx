@@ -169,10 +169,9 @@ export default function SalesOrdersPage() {
     try {
       const params = new URLSearchParams();
       if (factoryId) params.set("factoryId", String(factoryId));
-      if (filterStatus) params.set("status", filterStatus);
-      if (filterMonth) params.set("month", filterMonth);
       if (filterCustomer) params.set("customerId", String(filterCustomer));
-      const res = await fetch(`/api/sales-orders?${params}`);
+      // status + month filtering handled client-side until corrected Part 3 redesigns this page
+      const res = await fetch(`/api/kdsx/sales-orders?${params}`);
       const data = await res.json();
       setOrders(Array.isArray(data) ? data : []);
     } finally {
@@ -227,17 +226,19 @@ export default function SalesOrdersPage() {
       const values = await createForm.validateFields();
       setCreating(true);
       const payload = {
-        ...values,
+        orderNo: values.contractCode,
+        customerId: values.customerId,
+        factoryId: values.factoryId,
         deliveryDate: values.deliveryDate?.format("YYYY-MM-DD"),
         startDate: values.startDate?.format("YYYY-MM-DD"),
+        note: values.note,
         items: createItems.map((it) => ({
           itemId: it.itemId,
-          qtyOrdered: it.qtyOrdered,
+          plannedQty: it.qtyOrdered,
           unitPrice: it.unitPrice ?? 0,
-          deliveryDate: it.deliveryDate ?? null,
         })),
       };
-      const res = await fetch("/api/sales-orders", {
+      const res = await fetch("/api/kdsx/sales-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

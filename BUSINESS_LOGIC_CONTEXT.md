@@ -846,3 +846,48 @@ src/components/AdminLayout.tsx               — Thêm menu item "Theo dõi đơ
 - Chưa có edit inline cho items của HĐ từ UI
 - Biểu đồ chỉ tính cumulative từ allocations đã có, không project về tương lai
 - Responsive card: dùng Ant Design Row/Col (xs=24 lg=12 xl=8) — stack 1 cột trên mobile
+
+---
+
+## ORDER-TRACKING — Schema + Allocation Engine (Corrected Part 1)
+
+**Status:** ✅ Completed 2026-04-02 (supersedes previous Part 1 entry)
+
+### What was built
+
+Bổ sung khả năng theo dõi tiến độ sản xuất theo từng hợp đồng VÀO MÔ HÌNH KD-SX ĐÃ CÓ — không tạo lại SalesOrder/SalesOrderItem. Schema: thêm fields `deliveryDate`, `status`, `startDate`, `completedDate` vào `SalesOrder`; thêm `allocatedQty` vào `SalesOrderItem`; thêm bảng `OrderAllocation`. Engine `runAllocation` waterfall theo deadline, idempotent.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                        — thêm OrderStatus enum + fields mới + OrderAllocation model
+prisma/migrations/20260402000000_add_order_tracking/        — migration SQL
+src/lib/allocation-engine.ts                               — runAllocation() idempotent + recalculateAllocation() đúng thứ tự
+src/app/api/production/daily-input/route.ts                — gọi runAllocation sau mỗi POST (non-blocking)
+src/app/api/kdsx/sales-orders/route.ts                     — thêm deliveryDate vào POST
+```
+
+### Key business logic implemented
+
+- `runAllocation` **idempotent**: undo allocations cũ (delete + decrement `allocatedQty`) TRƯỚC khi phân bổ lại
+- Waterfall: `orderBy: [{ order.deliveryDate asc }, { plannedQty asc }]` — deadline sớm trước, cùng deadline ưu tiên HĐ ít còn thiếu
+- `recalculateAllocation` đúng thứ tự tránh FK + mất data:
+  1. Xóa allocations trong range
+  2. Recount remaining (ngoài range, filter by factoryId)
+  3. Reset allocatedQty = 0 rồi cộng lại từ remaining
+  4. Reset DONE/OVERDUE → ACTIVE
+  5. Re-run từng ngày
+- Field names đúng schema: `plannedQty` (không phải qtyOrdered), `orderId` (không phải salesOrderId), `order` relation (không phải salesOrder)
+- Đã xóa duplicate CRUD routes `/api/sales-orders/route.ts` và `/api/sales-orders/[id]/route.ts` — dùng KD-SX endpoints thay thế
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)` |
+| (internal) | `src/lib/allocation-engine.ts` | `recalculateAllocation(factoryId, from, to)` |
+
+### Known limitations
+
+- Tracking-specific routes (progress, recalculate, complete, cancel) ở `/api/sales-orders/` sẽ được review trong corrected Part 2
+- UI trang `/sales-orders` tạm dùng KD-SX endpoint cho list/create — sẽ được thiết kế lại trong corrected Part 3

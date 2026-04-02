@@ -144,26 +144,21 @@ async function checkAllItemsDone(salesOrderId: number): Promise<boolean> {
 
 /**
  * Tính lại toàn bộ allocation từ đầu cho 1 nhà máy trong khoảng thời gian.
- * Dùng khi cần recalculate (ví dụ: sửa ProductionLog cũ).
+ * Dùng khi cần recalculate (ví dụ: sửa ProductionLog cũ, thêm/xóa HĐ).
+ *
+ * Thứ tự đúng:
+ *   1. Xóa allocations trong khoảng → tránh FK violation
+ *   2. Recount allocations còn lại (ngoài khoảng) → không mất data ngoài range
+ *   3. Reset allocatedQty = 0 rồi cộng lại từ remaining
+ *   4. Reset DONE/OVERDUE → ACTIVE
+ *   5. Re-run từng ngày theo thứ tự
  */
 export async function recalculateAllocation(
   factoryId: number,
   fromDate: Date,
   toDate: Date,
 ) {
-  // Reset allocatedQty về 0
-  await prisma.salesOrderItem.updateMany({
-    where: { order: { factoryId } },
-    data: { allocatedQty: 0 },
-  })
-
-  // Reset status về ACTIVE (trừ CANCELLED)
-  await prisma.salesOrder.updateMany({
-    where: { factoryId, status: { in: ['DONE', 'OVERDUE'] } },
-    data: { status: 'ACTIVE', completedDate: null },
-  })
-
-  // Xóa toàn bộ allocation trong khoảng
+  // 1. Xóa allocations trong khoảng
   await prisma.orderAllocation.deleteMany({
     where: {
       factoryId,
@@ -171,10 +166,42 @@ export async function recalculateAllocation(
     },
   })
 
-  // Chạy lại từng ngày theo thứ tự
-  const current = new Date(fromDate)
-  while (current <= toDate) {
-    await runAllocation(factoryId, new Date(current))
-    current.setDate(current.getDate() + 1)
+  // 2. Tính tổng allocations còn lại ngoài khoảng (để không mất đóng góp từ ngày khác)
+  const remainingAllocations = await prisma.orderAllocation.groupBy({
+    by: ['salesOrderItemId'],
+    where: {
+      factoryId,
+      OR: [
+        { productionDate: { lt: fromDate } },
+        { productionDate: { gt: toDate } },
+      ],
+    },
+    _sum: { allocatedQty: true },
+  })
+
+  // 3. Reset tất cả items về 0, rồi cộng lại từ remaining
+  await prisma.salesOrderItem.updateMany({
+    where: { order: { factoryId } },
+    data: { allocatedQty: 0 },
+  })
+
+  for (const alloc of remainingAllocations) {
+    await prisma.salesOrderItem.update({
+      where: { id: alloc.salesOrderItemId },
+      data: { allocatedQty: alloc._sum.allocatedQty ?? 0 },
+    })
+  }
+
+  // 4. Reset status DONE/OVERDUE → ACTIVE (trừ CANCELLED)
+  await prisma.salesOrder.updateMany({
+    where: { factoryId, status: { in: ['DONE', 'OVERDUE'] } },
+    data: { status: 'ACTIVE', completedDate: null },
+  })
+
+  // 5. Chạy lại từng ngày theo thứ tự
+  const cursor = new Date(fromDate)
+  while (cursor <= toDate) {
+    await runAllocation(factoryId, new Date(cursor))
+    cursor.setDate(cursor.getDate() + 1)
   }
 }
