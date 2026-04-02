@@ -15,6 +15,8 @@ import {
   Spin,
   message,
   Badge,
+  Table,
+  Divider,
 } from "antd";
 import { SyncOutlined, RightOutlined, WarningOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
@@ -45,6 +47,13 @@ interface OrderProgress {
   overallProgressPct: number;
   isAtRisk: boolean;
   items: ProgressItem[];
+}
+
+interface SurplusItem {
+  itemId: number;
+  itemName: string;
+  itemCode: string | null;
+  totalSurplusQty: number;
 }
 
 interface Factory { id: number; name: string; }
@@ -172,6 +181,8 @@ export default function OrderProgressPage() {
   const [loading, setLoading] = useState(false);
   const [recalcLoading, setRecalcLoading] = useState(false);
 
+  const [surplus, setSurplus] = useState<SurplusItem[]>([]);
+
   // Load factories once
   useEffect(() => {
     fetch("/api/factories")
@@ -199,7 +210,14 @@ export default function OrderProgressPage() {
     }
   }, [factoryId, statusFilter]);
 
+  const fetchSurplus = useCallback(async () => {
+    if (!factoryId) { setSurplus([]); return; }
+    const res = await fetch(`/api/kdsx/sales-orders/surplus?factoryId=${factoryId}`);
+    if (res.ok) setSurplus(await res.json());
+  }, [factoryId]);
+
   useEffect(() => { fetchProgress(); }, [fetchProgress]);
+  useEffect(() => { fetchSurplus(); }, [fetchSurplus]);
 
   const handleRecalculate = async () => {
     if (!factoryId) { message.warning("Chọn nhà máy trước"); return; }
@@ -218,6 +236,7 @@ export default function OrderProgressPage() {
       if (!res.ok) throw new Error((await res.json()).error);
       message.success("Đã cập nhật tiến độ");
       fetchProgress();
+      fetchSurplus();
     } catch (e: any) {
       message.error(e.message ?? "Lỗi cập nhật");
     } finally {
@@ -232,6 +251,29 @@ export default function OrderProgressPage() {
   // Stats
   const atRiskCount = orders.filter((o) => o.isAtRisk).length;
   const overdueCount = orders.filter((o) => o.status === "OVERDUE").length;
+
+  const surplusColumns = [
+    {
+      title: "Mặt hàng",
+      key: "item",
+      render: (_: unknown, r: SurplusItem) => (
+        <Space size={4}>
+          {r.itemCode && <Tag style={{ fontSize: 11 }}>{r.itemCode}</Tag>}
+          <span>{r.itemName}</span>
+        </Space>
+      ),
+    },
+    {
+      title: "Lượng dư (kg)",
+      dataIndex: "totalSurplusQty",
+      align: "right" as const,
+      render: (v: number) => (
+        <span style={{ color: "#52c41a", fontWeight: 500 }}>
+          +{v.toLocaleString("vi-VN")} kg
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -311,6 +353,29 @@ export default function OrderProgressPage() {
             </Col>
           ))}
         </Row>
+      )}
+
+      {/* Surplus section */}
+      {surplus.length > 0 && (
+        <>
+          <Divider />
+          <div style={{ marginTop: 8 }}>
+            <Title level={5} style={{ marginBottom: 4 }}>
+              Sản lượng sản xuất dư (chưa có HĐ nhận)
+            </Title>
+            <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+              Lượng dư này sẽ tự động bổ sung cho HĐ tiếp theo khi có hợp đồng mới cùng mặt hàng.
+            </Text>
+            <Table
+              dataSource={surplus.filter((s) => s.totalSurplusQty > 0)}
+              columns={surplusColumns}
+              rowKey="itemId"
+              pagination={false}
+              size="small"
+              style={{ maxWidth: 480 }}
+            />
+          </div>
+        </>
       )}
     </div>
   );

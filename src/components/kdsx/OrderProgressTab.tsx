@@ -186,18 +186,28 @@ export default function OrderProgressTab({ orderId }: Props) {
     {
       title: "Tiến độ",
       dataIndex: "progressPct",
-      width: 200,
-      render: (pct: number, row: OrderItemDetail) => (
-        <Space>
-          <Progress
-            percent={Math.min(100, pct)}
-            size="small"
-            style={{ width: 110, margin: 0 }}
-            status={itemProgressStatus(row.estimatedDoneDate, order.deliveryDate, order.status)}
-          />
-          <Text style={{ fontSize: 12, whiteSpace: "nowrap" }}>{pct.toFixed(1)}%</Text>
-        </Space>
-      ),
+      width: 220,
+      render: (pct: number, row: OrderItemDetail) => {
+        const surplusQty = Math.max(0, row.allocatedQty - row.plannedQty);
+        return (
+          <>
+            <Space>
+              <Progress
+                percent={Math.min(100, pct)}
+                size="small"
+                style={{ width: 110, margin: 0 }}
+                status={itemProgressStatus(row.estimatedDoneDate, order.deliveryDate, order.status)}
+              />
+              <Text style={{ fontSize: 12, whiteSpace: "nowrap" }}>{pct.toFixed(1)}%</Text>
+            </Space>
+            {surplusQty > 0 && (
+              <div style={{ fontSize: 11, color: "#52c41a", marginTop: 2 }}>
+                +{surplusQty.toLocaleString("vi-VN")} kg dư
+              </div>
+            )}
+          </>
+        );
+      },
     },
     {
       title: "Dự kiến xong",

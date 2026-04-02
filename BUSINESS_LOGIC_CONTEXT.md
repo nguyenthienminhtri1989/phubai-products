@@ -984,3 +984,65 @@ src/components/AdminLayout.tsx                      — Added /kdsx/order-progre
 
 - `/sales-orders` (old tracking page) still exists and is linked in sidebar — can be removed if confirmed redundant
 - Cancel action no longer stores a cancel reason (removed in Part 2 redesign)
+
+---
+
+## THEO DÕI ĐƠN HÀNG — Bug fix: xóa nút "Tạo hợp đồng" khỏi trang read-only
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+Removed the "Tạo hợp đồng" button from the `/sales-orders` (Theo dõi đơn hàng) page. This page is read-only — contract creation belongs exclusively to `/kdsx/sales-orders` (Hợp đồng bán hàng).
+
+### Files created/modified
+
+```
+src/app/sales-orders/page.tsx    — Removed "Tạo hợp đồng" Button and surrounding flex wrapper from listTab
+```
+
+### Key business logic implemented
+
+- `/sales-orders` is a read-only tracking/dashboard page — no create/edit actions
+- Contract creation (POST /api/kdsx/sales-orders) is only available from `/kdsx/sales-orders`
+
+### Known limitations
+
+- The create modal code and `createOpen` state remain in the file (dead code); can be cleaned up later if page is confirmed read-only permanently
+
+
+---
+
+## THEO DÕI TIẾN ĐỘ — Surplus UI (phần dư sản lượng)
+
+**Status:** ✅ Completed 2026-04-03
+
+### What was built
+
+Finished the surplus UI layer that was previously skeleton-only. Two UI locations updated:
+1. `/kdsx/order-progress` dashboard — surplus table below the order cards grid (green +X kg, filtered to rows > 0)
+2. `OrderProgressTab` — per-item surplus indicator beneath the progress bar when `allocatedQty > plannedQty`
+
+### Files created/modified
+
+```
+src/app/kdsx/order-progress/page.tsx          — Fixed surplus color (#52c41a), added +prefix, added filter(totalSurplusQty > 0)
+src/components/kdsx/OrderProgressTab.tsx       — Added surplus indicator (+X kg dư) below progress bar in progress column
+```
+
+### Key business logic implemented
+
+- Surplus = `allocatedQty - plannedQty`; only shown when surplus > 0 (capped at 0 via `Math.max`)
+- Progress bar still capped at 100% even when surplus exists; surplus shown as separate text below
+- Surplus table hidden entirely when `surplus.length === 0` (section not rendered)
+- `dataSource` filtered with `s.totalSurplusQty > 0` to guard against 0-qty rows from API
+
+### API endpoints
+
+| Method | Path                                      | Description                          |
+| ------ | ----------------------------------------- | ------------------------------------ |
+| GET    | /api/kdsx/sales-orders/surplus?factoryId= | Returns surplus qty per item (existing) |
+
+### Known limitations
+
+- `var(--color-text-success)` CSS variable not guaranteed in all themes; using hardcoded `#52c41a` instead
