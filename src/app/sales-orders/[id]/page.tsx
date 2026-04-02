@@ -47,7 +47,6 @@ const { Title, Text } = Typography;
 type OrderStatus = "ACTIVE" | "DONE" | "OVERDUE" | "CANCELLED";
 
 interface Allocation {
-  id: number;
   productionDate: string;
   allocatedQty: number;
 }
@@ -149,7 +148,7 @@ export default function SalesOrderDetailPage() {
   const fetchOrder = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/sales-orders/${id}`);
+      const res = await fetch(`/api/kdsx/sales-orders/${id}`);
       if (!res.ok) { router.push("/sales-orders"); return; }
       setOrder(await res.json());
     } finally {
@@ -163,7 +162,11 @@ export default function SalesOrderDetailPage() {
   const handleComplete = async () => {
     setCompleting(true);
     try {
-      const res = await fetch(`/api/sales-orders/${id}/complete`, { method: "POST" });
+      const res = await fetch(`/api/kdsx/sales-orders/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DONE" }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       message.success("Đã đánh dấu hoàn thành");
@@ -182,10 +185,10 @@ export default function SalesOrderDetailPage() {
     }
     setCancelling(true);
     try {
-      const res = await fetch(`/api/sales-orders/${id}/cancel`, {
-        method: "POST",
+      const res = await fetch(`/api/kdsx/sales-orders/${id}/status`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancelReason }),
+        body: JSON.stringify({ status: "CANCELLED" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

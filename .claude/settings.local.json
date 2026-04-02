@@ -10,7 +10,10 @@
       "Bash(psql:*)",
       "Bash(PGPASSWORD=123456 psql:*)",
       "Bash(npx tsc:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(xargs grep:*)",
+      "Bash(/d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/BUSINESS_LOGIC_CONTEXT.md:*)",
+      "Bash(ls /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app/api/items 2>/dev/null || echo \"no items api\"\ngrep -r \"fetch.*\\\\/api\\\\/items\" /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app --include=\"*.tsx\" | head -3)"
     ]
   }
 }

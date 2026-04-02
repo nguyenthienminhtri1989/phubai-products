@@ -185,7 +185,7 @@ export default function SalesOrdersPage() {
     setProgressLoading(true);
     try {
       const params = new URLSearchParams({ factoryId: String(factoryId) });
-      const res = await fetch(`/api/sales-orders/progress?${params}`);
+      const res = await fetch(`/api/kdsx/sales-orders/progress?${params}`);
       const data = await res.json();
       setProgressData(Array.isArray(data) ? data : []);
     } finally {
@@ -204,7 +204,7 @@ export default function SalesOrdersPage() {
       const today = dayjs();
       const from = today.subtract(90, "day").format("YYYY-MM-DD");
       const to = today.format("YYYY-MM-DD");
-      const res = await fetch("/api/sales-orders/recalculate", {
+      const res = await fetch("/api/kdsx/sales-orders/recalculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ factoryId, fromDate: from, toDate: to }),
@@ -266,10 +266,10 @@ export default function SalesOrdersPage() {
     }
     setCancelling(true);
     try {
-      const res = await fetch(`/api/sales-orders/${cancelId}/cancel`, {
-        method: "POST",
+      const res = await fetch(`/api/kdsx/sales-orders/${cancelId}/status`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancelReason }),
+        body: JSON.stringify({ status: "CANCELLED" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

@@ -10,12 +10,18 @@ export async function GET(req: NextRequest) {
   const factoryId = searchParams.get("factoryId");
   const customerId = searchParams.get("customerId");
   const isActive = searchParams.get("isActive");
+  const statusParam = searchParams.get("status"); // comma-separated e.g. "ACTIVE,OVERDUE"
+
+  const statusList = statusParam
+    ? statusParam.split(",").map((s) => s.trim())
+    : null;
 
   const orders = await prisma.salesOrder.findMany({
     where: {
       ...(factoryId ? { factoryId: Number(factoryId) } : {}),
       ...(customerId ? { customerId: Number(customerId) } : {}),
       ...(isActive !== null ? { isActive: isActive === "true" } : {}),
+      ...(statusList ? { status: { in: statusList as any[] } } : {}),
     },
     include: {
       customer: true,
@@ -24,9 +30,30 @@ export async function GET(req: NextRequest) {
         include: { item: { select: { id: true, name: true, code: true } } },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { deliveryDate: "asc" },
   });
-  return NextResponse.json(orders);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const result = orders.map((order) => {
+    const deliveryDate = new Date(order.deliveryDate);
+    deliveryDate.setHours(0, 0, 0, 0);
+    const daysUntilDeadline = Math.ceil(
+      (deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    const totalQty = order.items.reduce((s, i) => s + i.plannedQty, 0);
+    const totalAllocated = order.items.reduce((s, i) => s + i.allocatedQty, 0);
+    const overallProgressPct = Math.min(
+      100,
+      totalQty > 0 ? Math.round((totalAllocated / totalQty) * 1000) / 10 : 0,
+    );
+
+    return { ...order, overallProgressPct, daysUntilDeadline };
+  });
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {

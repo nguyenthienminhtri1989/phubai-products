@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { calcEstimatedDoneDate } from "@/lib/estimate-completion";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,12 +14,58 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       customer: true,
       factory: { select: { id: true, name: true } },
       items: {
-        include: { item: { select: { id: true, name: true, code: true } } },
+        include: {
+          item: { select: { id: true, name: true, code: true } },
+          allocations: {
+            select: { productionDate: true, allocatedQty: true },
+            orderBy: { productionDate: 'asc' },
+          },
+        },
+        orderBy: { id: 'asc' },
       },
     },
   });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(order);
+
+  // Enrich each item with progress data
+  const enrichedItems = await Promise.all(
+    order.items.map(async (item) => {
+      const remainingQty = Math.max(0, item.plannedQty - item.allocatedQty);
+      const progressPct = Math.min(
+        100,
+        item.plannedQty > 0
+          ? Math.round((item.allocatedQty / item.plannedQty) * 1000) / 10
+          : 0,
+      );
+
+      // Cumulative production by date
+      let cumulative = 0;
+      const cumulativeData = item.allocations.map((a) => {
+        cumulative += a.allocatedQty;
+        return {
+          date: a.productionDate.toISOString().split('T')[0],
+          qty: a.allocatedQty,
+          cumulative,
+        };
+      });
+
+      const estimatedDoneDate = await calcEstimatedDoneDate(
+        item.itemId,
+        order.factoryId,
+        remainingQty,
+      );
+
+      return {
+        ...item,
+        remainingQty,
+        progressPct,
+        cumulativeData,
+        estimatedDoneDate: estimatedDoneDate?.toISOString().split('T')[0] ?? null,
+      };
+    }),
+  );
+
+  return NextResponse.json({ ...order, items: enrichedItems });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
