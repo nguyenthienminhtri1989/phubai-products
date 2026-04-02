@@ -711,3 +711,138 @@ prisma/migrations/20260401000000_add_productivity_benchmark/   — 2 bảng: ben
 ---
 
 _Cập nhật lần cuối: 2026-04-01 — Thêm KD-SX full implementation + Module Định mức Năng suất_
+
+---
+
+## ORDER-TRACKING — Theo dõi Đơn hàng: Schema + Allocation Engine (Part 1)
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+Nền tảng theo dõi tiến độ thực hiện hợp đồng: mở rộng `SalesOrder`/`SalesOrderItem` với fields vòng đời, thêm bảng `OrderAllocation` để lưu phân bổ sản lượng theo ngày, và engine `runAllocation` tự động phân bổ waterfall theo deadline mỗi khi công nhân nhập sản lượng.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                        — thêm OrderStatus enum, deliveryDate/status/startDate/completedDate vào SalesOrder, deliveryDate/allocatedQty/allocations vào SalesOrderItem, thêm model OrderAllocation
+prisma/migrations/20260402000000_add_order_tracking/        — SQL migration: enum + alter tables + create order_allocations
+src/lib/allocation-engine.ts                               — runAllocation() + recalculateAllocation()
+src/app/api/production/daily-input/route.ts                — thêm non-blocking runAllocation call sau upsert thành công
+src/app/api/kdsx/sales-orders/route.ts                     — thêm deliveryDate vào POST create (required field)
+```
+
+### Key business logic implemented
+
+- `runAllocation` **idempotent**: trước khi phân bổ lại, undo allocations cũ của ngày đó (delete + decrement `allocatedQty` trên `SalesOrderItem`), reset DONE orders về ACTIVE nếu bị ảnh hưởng
+- Waterfall theo deadline: `orderBy: [{ order: { deliveryDate: 'asc' } }, { plannedQty: 'asc' }]` — cùng deadline ưu tiên HĐ ít còn thiếu hơn (dễ xong trước)
+- Auto DONE: sau khi increment, `checkAllItemsDone(orderId)` — nếu tất cả items ≥ plannedQty → cập nhật `status=DONE`, `completedDate=now()`
+- Flag OVERDUE: cuối `runAllocation` updateMany `status=ACTIVE` + `deliveryDate < now()` → OVERDUE
+- Lỗi allocation **không block** nhập sản lượng: wrapped trong riêng try/catch ở `daily-input/route.ts`
+- `recalculateAllocation`: reset toàn bộ (allocatedQty→0, DONE/OVERDUE→ACTIVE, xóa allocations), rồi re-run từng ngày theo thứ tự
+- Quan hệ field name trong schema: `SalesOrderItem.orderId` (không phải `salesOrderId`), relation `order` (không phải `salesOrder`), `plannedQty` (không phải `qtyOrdered`)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)` — tự gọi sau mỗi POST daily-input |
+| (internal) | `src/lib/allocation-engine.ts` | `recalculateAllocation(factoryId, from, to)` — dùng khi sửa lại ProductionLog cũ |
+
+### Known limitations / not yet implemented
+
+- Chưa có API endpoint để trigger `recalculateAllocation` thủ công từ UI
+- Chưa có API GET để xem phân bổ theo đơn hàng (sẽ làm ở Part 2)
+- `runAllocation` không tích hợp vào IoT import route (chỉ tích hợp daily-input)
+- Lỗi allocation chỉ log ra console, chưa có alerting
+
+### Data notes
+
+- `deliveryDate` trên `SalesOrder`: NOT NULL, rows cũ được set mặc định `'2099-12-31'` qua migration
+- `allocatedQty` trên `SalesOrderItem`: cached value, luôn = SUM(OrderAllocation.allocatedQty) cho item đó
+- `OrderAllocation.factoryId` và `itemId` là denormalized (không FK) để index lookup nhanh
+
+---
+
+## ORDER-TRACKING — API Routes (Part 2)
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+6 route files cho module theo dõi đơn hàng: CRUD hợp đồng, chuyển trạng thái (complete/cancel), trigger recalculate phân bổ, và endpoint progress tổng hợp tiến độ kèm ước tính ngày hoàn thành dựa trên benchmark.
+
+### Files created/modified
+
+```
+src/app/api/sales-orders/route.ts                  — GET (list + filter) / POST (tạo HĐ mới)
+src/app/api/sales-orders/[id]/route.ts             — GET (chi tiết + enriched) / PUT / DELETE
+src/app/api/sales-orders/[id]/complete/route.ts    — POST: đánh dấu DONE thủ công
+src/app/api/sales-orders/[id]/cancel/route.ts      — POST: hủy HĐ, ghi reason vào note
+src/app/api/sales-orders/recalculate/route.ts      — POST: trigger recalculateAllocation (Admin only)
+src/app/api/sales-orders/progress/route.ts         — GET: tiến độ tổng hợp kèm isAtRisk
+```
+
+### Key business logic implemented
+
+- `calcEstimatedDoneDate`: benchmark.stdOutputPerShift × machineCount × 3 ca → daysNeeded = ceil(remaining/daily) — null khi không có benchmark hoặc không có máy đang chạy
+- `isAtRisk = false` khi không có benchmark (thiếu dữ liệu không được flag nhầm là rủi ro)
+- DELETE chỉ cho status=ACTIVE; xóa đúng thứ tự: OrderAllocation → SalesOrderItem → SalesOrder
+- Cancel không xóa OrderAllocation (giữ để audit); ghi prefix `[HỦY YYYY-MM-DD]` vào note
+- Recalculate giới hạn tối đa 365 ngày; có `maxDuration = 300` cho Vercel timeout
+- progressPct luôn `Math.min(100, ...)` — không vượt 100%
+- POST tạo HĐ: validate `deliveryDate >= today`, `contractCode` unique, `items` không rỗng, `qtyOrdered > 0`
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/sales-orders | Danh sách HĐ (filter: factoryId, status, month, customerId) |
+| POST | /api/sales-orders | Tạo HĐ mới |
+| GET | /api/sales-orders/[id] | Chi tiết HĐ + remainingQty/progressPct/estimatedDoneDate per item |
+| PUT | /api/sales-orders/[id] | Sửa deliveryDate/startDate/note (chỉ ACTIVE/OVERDUE) |
+| DELETE | /api/sales-orders/[id] | Xóa HĐ (chỉ Admin, chỉ ACTIVE) |
+| POST | /api/sales-orders/[id]/complete | Đánh dấu DONE thủ công |
+| POST | /api/sales-orders/[id]/cancel | Hủy HĐ (body: { reason }) |
+| POST | /api/sales-orders/recalculate | Tính lại toàn bộ phân bổ (Admin only) |
+| GET | /api/sales-orders/progress | Tiến độ tổng hợp + isAtRisk (filter: factoryId, status, month) |
+
+### Known limitations / not yet implemented
+
+- Chưa có API PATCH items (sửa/thêm/xóa dòng mặt hàng trong HĐ)
+- estimatedDoneDate chỉ tính theo benchmark hiện tại, không tính theo lịch sử tốc độ thực tế
+- Recalculate chạy đồng bộ (blocking) — với khoảng > 30 ngày có thể chậm
+
+---
+
+## ORDER-TRACKING — UI Pages (Part 3)
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+2 UI pages cho module theo dõi đơn hàng: trang danh sách với 2 tab (bảng + dashboard tiến độ), và trang chi tiết với biểu đồ sản lượng tích lũy Recharts. Menu sidebar đã thêm "Theo dõi đơn hàng" vào nhóm KH Kinh doanh - SX.
+
+### Files created/modified
+
+```
+src/app/sales-orders/page.tsx                — Trang chính: Tab 1 (bảng + modal tạo HĐ) + Tab 2 (cards tiến độ)
+src/app/sales-orders/[id]/page.tsx           — Chi tiết HĐ: Descriptions + progress table + Recharts LineChart
+src/components/AdminLayout.tsx               — Thêm menu item "Theo dõi đơn hàng" → /sales-orders
+```
+
+### Key business logic implemented
+
+- Tab 2 (progress): chỉ hiển thị ACTIVE + OVERDUE, không hiển thị DONE/CANCELLED
+- Progress bar capped tại 100% (`Math.min(100, pct)`) dù allocatedQty > plannedQty
+- `isAtRisk = false` khi không có benchmark → không flag nhầm
+- Nút "Cập nhật tiến độ": recalculate 90 ngày trước đến hôm nay; disabled khi chưa chọn nhà máy
+- Biểu đồ: 3 đường (actual tích lũy / target ngang / ideal tuyến tính) + ReferenceLine deadline; empty state khi chưa có allocation
+- Nhiều mặt hàng trong 1 HĐ → biểu đồ dùng Tabs (1 tab per item)
+- Cancel: ghi prefix `[HỦY YYYY-MM-DD]` vào note, reason ≥5 ký tự validate ở cả client và server
+
+### Known limitations / not yet implemented
+
+- Chưa có edit inline cho items của HĐ từ UI
+- Biểu đồ chỉ tính cumulative từ allocations đã có, không project về tương lai
+- Responsive card: dùng Ant Design Row/Col (xs=24 lg=12 xl=8) — stack 1 cột trên mobile

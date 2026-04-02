@@ -697,6 +697,13 @@ enum SnapshotType {
   TH // Thực hiện
 }
 
+enum OrderStatus {
+  ACTIVE
+  DONE
+  OVERDUE
+  CANCELLED
+}
+
 // --- Nhóm Hợp đồng ---
 
 // 1. Danh mục khách hàng
@@ -725,9 +732,13 @@ model SalesOrder {
   factoryId Int
   factory   Factory @relation(fields: [factoryId], references: [id])
 
-  signedDate DateTime? @db.Date
-  note       String?
-  isActive   Boolean   @default(true)
+  signedDate    DateTime?   @db.Date
+  deliveryDate  DateTime    @db.Date
+  status        OrderStatus @default(ACTIVE)
+  startDate     DateTime?   @db.Date
+  completedDate DateTime?   @db.Date
+  note          String?
+  isActive      Boolean     @default(true)
 
   items SalesOrderItem[]
 
@@ -748,12 +759,15 @@ model SalesOrderItem {
   itemId Int
   item   Item @relation(fields: [itemId], references: [id])
 
-  plannedQty Float // Số lượng HĐ (kg)
-  unitPrice  Float // Đơn giá (USD/kg)
-  note       String?
+  plannedQty   Float    // Số lượng HĐ (kg)
+  unitPrice    Float    // Đơn giá (USD/kg)
+  deliveryDate DateTime? @db.Date  // deadline riêng nếu khác HĐ
+  allocatedQty Float    @default(0) // cached, cập nhật tự động
+  note         String?
 
   planLineItems   PlanLineItem[]
   actualLineItems ActualLineItem[]
+  allocations     OrderAllocation[]
 
   @@index([orderId])
   @@index([itemId])
@@ -1030,6 +1044,25 @@ model ProductivityBenchmark {
   @@index([itemId])
   @@index([processId])
   @@map("productivity_benchmarks")
+}
+
+// ==========================================
+// MODULE THEO DÕI ĐƠN HÀNG — Allocation
+// ==========================================
+
+model OrderAllocation {
+  id               Int            @id @default(autoincrement())
+  salesOrderItemId Int
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id])
+  productionDate   DateTime       @db.Date
+  factoryId        Int
+  itemId           Int
+  allocatedQty     Float
+  allocationDate   DateTime       @default(now())
+
+  @@index([salesOrderItemId])
+  @@index([productionDate, factoryId, itemId])
+  @@map("order_allocations")
 }
 
 // --- Dashboard Cache ---

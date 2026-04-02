@@ -39,9 +39,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { orderNo, customerId, factoryId, signedDate, note, items } = body;
-  if (!orderNo || !customerId || !factoryId) {
-    return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
+  const { orderNo, customerId, factoryId, signedDate, deliveryDate, note, items } = body;
+  if (!orderNo || !customerId || !factoryId || !deliveryDate) {
+    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, customerId, factoryId, deliveryDate)" }, { status: 400 });
   }
 
   const order = await prisma.salesOrder.create({
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       customerId: Number(customerId),
       factoryId: Number(factoryId),
       signedDate: signedDate ? new Date(signedDate) : null,
+      deliveryDate: new Date(deliveryDate),
       note: note || null,
       items: {
         create: (items || []).map((it: any) => ({
