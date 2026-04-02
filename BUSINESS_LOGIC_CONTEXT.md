@@ -891,3 +891,50 @@ src/app/api/kdsx/sales-orders/route.ts                     — thêm deliveryDat
 
 - Tracking-specific routes (progress, recalculate, complete, cancel) ở `/api/sales-orders/` sẽ được review trong corrected Part 2
 - UI trang `/sales-orders` tạm dùng KD-SX endpoint cho list/create — sẽ được thiết kế lại trong corrected Part 3
+
+---
+
+## THEO DÕI TIẾN ĐỘ ĐƠN HÀNG — Corrected Part 2: API Extensions
+
+**Status:** ✅ Completed 2026-04-02
+
+### What was built
+
+Extended existing KD-SX sales-orders routes to expose progress/allocation data, added 3 new tracking-specific endpoints, removed old duplicate `/api/sales-orders/*` routes, and updated UI pages to call the new kdsx endpoints.
+
+### Files created/modified
+
+```
+src/lib/estimate-completion.ts                          — calcEstimatedDoneDate(itemId, factoryId, remainingQty)
+src/app/api/kdsx/sales-orders/route.ts                  — GET: added status filter, overallProgressPct, daysUntilDeadline
+src/app/api/kdsx/sales-orders/[id]/route.ts             — GET: added allocations include, per-item progress enrichment
+src/app/api/kdsx/sales-orders/[id]/status/route.ts      — PATCH status (ACTIVE/DONE/CANCELLED), guards CANCELLED→* transition
+src/app/api/kdsx/sales-orders/recalculate/route.ts      — POST recalculate allocation for date range (Admin only)
+src/app/api/kdsx/sales-orders/progress/route.ts         — GET progress summary list with isAtRisk flag
+src/app/sales-orders/page.tsx                           — Updated: fetch from /api/kdsx/sales-orders/progress & recalculate
+src/app/sales-orders/[id]/page.tsx                      — Updated: fetch from /api/kdsx/sales-orders/[id], actions via PATCH status
+```
+
+### Key business logic implemented
+
+- `calcEstimatedDoneDate`: stdOutputPerShift × machineCount(activeItemId) × 3 shifts/day → Math.ceil(remaining/daily)
+- `isAtRisk = true` only when estimatedDoneDate > deliveryDate AND benchmark exists (null estimatedDoneDate → false, safe default)
+- GET list now sorts by `deliveryDate asc` (was `createdAt desc`) and computes progress inline
+- GET detail includes `allocations { productionDate, allocatedQty }` sorted by date + `cumulativeData` array per item
+- PATCH status blocks CANCELLED → any transition (irreversible cancellation)
+- recalculate: max 365-day range guard (in UI defaults to last 90 days)
+
+### API endpoints
+
+| Method | Path                                          | Description                              |
+| ------ | --------------------------------------------- | ---------------------------------------- |
+| GET    | /api/kdsx/sales-orders                        | List with status filter + progress fields |
+| GET    | /api/kdsx/sales-orders/[id]                   | Detail with allocations + per-item progress |
+| PATCH  | /api/kdsx/sales-orders/[id]/status            | Update status (ACTIVE/DONE/CANCELLED)    |
+| POST   | /api/kdsx/sales-orders/recalculate            | Recalculate allocation (Admin only)      |
+| GET    | /api/kdsx/sales-orders/progress               | Progress summary list with isAtRisk      |
+
+### Known limitations
+
+- Corrected Part 3 (UI redesign for /sales-orders tracking pages) not yet implemented
+- Cancel in UI still shows a "reason" text box but the reason field is not stored (status PATCH only sets status=CANCELLED)
