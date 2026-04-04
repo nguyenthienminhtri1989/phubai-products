@@ -1,8 +1,6 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# --- DEPENDENCIES (Thư viện) ---
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,59 +8,55 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# --- NEXT.JS & BUILD (File biên dịch) ---
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
 
-# next.js
-/.next/
-/out/
+# --- PRISMA & DATABASE (Cấu hình DB) ---
+/generated/prisma
+*.sqlite
+*.sqlite-journal
+*.sql
+*.db
 
-# production
-/build
-
-# misc
-.DS_Store
+# --- ENV & SECRETS (Bảo mật - QUAN TRỌNG) ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
 
-# debug
+# --- DEBUG & LOGS (Nhật ký lỗi) ---
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+*.log
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-/generated/prisma
-
-# --- BỔ SUNG THÊM ---
-
-# IDE / Editor (Cấu hình riêng của trình soạn thảo code, không nên đẩy lên)
+# --- IDE & EDITORS (Cấu hình trình soạn thảo) ---
+.vscode/*
+!.vscode/extensions.json
 .idea/
-.vscode/
 *.swp
 *.swo
+.project
+.settings/
 
-# OS generated files (File rác của hệ điều hành)
+# --- OS JUNK (File rác hệ điều hành) ---
 .DS_Store
 .DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Optional: Nếu sau này có log lỗi của Next.js
-.next/
-
-# Prisma (Nếu lỡ tay tạo file SQLite hoặc backup DB)
-*.sqlite
-*.sqlite-journal
-ecosystem.config.js
+# --- AI AGENT CACHE (Chống treo khung chat) ---
+.antigravity/
+.cursor/
+.idx/
