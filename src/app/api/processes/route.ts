@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 // --- HÀM LẤY DANH SÁCH CÔNG ĐOẠN ---
 export async function GET() {
@@ -20,9 +21,14 @@ export async function GET() {
   }
 }
 
-// --- HÀM THÊM MỚI CÔNG ĐOẠN ---
+// --- HÀM THÊM MỚI CÔNG ĐOẠN (chỉ ADMIN) ---
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được thêm công đoạn" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { name, factoryId } = body;
 

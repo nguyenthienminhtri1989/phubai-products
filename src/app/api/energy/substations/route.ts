@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 export async function GET() {
   try {
@@ -18,6 +19,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được thêm trạm biến áp" }, { status: 403 });
+    }
+
     const { code, name, factoryId } = await request.json();
     const newData = await prisma.substation.create({
       data: { code, name, factoryId: Number(factoryId) },
@@ -33,6 +39,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được xóa trạm biến áp" }, { status: 403 });
+    }
+
     const { id } = await request.json();
     await prisma.substation.delete({ where: { id: Number(id) } });
     return NextResponse.json({ success: true });
@@ -46,6 +57,11 @@ export async function DELETE(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được sửa trạm biến áp" }, { status: 403 });
+    }
+
     const { id, code, name, factoryId } = await request.json();
     const updatedData = await prisma.substation.update({
       where: { id: Number(id) },

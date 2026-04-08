@@ -1,15 +1,19 @@
 // app/api/factories/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
-// 1. HÀM PUT: Cập nhật thông tin
+// 1. HÀM PUT: Cập nhật thông tin (chỉ ADMIN)
 export async function PUT(
   request: Request,
-  // Sửa kiểu dữ liệu của params thành Promise
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // --- KHẮC PHỤC LỖI Ở ĐÂY ---
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được sửa nhà máy" }, { status: 403 });
+    }
+
     // Phải await params trước khi lấy id
     const data = await params;
     const idString = data.id; // Lấy giá trị của 'id' nhưng gán vào biến tên là 'idString'
@@ -32,12 +36,17 @@ export async function PUT(
   }
 }
 
-// 2. HÀM DELETE: Xóa nhà máy
+// 2. HÀM DELETE: Xóa nhà máy (chỉ ADMIN)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được xóa nhà máy" }, { status: 403 });
+    }
+
     const { id: idString } = await params;
     const id = parseInt(idString);
 

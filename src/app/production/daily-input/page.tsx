@@ -19,7 +19,8 @@ interface Machine {
     currentNE?: number;
     todayLog?: {
         id: number;
-        itemId: number; // Thêm itemId vào đây để biết log đó của hàng nào
+        itemId: number;
+        item?: { id: number; name: string }; // Tên mặt hàng thực tế của log ca này
         finalOutput: number;
         startIndex?: number;
         endIndex?: number;
@@ -517,7 +518,7 @@ export default function DailyInputPage() {
                             <Col>
                                 <Statistic
                                     title="SL Ca / SL Ngày"
-                                    value={`${totalOutput} / ${totalOutput3Ca}`}
+                                    value={`${Number(totalOutput).toLocaleString(undefined, { maximumFractionDigits: 2 })} / ${Number(totalOutput3Ca).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
                                     suffix="kg"
                                     styles={{ content: { fontSize: isMobile ? 16 : 20, color: '#389e0d' } }}
                                 />
@@ -557,7 +558,8 @@ export default function DailyInputPage() {
                                         {isDone && <SaveOutlined style={{ color: '#52c41a', flexShrink: 0 }} />}
                                     </div>
                                     <div style={{ fontSize: 11, color: '#666', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {m.currentItem?.name || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
+                                        {/* Ưu tiên hiển thị mặt hàng thực tế của log ca đang xem, fallback về mặt hàng hiện tại */}
+                                        {(m.todayLog?.item?.name ?? m.currentItem?.name) || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
                                     </div>
                                     <div style={{ marginTop: 6, textAlign: 'right', fontWeight: 'bold', fontSize: isMobile ? 15 : 16 }}>
                                         {isDone
@@ -582,7 +584,10 @@ export default function DailyInputPage() {
                 centered={!isMobile}
                 title={
                     <span style={{ fontSize: isMobile ? 14 : 16 }}>
-                        {currentMachine?.name} <Tag color="blue">{currentMachine?.currentItem?.name}</Tag>
+                        {currentMachine?.name} <Tag color="blue">
+                            {/* Ưu tiên hiển thị mặt hàng thực tế của log ca đang xem */}
+                            {currentMachine?.todayLog?.item?.name ?? currentMachine?.currentItem?.name}
+                        </Tag>
                     </span>
                 }
             >

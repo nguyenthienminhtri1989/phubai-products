@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space, Tooltip } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space, Checkbox } from 'antd';
 import { EditOutlined, ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useSession } from 'next-auth/react';
+import {
+  DEPARTMENT_LABELS,
+  MODULE_LABELS,
+  getAvailableExtraModules,
+  type Department,
+  type ModuleKey,
+} from '@/lib/permissions';
 
 interface UserType {
     id: number;
@@ -12,6 +19,8 @@ interface UserType {
     isActive: boolean;
     role: string;
     accessLevel: string;
+    department: string;
+    extraModules: string[];
     userProcesses: { processId: number; process: { name: string } }[];
 }
 
@@ -20,6 +29,13 @@ export default function UserManagementPage() {
     const [users, setUsers] = useState<UserType[]>([]);
     const [processes, setProcesses] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [searchText, setSearchText] = useState("");
+    // department đang chọn trong form (dùng để tính available extra modules)
+    const [selectedDepartment, setSelectedDepartment] = useState<Department>("FACTORY");
+
+    const filteredUsers = users.filter(user => 
+        user.fullName.toLowerCase().includes(searchText.toLowerCase())
+    );
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,10 +100,13 @@ export default function UserManagementPage() {
     const openCreateModal = () => {
         setEditingUser(null);
         form.resetFields();
+        setSelectedDepartment("FACTORY");
         form.setFieldsValue({
             isActive: true,
             role: 'USER',
-            accessLevel: 'READ_ONLY'
+            accessLevel: 'READ_ONLY',
+            department: 'FACTORY',
+            extraModules: [],
         });
         setIsModalOpen(true);
     };
@@ -96,12 +115,15 @@ export default function UserManagementPage() {
     const openEditModal = (user: UserType) => {
         setEditingUser(user);
         form.resetFields();
+        setSelectedDepartment((user.department as Department) || "FACTORY");
         form.setFieldsValue({
             username: user.username,
             fullName: user.fullName,
             isActive: user.isActive,
             role: user.role,
             accessLevel: user.accessLevel,
+            department: user.department || "FACTORY",
+            extraModules: user.extraModules || [],
             processIds: user.userProcesses.map(up => up.processId),
             newPassword: ''
         });
@@ -166,6 +188,12 @@ export default function UserManagementPage() {
                 title="Quản trị Người dùng"
                 extra={
                     <Space>
+                        <Input.Search 
+                            placeholder="Tìm kiếm theo tên..." 
+                            allowClear
+                            onChange={(e) => setSearchText(e.target.value)}
+                            style={{ width: 250 }}
+                        />
                         <Button type="primary" icon={<UserAddOutlined />} onClick={openCreateModal}>
                             Thêm tài khoản
                         </Button>
@@ -175,7 +203,7 @@ export default function UserManagementPage() {
                     </Space>
                 }
             >
-                <Table rowKey="id" columns={columns} dataSource={users} loading={loading} bordered pagination={{ pageSize: 8 }} />
+                <Table rowKey="id" columns={columns} dataSource={filteredUsers} loading={loading} bordered pagination={{ pageSize: 8 }} />
             </Card>
 
             <Modal
@@ -230,6 +258,37 @@ export default function UserManagementPage() {
                             ))}
                         </Select>
                     </Form.Item>
+
+                    {/* FIELD: DEPARTMENT */}
+                    <Form.Item name="department" label="Bộ phận" rules={[{ required: true, message: 'Vui lòng chọn bộ phận' }]}>
+                        <Select
+                            onChange={(val: Department) => {
+                                setSelectedDepartment(val);
+                                // Reset extraModules khi đổi department
+                                form.setFieldValue('extraModules', []);
+                            }}
+                        >
+                            {(Object.keys(DEPARTMENT_LABELS) as Department[]).map((dep) => (
+                                <Select.Option key={dep} value={dep}>{DEPARTMENT_LABELS[dep]}</Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    {/* FIELD: EXTRA MODULES */}
+                    {(() => {
+                        const availableExtras = getAvailableExtraModules(selectedDepartment);
+                        if (availableExtras.length === 0) return null;
+                        return (
+                            <Form.Item name="extraModules" label="Cho phép xem thêm">
+                                <Checkbox.Group
+                                    options={availableExtras.map((m: ModuleKey) => ({
+                                        label: MODULE_LABELS[m],
+                                        value: m,
+                                    }))}
+                                />
+                            </Form.Item>
+                        );
+                    })()}
 
                     <Form.Item
                         name="newPassword"

@@ -41,6 +41,7 @@ import {
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { canViewModule, type ModuleKey } from "@/lib/permissions";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -103,6 +104,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
         { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
         { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+        { key: "/dashboard/stop-categories", label: "Danh mục nguyên nhân dừng", icon: <TagsOutlined /> },
       ],
     },
     {
@@ -158,22 +160,20 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   ];
 
   // ========================================================
-  // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU ĐIỆN NĂNG
+  // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU THEO DEPARTMENT
   // ========================================================
-  const userRole = session?.user?.role;
-  const userProcessIds: number[] = (session?.user as any)?.processIds || [];
-  const userProcessId = userProcessIds[0] ?? null;
-
-  // Danh sách ID các Tổ Điện (Nhà máy 1 và Nhà máy 2)
-  const ELECTRICAL_PROCESS_IDS = [15, 16];
+  const userRole = (session?.user as any)?.role ?? "USER";
+  const userDepartment = (session?.user as any)?.department ?? "FACTORY";
+  const userExtraModules: string[] = (session?.user as any)?.extraModules ?? [];
 
   const isAdmin = userRole === "ADMIN";
 
-  // Kiểm tra xem user có thuộc một trong các tổ điện không
-  const isElectrician = userProcessIds.some(id => ELECTRICAL_PROCESS_IDS.includes(id));
+  // Helper dùng trong JSX — wrapper gọi canViewModule
+  const canView = (module: ModuleKey) =>
+    canViewModule(userDepartment, userExtraModules, userRole, module);
 
-  // Nếu là Admin HOẶC là nhân viên tổ điện -> Thêm menu Quản lý Điện năng
-  if (isAdmin || isElectrician) {
+  // Nếu có quyền 'energy' → thêm menu Quản lý Điện năng
+  if (canView("energy")) {
     baseMenuItems.push({
       key: "sub-energy",
       icon: <ThunderboltOutlined />,
@@ -209,8 +209,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     } as any);
   }
 
-  // 3b2. Menu KD-SX (Admin + Manager)
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+  // 3b2. Menu KD-SX — dùng canView('kdsx')
+  if (canView("kdsx")) {
     baseMenuItems.push({
       key: "sub-kdsx",
       icon: <BarChartOutlined />,
@@ -227,8 +227,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     } as any);
   }
 
-  // 3b3. Menu Định mức Năng suất (Admin + Manager)
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+  // 3b3. Menu Định mức Năng suất — dùng canView('benchmark')
+  if (canView("benchmark")) {
     baseMenuItems.push({
       key: "sub-benchmark",
       icon: <LineChartOutlined />,
@@ -241,8 +241,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     } as any);
   }
 
-  // 3c. Menu Import IoT (Admin + Manager)
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER" || userRole === "MANAGER") {
+  // 3c. Menu Import IoT — dùng canView('iot')
+  if (canView("iot")) {
     baseMenuItems.push({
       key: "/iot-import",
       icon: <UploadOutlined />,
@@ -261,11 +261,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           key: "/users",
           icon: <UserOutlined />,
           label: "Quản lý Tài khoản",
-        },
-        {
-          key: "/dashboard/stop-categories",
-          icon: <TagsOutlined />,
-          label: "Danh mục nguyên nhân dừng",
         },
         {
           key: "/admin/backup",

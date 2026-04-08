@@ -1,16 +1,20 @@
-import { error } from "console";
 // app/api/processes/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { message } from "antd";
+import { auth } from "@/auth";
 
-// --- PUT. HÀM CẬP NHẬT ---
+// --- PUT. HÀM CẬP NHẬT (chỉ ADMIN) ---
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> } // Cú pháp an toàn
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const data = await params; // Đợi dữ liệu từ Promise params
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được sửa công đoạn" }, { status: 403 });
+    }
+
+    const data = await params;
     const idString = data.id; // Gán id dạng chuỗi cho idString
     const id = parseInt(idString); // Biến đổi chuỗi thành số
     const body = await request.json(); // Lấy dữ liệu từ Client gửi lên
@@ -36,12 +40,17 @@ export async function PUT(
   }
 }
 
-// --- DELETE. HÀM XÓA ---
+// --- DELETE. HÀM XÓA (chỉ ADMIN) ---
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> } // Cú pháp an toàn
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được xóa công đoạn" }, { status: 403 });
+    }
+
     const data = await params;
     const idString = data.id;
     const id = parseInt(idString);

@@ -13,11 +13,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const body = await req.json();
-  const { name, code, note } = body;
+  const { name, code, address, phone, email, taxCode, customerType, note } = body;
+
+  // Validate customerType
+  const validTypes = ["DOMESTIC", "FOREIGN"];
+  const resolvedType = validTypes.includes(customerType) ? customerType : "DOMESTIC";
 
   const customer = await prisma.customer.update({
     where: { id: Number(id) },
-    data: { name, code: code || null, note: note || null },
+    data: {
+      name,
+      code: code || null,
+      address: address || null,
+      phone: phone || null,
+      email: email || null,
+      taxCode: taxCode || null,
+      customerType: resolvedType,
+      note: note || null,
+    },
   });
   return NextResponse.json(customer);
 }

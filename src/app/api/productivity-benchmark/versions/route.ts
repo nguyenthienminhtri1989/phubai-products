@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessBenchmark } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canAccessBenchmark(session as any))
+    return NextResponse.json({ error: "Không có quyền truy cập module Định mức" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const factoryId = searchParams.get("factoryId");

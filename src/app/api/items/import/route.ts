@@ -17,11 +17,8 @@ const HEADER_TO_FIELD: Record<string, string> = {
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (
-      session?.user?.role !== "ADMIN" &&
-      session?.user?.accessLevel !== "MANAGER"
-    ) {
-      return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được import mặt hàng" }, { status: 403 });
     }
 
     const formData = await req.formData();

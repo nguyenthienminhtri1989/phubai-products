@@ -1076,3 +1076,103 @@ src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts  — Không cần sửa 
 
 - Không có field `contractCode = 'DP'` trong DB (schema không có field này trong PlanLineItem); DP được nhận diện bằng `salesOrderItemId IS NULL`
 - Allocation engine không thay đổi — lượng SX không có HĐ nhận tự vào surplus pool như bình thường
+
+---
+
+## USER-PERMISSION — Department + Extra Modules
+
+**Status:** ✅ Completed 2026-04-05
+
+### What was built
+
+Thêm field `department` (enum 5 giá trị) và `extraModules` (String[]) vào model User.
+Sidebar AdminLayout ẩn/hiện nhóm menu theo department + extraModules thay vì theo `accessLevel`.
+Admin có thể cấp thêm quyền xem module ngoài mặc định qua form chỉnh sửa User.
+Guard API trên các route nhạy cảm (kdsx, benchmark) trả 403 với user không có quyền.
+
+### Files created/modified
+
+```
+src/lib/permissions.ts              — canViewModule(), canAccessKdsx(), canAccessBenchmark(), MODULE_KEYS, MODULE_LABELS, DEPARTMENT_LABELS, getAvailableExtraModules()
+src/auth.config.ts                  — thêm department/extraModules vào JWT+session callback
+src/auth.ts                         — thêm department/extraModules vào authorize return
+src/components/AdminLayout.tsx      — ẩn/hiện menu theo canViewModule() thay vì accessLevel
+src/app/api/users/route.ts          — accept department/extraModules trong POST và PUT
+src/app/users/page.tsx              — thêm Select department + Checkbox extraModules vào form
+src/app/api/kdsx/customers/route.ts — thêm canAccessKdsx guard cho GET
+src/app/api/kdsx/summary/route.ts   — thêm canAccessKdsx guard cho GET
+src/app/api/productivity-benchmark/versions/route.ts — thêm canAccessBenchmark guard cho GET
+```
+
+### Key business logic implemented
+
+- `canViewModule(department, extraModules, role, module)` — logic check quyền duy nhất, dùng chung frontend + backend
+- ADMIN bypass tất cả
+- User cũ mặc định FACTORY + extraModules=[] — không bị ảnh hưởng (default trong schema)
+- Sidebar chỉ ẩn menu (UX), bảo mật thật ở API guard
+- Department mặc định theo FACTORY_MODULES:
+  - FACTORY: production, maintenance, energy, iot, stops
+  - MANAGEMENT: tất cả module
+  - SALES: kdsx
+  - ACCOUNTING: kdsx, energy
+  - WAREHOUSE: không có module nào
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | /api/users | Thêm department/extraModules vào payload |
+| POST | /api/users | Thêm department/extraModules vào payload |
+
+### Data notes
+
+- `department` default = 'FACTORY' — user cũ không bị ảnh hưởng
+- `extraModules` default = [] — không có quyền thêm
+- MODULE_KEYS: production, maintenance, energy, iot, kdsx, benchmark, stops
+- canAccessKdsx/canAccessBenchmark dùng `session as any` vì NextAuth chưa có type declaration mở rộng cho department
+
+---
+
+## KDSX — Mở rộng thông tin Khách hàng
+
+**Status:** ✅ Completed 2026-04-06
+
+### What was built
+
+Bổ sung 5 trường thông tin mới vào model Customer: địa chỉ, số điện thoại, email, mã số thuế và phân loại khách hàng (trong nước / nước ngoài). Cập nhật toàn bộ API và giao diện UI để hỗ trợ các trường này.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                 — Thêm enum CustomerType (DOMESTIC | FOREIGN) và 5 trường mới vào model Customer
+prisma/migrations/20260406000002_add_customer_fields/ — Migration SQL thêm cột vào bảng customers
+src/app/api/kdsx/customers/route.ts                  — POST nhận và lưu 5 trường mới
+src/app/api/kdsx/customers/[id]/route.ts             — PUT cập nhật 5 trường mới
+src/app/kdsx/customers/page.tsx                      — UI: bảng hiển thị thêm cột + form nhập đầy đủ 8 trường
+```
+
+### Key business logic implemented
+
+- `customerType` mặc định là `DOMESTIC` (trong nước) nếu không truyền hoặc truyền sai giá trị
+- Validate `customerType`: chỉ chấp nhận "DOMESTIC" | "FOREIGN", fallback về "DOMESTIC"
+- Giao diện form dùng 2 cột để tiết kiệm không gian, bảng có `scroll={{ x: 1100 }}`
+- Tag màu: Trong nước = blue, Nước ngoài = green
+
+### API endpoints
+
+| Method | Path                       | Description                     |
+| ------ | -------------------------- | ------------------------------- |
+| GET    | /api/kdsx/customers        | Lấy danh sách kèm _count orders |
+| POST   | /api/kdsx/customers        | Tạo khách hàng mới (8 trường)   |
+| PUT    | /api/kdsx/customers/[id]   | Cập nhật khách hàng (8 trường)  |
+| DELETE | /api/kdsx/customers/[id]   | Xóa (chỉ ADMIN)                 |
+
+### Known limitations / not yet implemented
+
+- Chưa có tính năng tìm kiếm / lọc theo customerType trên bảng
+- Chưa validate định dạng email, số điện thoại, mã số thuế ở backend
+
+### Data notes
+
+- `customerType` lưu dạng enum PostgreSQL: 'DOMESTIC' | 'FOREIGN'
+- Migration: `20260406000002_add_customer_fields` — cần chạy `npx prisma migrate deploy` trên máy dev

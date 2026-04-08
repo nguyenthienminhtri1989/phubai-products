@@ -16,23 +16,17 @@ import {
   Col,
   Progress,
   Modal,
-  Form,
   Input,
-  InputNumber,
-  Popconfirm,
   Tooltip,
   Spin,
   message,
   Empty,
-  Divider,
 } from "antd";
 import {
-  PlusOutlined,
   EyeOutlined,
   StopOutlined,
   ReloadOutlined,
   WarningOutlined,
-  DeleteOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -45,7 +39,6 @@ type OrderStatus = "ACTIVE" | "DONE" | "OVERDUE" | "CANCELLED";
 
 interface Factory { id: number; name: string }
 interface Customer { id: number; name: string; code: string | null }
-interface Item { id: number; name: string; code: string | null }
 
 interface SalesOrderItem {
   id: number;
@@ -129,21 +122,12 @@ export default function SalesOrdersPage() {
   const [progressData, setProgressData] = useState<OrderProgress[]>([]);
   const [factories, setFactories] = useState<Factory[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [progressLoading, setProgressLoading] = useState(false);
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("list");
-
-  // Create modal
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm] = Form.useForm();
-  const [createItems, setCreateItems] = useState<
-    { itemId?: number; qtyOrdered?: number; unitPrice?: number; deliveryDate?: string }[]
-  >([{}]);
-  const [creating, setCreating] = useState(false);
 
   // Cancel modal
   const [cancelId, setCancelId] = useState<number | null>(null);
@@ -155,11 +139,9 @@ export default function SalesOrdersPage() {
     Promise.all([
       fetch("/api/factories").then((r) => r.json()),
       fetch("/api/kdsx/customers").then((r) => r.json()),
-      fetch("/api/items").then((r) => r.json()),
-    ]).then(([f, c, it]) => {
+    ]).then(([f, c]) => {
       setFactories(Array.isArray(f) ? f : []);
       setCustomers(Array.isArray(c) ? c : []);
-      setItems(Array.isArray(it) ? it : []);
     });
   }, []);
 
@@ -217,43 +199,6 @@ export default function SalesOrdersPage() {
       message.error(e.message ?? "Lỗi cập nhật");
     } finally {
       setRecalcLoading(false);
-    }
-  };
-
-  // ── Create order ──────────────────────────────────────────────────────────
-  const handleCreate = async () => {
-    try {
-      const values = await createForm.validateFields();
-      setCreating(true);
-      const payload = {
-        orderNo: values.contractCode,
-        customerId: values.customerId,
-        factoryId: values.factoryId,
-        deliveryDate: values.deliveryDate?.format("YYYY-MM-DD"),
-        startDate: values.startDate?.format("YYYY-MM-DD"),
-        note: values.note,
-        items: createItems.map((it) => ({
-          itemId: it.itemId,
-          plannedQty: it.qtyOrdered,
-          unitPrice: it.unitPrice ?? 0,
-        })),
-      };
-      const res = await fetch("/api/kdsx/sales-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      message.success("Tạo hợp đồng thành công");
-      setCreateOpen(false);
-      createForm.resetFields();
-      setCreateItems([{}]);
-      fetchOrders();
-    } catch (e: any) {
-      message.error(e.message ?? "Lỗi tạo hợp đồng");
-    } finally {
-      setCreating(false);
     }
   };
 
@@ -422,12 +367,13 @@ export default function SalesOrdersPage() {
       <Select
         allowClear
         placeholder="Khách hàng"
-        style={{ width: 180 }}
+        style={{ width: 250 }}
         showSearch
         optionFilterProp="label"
         value={filterCustomer}
         onChange={setFilterCustomer}
         options={customers.map((c) => ({ value: c.id, label: c.name }))}
+        popupMatchSelectWidth={false}
       />
       <Button icon={<ReloadOutlined />} onClick={fetchOrders}>Làm mới</Button>
     </Space>
@@ -436,13 +382,8 @@ export default function SalesOrdersPage() {
   // ── Tab 1: List ────────────────────────────────────────────────────────��──
   const listTab = (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+      <div style={{ marginBottom: 8 }}>
         {filterBar}
-        {isManager && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            Tạo hợp đồng
-          </Button>
-        )}
       </div>
       <Table
         dataSource={orders}
@@ -573,124 +514,6 @@ export default function SalesOrdersPage() {
     </div>
   );
 
-  // ── Create modal ────────────────────────────────��─────────────────────────
-  const createModal = (
-    <Modal
-      title="Tạo hợp đồng mới"
-      open={createOpen}
-      onOk={handleCreate}
-      onCancel={() => { setCreateOpen(false); createForm.resetFields(); setCreateItems([{}]); }}
-      confirmLoading={creating}
-      width={700}
-      okText="Tạo hợp đồng"
-    >
-      <Form form={createForm} layout="vertical" size="small">
-        <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item name="contractCode" label="Số hợp đồng" rules={[{ required: true }]}>
-              <Input placeholder="VD: 431PB26" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="factoryId" label="Nhà máy" rules={[{ required: true }]}>
-              <Select options={factories.map((f) => ({ value: f.id, label: f.name }))} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="customerId" label="Khách hàng" rules={[{ required: true }]}>
-              <Select
-                showSearch
-                optionFilterProp="label"
-                options={customers.map((c) => ({ value: c.id, label: c.name }))}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="deliveryDate" label="Deadline giao hàng" rules={[{ required: true }]}>
-              <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" disabledDate={(d) => d.isBefore(dayjs(), "day")} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="startDate" label="Ngày bắt đầu SX">
-              <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-            </Form.Item>
-          </Col>
-          <Col span={24}>
-            <Form.Item name="note" label="Ghi chú">
-              <Input.TextArea rows={2} />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Divider plain style={{ fontSize: 13 }}>Mặt hàng</Divider>
-
-        {createItems.map((item, idx) => (
-          <Row key={idx} gutter={8} style={{ marginBottom: 8 }} align="middle">
-            <Col span={8}>
-              <Select
-                placeholder="Mặt hàng"
-                style={{ width: "100%" }}
-                showSearch
-                optionFilterProp="label"
-                value={item.itemId}
-                onChange={(v) => {
-                  const next = [...createItems];
-                  next[idx] = { ...next[idx], itemId: v };
-                  setCreateItems(next);
-                }}
-                options={items.map((i) => ({ value: i.id, label: i.name }))}
-              />
-            </Col>
-            <Col span={6}>
-              <InputNumber
-                placeholder="Số lượng (kg)"
-                style={{ width: "100%" }}
-                min={1}
-                value={item.qtyOrdered}
-                onChange={(v) => {
-                  const next = [...createItems];
-                  next[idx] = { ...next[idx], qtyOrdered: v ?? undefined };
-                  setCreateItems(next);
-                }}
-              />
-            </Col>
-            <Col span={6}>
-              <InputNumber
-                placeholder="Đơn giá (USD)"
-                style={{ width: "100%" }}
-                min={0}
-                value={item.unitPrice}
-                onChange={(v) => {
-                  const next = [...createItems];
-                  next[idx] = { ...next[idx], unitPrice: v ?? undefined };
-                  setCreateItems(next);
-                }}
-              />
-            </Col>
-            <Col span={4}>
-              {createItems.length > 1 && (
-                <Button
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  onClick={() => setCreateItems(createItems.filter((_, i) => i !== idx))}
-                />
-              )}
-            </Col>
-          </Row>
-        ))}
-
-        <Button
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={() => setCreateItems([...createItems, {}])}
-        >
-          Thêm mặt hàng
-        </Button>
-      </Form>
-    </Modal>
-  );
-
   // ── Cancel modal ──────────────────────────────────────────────────────────
   const cancelModal = (
     <Modal
@@ -726,7 +549,6 @@ export default function SalesOrdersPage() {
         ]}
       />
 
-      {createModal}
       {cancelModal}
     </div>
   );

@@ -29,6 +29,8 @@ export const authConfig = {
         token.accessLevel = (user as any).accessLevel;
         token.username = (user as any).username;
         token.fullName = (user as any).fullName;
+        token.department = (user as any).department;
+        token.extraModules = (user as any).extraModules;
       }
       if (trigger === "update" && session) {
         return { ...token, ...session.user };
@@ -44,6 +46,8 @@ export const authConfig = {
         session.user.accessLevel = token.accessLevel as string;
         session.user.username = token.username as string;
         session.user.fullName = token.fullName as string;
+        (session.user as any).department = token.department as string;
+        (session.user as any).extraModules = (token.extraModules as string[]) ?? [];
       }
       return session;
     },

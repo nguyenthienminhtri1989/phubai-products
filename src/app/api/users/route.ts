@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { username, password, fullName, role, accessLevel, processIds } = body;
+    const { username, password, fullName, role, accessLevel, processIds, department, extraModules } = body;
 
     // Validate
     if (!username || !password || !fullName) {
@@ -70,6 +70,8 @@ export async function POST(req: Request) {
         role: role || "USER",
         accessLevel: accessLevel || "READ_ONLY",
         isActive: true,
+        department: department || "FACTORY",
+        extraModules: Array.isArray(extraModules) ? extraModules : [],
         userProcesses: {
           create: pIds.map((pid) => ({ processId: pid })),
         },
@@ -96,10 +98,17 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { id, isActive, role, accessLevel, processIds, newPassword, fullName } = body;
+    const { id, isActive, role, accessLevel, processIds, newPassword, fullName, department, extraModules } = body;
     const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
 
-    const updateData: any = { isActive, role, accessLevel, fullName };
+    const updateData: any = {
+      isActive,
+      role,
+      accessLevel,
+      fullName,
+      ...(department ? { department } : {}),
+      ...(Array.isArray(extraModules) ? { extraModules } : {}),
+    };
 
     if (newPassword && newPassword.trim() !== "") {
       updateData.password = await bcrypt.hash(newPassword, 10);

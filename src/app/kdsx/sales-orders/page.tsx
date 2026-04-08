@@ -272,16 +272,17 @@ export default function SalesOrdersPage() {
         width={800}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Space style={{ width: "100%" }} size="middle">
+          <Space style={{ width: "100%", display: "flex" }} size="middle">
             <Form.Item name="orderNo" label="Số hợp đồng" rules={[{ required: true }]} style={{ flex: 1 }}>
               <Input placeholder="VD: 431PB25" />
             </Form.Item>
-            <Form.Item name="customerId" label="Khách hàng" rules={[{ required: true }]} style={{ flex: 1 }}>
+            <Form.Item name="customerId" label="Khách hàng" rules={[{ required: true }]} style={{ flex: 2 }}>
               <Select
                 options={customers.map((c) => ({ label: c.name, value: c.id }))}
                 showSearch
                 optionFilterProp="label"
                 placeholder="Chọn khách hàng"
+                popupMatchSelectWidth={false}
               />
             </Form.Item>
           </Space>

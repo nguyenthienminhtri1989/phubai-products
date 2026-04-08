@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 // 1. HÀM GET: TRẢ VỀ DANH SÁCH NHÀ MÁY
 export async function GET() {
@@ -18,9 +19,14 @@ export async function GET() {
   }
 }
 
-// 2. HÀM POST: TẠO MỚI NHÀ MÁY
+// 2. HÀM POST: TẠO MỚI NHÀ MÁY (chỉ ADMIN)
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được thêm nhà máy" }, { status: 403 });
+    }
+
     const body = await request.json(); // Lấy dữ liệu từ phía Client gửi lên
     const { name, note } = body; // Lấy dữ liệu từ body
 

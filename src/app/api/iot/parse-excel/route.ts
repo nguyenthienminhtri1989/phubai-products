@@ -145,7 +145,15 @@ export async function POST(req: Request) {
     // Hàng 1: header thực sự
     // Hàng 2+: dữ liệu
     const headerRow = allRows[1] ?? [];
-    const dataRows = allRows.slice(2).filter((row) => row.some((c) => c !== ""));
+
+    // Từ khóa nhận diện dòng tổng cộng/summary để bỏ qua
+    const SUMMARY_KEYWORDS = ["tong cong", "total", "tong", "subtotal", "grand total"];
+    const dataRows = allRows.slice(2).filter((row) => {
+      if (!row.some((c) => c !== "")) return false; // bỏ dòng trống
+      const firstCell = normalize(String(row[0] ?? ""));
+      if (SUMMARY_KEYWORDS.some((k) => firstCell.includes(k))) return false; // bỏ dòng tổng
+      return true;
+    });
     const rawHeaders = headerRow.map((h) => String(h));
     const normHeaders = rawHeaders.map(normalize);
 

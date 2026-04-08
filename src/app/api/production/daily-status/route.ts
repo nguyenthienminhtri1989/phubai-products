@@ -25,6 +25,9 @@ export async function GET(request: Request) {
             recordDate: targetDate,
             shift: parseInt(shift),
           },
+          include: {
+            item: { select: { id: true, name: true } }, // Lấy tên mặt hàng thực tế của log
+          },
           orderBy: { id: "desc" },
           take: 1,
         },

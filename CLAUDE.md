@@ -1,5 +1,10 @@
 # STANDING INSTRUCTION — Update BUSINESS_LOGIC_CONTEXT.md after every feature
 
+## Context Files
+
+Đọc AGENT*CONTEXT/00_QUICK_START.md trước khi bắt đầu bất kỳ task nào.
+Đọc PLANS/PLAN*[feature].md cho task cụ thể đang được giao.
+
 After completing ANY feature, API route, schema change, or UI page,
 you MUST append a summary to the bottom of `BUSINESS_LOGIC_CONTEXT.md`
 using EXACTLY this format:
@@ -93,6 +98,13 @@ Sau đó đọc `BUSINESS_LOGIC_CONTEXT.md` để hiểu nghiệp vụ chi tiế
 - `USER` (Manager/Operator) — chỉ truy cập data trong `processId` của mình
 - Mọi API route phải kiểm tra session và role trước khi xử lý
 
+## 4.1 Phân quyền theo Department (bổ sung)
+
+- `department`: FACTORY | MANAGEMENT | SALES | ACCOUNTING | WAREHOUSE
+- `extraModules`: String[] — module được xem thêm ngoài quyền mặc định
+- Logic check: xem `src/lib/permissions.ts` → hàm `canViewModule()`
+- ADMIN bypass tất cả, không cần check department
+
 ---
 
 ## 5. Sau khi hoàn thành mỗi tính năng — BẮT BUỘC
@@ -147,4 +159,25 @@ Prompt từ Claude.ai thường có cấu trúc:
 4. UI cần xây dựng
 5. Checklist trước khi code
 
+## 7. Quy trình Migration an toàn
+
+1. `npx prisma migrate status` — kiểm tra trước
+2. Nếu có drift → DỪNG, báo người dùng, không tự xử lý
+3. `npx prisma migrate dev --name xxx --create-only` — tạo file
+4. Nếu hỏi "reset? All data will be lost" → gõ N ngay, báo người dùng
+5. `npx prisma migrate deploy` — apply
+6. `npx prisma generate` — regenerate client
+
+## 8. Context Files — Đọc trước khi code
+
+- `AGENT_CONTEXT/00_QUICK_START.md` — tổng quan nhanh
+- `AGENT_CONTEXT/01_BUSINESS_LOGIC.md` — nghiệp vụ chi tiết
+- `AGENT_CONTEXT/02_ARCHITECTURE.md` — schema, API patterns
+- `AGENT_CONTEXT/03_CODING_RULES.md` — anti-patterns, checklist
+- `PLANS/PLAN_[feature].md` — task đang được giao
+
 Đọc **toàn bộ prompt** trước khi bắt đầu code. Không bỏ qua phần checklist.
+
+## Xem thêm
+
+Đọc `AI_RULES.md` để biết toàn bộ conventions, phân quyền và quy trình migration.

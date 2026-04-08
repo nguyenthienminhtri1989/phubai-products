@@ -40,6 +40,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           processIds: user.userProcesses.map((up) => up.processId),
           accessLevel: user.accessLevel,
           fullName: user.fullName,
+          department: user.department,
+          extraModules: user.extraModules,
         } as any;
       },
     }),

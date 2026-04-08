@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 export async function GET() {
   try {
@@ -19,6 +20,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được thêm đồng hồ điện" }, { status: 403 });
+    }
+
     const data = await request.json();
     const newData = await prisma.powerMeter.create({
       data: {
@@ -50,11 +56,30 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  // ... Giữ nguyên nội dung hàm DELETE của bạn ...
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được xóa đồng hồ điện" }, { status: 403 });
+    }
+
+    const { id } = await request.json();
+    await prisma.powerMeter.delete({ where: { id: Number(id) } });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json(
+      { error: "Không thể xóa đồng hồ. Có thể đang có dữ liệu điện liên kết." },
+      { status: 400 },
+    );
+  }
 }
 
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được sửa đồng hồ điện" }, { status: 403 });
+    }
+
     const data = await request.json();
     const updatedData = await prisma.powerMeter.update({
       where: { id: Number(data.id) },

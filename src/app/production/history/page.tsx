@@ -18,6 +18,7 @@ export default function ProductionHistoryPage() {
     // State Phân trang & Thống kê Server trả về
     const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
     const [serverStats, setServerStats] = useState({ totalOutput: 0 });
+    const [sortConfig, setSortConfig] = useState<{ field: any, order: string } | null>(null);
 
     // --- 2. STATE DANH MỤC (Để đổ vào ô lọc) ---
     const [factories, setFactories] = useState<any[]>([]);
@@ -53,7 +54,7 @@ export default function ProductionHistoryPage() {
     }, []);
 
     // --- 5. HÀM TÌM KIẾM (GỌI API) ---
-    const handleSearch = async (pageIndex = 1) => {
+    const handleSearch = async (pageIndex = 1, currentSort = sortConfig) => {
         setLoading(true);
         try {
             const payload = {
@@ -65,7 +66,9 @@ export default function ProductionHistoryPage() {
                 shifts: selectedShifts,
                 itemIds: selectedItems,
                 page: pageIndex,
-                pageSize: pagination.pageSize
+                pageSize: pagination.pageSize,
+                sortField: currentSort?.field,
+                sortOrder: currentSort?.order
             };
 
             const res = await fetch("/api/production/history", {
@@ -95,8 +98,17 @@ export default function ProductionHistoryPage() {
     };
 
     // --- 6. XỬ LÝ CHUYỂN TRANG ---
-    const handleTableChange = (newPagination: any) => {
-        handleSearch(newPagination.current);
+    const handleTableChange = (newPagination: any, filters?: any, sorter?: any) => {
+        let newSort = sortConfig;
+        if (sorter && sorter.field) {
+            newSort = sorter.order ? { field: sorter.field, order: sorter.order } : null;
+        } else if (Array.isArray(sorter) && sorter.length > 0) {
+            newSort = sorter[0].order ? { field: sorter[0].field, order: sorter[0].order } : null;
+        } else if (sorter && !sorter.order) {
+            newSort = null; // Removed sorting
+        }
+        setSortConfig(newSort);
+        handleSearch(newPagination.current, newSort);
     };
 
     // --- 7. TÍNH TOÁN BIỂU ĐỒ (Dựa trên dữ liệu trang hiện tại) ---
@@ -133,20 +145,21 @@ export default function ProductionHistoryPage() {
     };
 
     const columns = [
-        { title: "Ngày", dataIndex: "recordDate", render: (d: string) => dayjs(d).format("DD/MM/YYYY") },
-        { title: "Ca", dataIndex: "shift", width: 60, align: 'center' as const, render: (s: number) => <Tag color="blue">{s}</Tag> },
-        { title: "Công đoạn", dataIndex: ["machine", "process", "name"], responsive: ['lg'] as any }, // Ẩn trên mobile
-        { title: "Máy", dataIndex: ["machine", "name"], width: 100, render: (t: string) => <b>{t}</b> },
-        { title: "Mặt hàng", dataIndex: ["item", "name"] },
+        { title: "Ngày", dataIndex: "recordDate", sorter: true, render: (d: string) => dayjs(d).format("DD/MM/YYYY") },
+        { title: "Ca", dataIndex: "shift", width: 60, align: 'center' as const, sorter: true, render: (s: number) => <Tag color="blue">{s}</Tag> },
+        { title: "Công đoạn", dataIndex: ["machine", "process", "name"], sorter: true, responsive: ['lg'] as any }, // Ẩn trên mobile
+        { title: "Máy", dataIndex: ["machine", "name"], width: 100, sorter: true, render: (t: string) => <b>{t}</b> },
+        { title: "Mặt hàng", dataIndex: ["item", "name"], sorter: true },
         {
             title: "Sản lượng",
             dataIndex: "finalOutput",
             align: 'right' as const,
+            sorter: true,
             render: (n: number) => <b style={{ color: '#389e0d' }}>{n?.toLocaleString()} kg</b>
         },
-        { title: "Đầu", dataIndex: "startIndex", align: 'right' as const, width: 90, responsive: ['md'] as any },
-        { title: "Cuối", dataIndex: "endIndex", align: 'right' as const, width: 90, responsive: ['md'] as any },
-        { title: "Người nhập", dataIndex: ["createdBy", "fullName"], width: 150, ellipsis: true, responsive: ['lg'] as any },
+        { title: "Đầu", dataIndex: "startIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
+        { title: "Cuối", dataIndex: "endIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
+        { title: "Người nhập", dataIndex: ["createdBy", "fullName"], width: 150, ellipsis: true, sorter: true, responsive: ['lg'] as any },
     ];
 
     return (

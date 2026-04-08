@@ -19,6 +19,8 @@ export async function POST(request: Request) {
       itemIds,
       page = 1,
       pageSize = 20, // Mặc định trang 1, 20 dòng/trang
+      sortField,
+      sortOrder,
     } = body;
 
     // 1. Xây dựng điều kiện lọc (Where)
@@ -58,7 +60,27 @@ export async function POST(request: Request) {
           item: true,
           createdBy: { select: { fullName: true } },
         },
-        orderBy: [{ recordDate: "desc" }, { shift: "desc" }],
+        orderBy: (() => {
+          if (sortField) {
+            const direction = sortOrder === 'ascend' ? 'asc' : 'desc';
+            if (Array.isArray(sortField)) {
+              const orderObj: any = {};
+              let current = orderObj;
+              for (let i = 0; i < sortField.length - 1; i++) {
+                current[sortField[i]] = {};
+                current = current[sortField[i]];
+              }
+              current[sortField[sortField.length - 1]] = direction;
+              return [orderObj];
+            } else {
+              if (sortField === 'recordDate') {
+                return [{ recordDate: direction }, { shift: direction }];
+              }
+              return [{ [sortField]: direction }];
+            }
+          }
+          return [{ recordDate: "desc" }, { shift: "desc" }];
+        })(),
       }),
 
       // Query 2: Count

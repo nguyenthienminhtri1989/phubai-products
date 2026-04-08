@@ -35,12 +35,9 @@ export async function GET(request: Request) {
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    // Check quyền Admin hoặc Manager
-    if (
-      session?.user?.role !== "ADMIN" &&
-      session?.user?.accessLevel !== "MANAGER"
-    ) {
-      return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
+    // Chỉ ADMIN mới được tạo mặt hàng
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin mới được thêm mặt hàng" }, { status: 403 });
     }
 
     const body = await req.json();

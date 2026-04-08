@@ -211,6 +211,11 @@ model User {
   createdLines  ProductionLine[]
   reportedStops MachineStopLog[]
 
+  // --- PHÂN QUYỀN THEO BỘ PHẬN ---
+  department   Department @default(FACTORY)
+  extraModules String[]   @default([])
+  // extraModules lưu mảng key module: ["kdsx", "energy", "benchmark", "production", "maintenance", "iot"]
+
   @@map("users")
 }
 
@@ -262,7 +267,10 @@ model MaintenanceTask {
 //   maintenanceTasks MaintenanceTask[]
 // }
 
-// Bảng Nhật ký bảo dưỡng (Maintenance History)
+
+// ==========================================
+// BẢNG NHẬT KÝ BẢO DƯỠNG (Maintenance History)
+// ==========================================
 // Lưu vết mỗi lần thực hiện xong
 model MaintenanceHistory {
   id            String   @id @default(cuid())
@@ -295,7 +303,9 @@ model ElectricityPrice {
   @@map("electricity_prices")
 }
 
-// 2. Danh mục Trạm biến áp
+// ==========================================
+// BẢNG DANH MỤC TRẠM BIẾN ÁP (Substation)
+// ==========================================
 model Substation {
   id   Int    @id @default(autoincrement())
   code String @unique // Mã trạm (Vd: TBA-01)
@@ -311,7 +321,9 @@ model Substation {
   @@map("substations")
 }
 
-// 3. Danh mục Đồng hồ điện / Công tơ (Bao gồm cả Trung thế & Hạ thế)
+// ==========================================
+// BẢNG DANH MỤC ĐỒNG HỒ ĐIỆN / CÔNG TƠ (PowerMeter)
+// ==========================================
 model PowerMeter {
   id          Int     @id @default(autoincrement())
   code        String  @unique // Mã đồng hồ
@@ -346,7 +358,9 @@ model PowerMeter {
   @@map("power_meters")
 }
 
-// ---> BẢNG MỚI: Hứng dữ liệu IoT liên tục
+// ==========================================
+// BẢNG HỨNG DỮ LIỆU IOT LIÊN TỤC (PowerTelemetry)
+// ==========================================
 model PowerTelemetry {
   id        BigInt   @id @default(autoincrement())
   timestamp DateTime @default(now())
@@ -361,7 +375,9 @@ model PowerTelemetry {
   @@map("power_telemetries")
 }
 
-// 4. Bảng Ghi nhận Chỉ số điện Hàng ngày
+// ==========================================
+// BẢNG GHI NHẬN CHỈ SỐ ĐIỆN HÀNG NGÀY (PowerRecord)
+// ==========================================
 model PowerRecord {
   id         String   @id @default(cuid())
   recordDate DateTime @db.Date
@@ -400,13 +416,10 @@ model PowerRecord {
   @@map("power_records")
 }
 
-// ==========================================
-// THEM VAO CUOI FILE schema.prisma
-// ==========================================
 
+// ==========================================
 // MODULE SO DO LINE SAN XUAT (Production Line Routing)
-
-// 1. Bang chinh: Luu thong tin dot line san xuat
+// ==========================================
 model ProductionLine {
   id   Int    @id @default(autoincrement())
   name String // Ten line (VD: "Line CVC30 - NM1")
@@ -467,23 +480,6 @@ model ProductionLineLink {
   @@index([toMachineId])
   @@map("production_line_links")
 }
-
-// ==========================================
-// CAN BO SUNG QUAN HE VAO CAC MODEL DA CO:
-// ==========================================
-
-// Them vao model Item:
-//   productionLines ProductionLine[]
-
-// Them vao model Factory:
-//   productionLines ProductionLine[]
-
-// Them vao model User:
-//   createdLines ProductionLine[]
-
-// Them vao model Machine:
-//   linksFrom ProductionLineLink[] @relation("LinkFrom")
-//   linksTo   ProductionLineLink[] @relation("LinkTo")
 
 // ==========================================
 // MODULE GHI NHẬN DỪNG MÁY / SỰ CỐ
@@ -669,6 +665,14 @@ model MeterGroupCategory {
 
 // --- Enums ---
 
+enum Department {
+  FACTORY      // Nhà máy — có userProcesses
+  MANAGEMENT   // Ban giám đốc
+  SALES        // Phòng kinh doanh
+  ACCOUNTING   // Phòng kế toán
+  WAREHOUSE    // Kho
+}
+
 enum PlanStatus {
   DRAFT
   SUBMITTED
@@ -697,6 +701,11 @@ enum SnapshotType {
   TH // Thực hiện
 }
 
+enum CustomerType {
+  DOMESTIC // Khách hàng trong nước
+  FOREIGN  // Khách hàng nước ngoài
+}
+
 enum OrderStatus {
   ACTIVE
   DONE
@@ -708,10 +717,15 @@ enum OrderStatus {
 
 // 1. Danh mục khách hàng
 model Customer {
-  id   Int     @id @default(autoincrement())
-  name String // Tên khách hàng
-  code String? @unique // Mã KH (nếu có)
-  note String?
+  id           Int          @id @default(autoincrement())
+  name         String       // Tên khách hàng
+  code         String?      @unique // Mã KH (nếu có)
+  address      String?      // Địa chỉ
+  phone        String?      // Số điện thoại
+  email        String?      // Email
+  taxCode      String?      // Mã số thuế
+  customerType CustomerType @default(DOMESTIC) // Trong nước / Nước ngoài
+  note         String?
 
   salesOrders SalesOrder[]
 
