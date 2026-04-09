@@ -85,82 +85,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     );
   }
 
-  // 2. Cấu hình Menu Cơ bản (Ai cũng thấy)
-  const baseMenuItems = [
-    {
-      key: "/",
-      icon: <DashboardOutlined />,
-      label: "Tổng quan (Dashboard)",
-    },
-    {
-      key: "sub1",
-      icon: <DatabaseOutlined />,
-      label: "Danh mục dữ liệu",
-      children: [
-        { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
-        { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
-        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-        { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
-        { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
-        { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
-        { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
-        { key: "/dashboard/stop-categories", label: "Danh mục nguyên nhân dừng", icon: <TagsOutlined /> },
-      ],
-    },
-    {
-      key: "sub2",
-      icon: <AppstoreOutlined />,
-      label: "Quản lý Sản xuất",
-      children: [
-        { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
-        { key: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
-        {
-          key: "sub-mobile",
-          icon: <MobileOutlined />,
-          label: "Mobile",
-          children: [
-            { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
-            { key: "/production/mobile-report", label: "Báo cáo Mobile", icon: <MobileOutlined /> },
-            { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
-            { key: "/production/mobile-maintenance", label: "Bảo dưỡng", icon: <ToolOutlined /> },
-          ],
-        },
-        {
-          key: "/dashboard/maintenance",
-          label: "Nhật ký bảo dưỡng",
-          icon: <ScheduleOutlined />,
-        },
-        {
-          key: "/machines/qr-machines",
-          label: "QR Code máy",
-          icon: <QrcodeOutlined />
-        },
-        {
-          key: "/production/line-setup",
-          label: "Thiết lập line SX",
-          icon: <ApartmentOutlined />
-        },
-        {
-          key: "/production/line-diagram",
-          label: "Sơ đồ line SX",
-          icon: <NodeIndexOutlined />
-        },
-        {
-          key: "/production/machine-stops",
-          label: "Ghi nhận dừng máy",
-          icon: <PauseCircleOutlined />,
-        },
-        {
-          key: "/production/stop-history",
-          label: "Lịch sử dừng máy",
-          icon: <HistoryOutlined />,
-        },
-      ],
-    },
-  ];
-
   // ========================================================
-  // 3. LOGIC PHÂN QUYỀN HIỂN THỊ MENU THEO DEPARTMENT
+  // PHÂN QUYỀN
   // ========================================================
   const userRole = (session?.user as any)?.role ?? "USER";
   const userDepartment = (session?.user as any)?.department ?? "FACTORY";
@@ -168,68 +94,88 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   const isAdmin = userRole === "ADMIN";
 
-  // Helper dùng trong JSX — wrapper gọi canViewModule
   const canView = (module: ModuleKey) =>
     canViewModule(userDepartment, userExtraModules, userRole, module);
 
-  // Nếu có quyền 'energy' → thêm menu Quản lý Điện năng
-  if (canView("energy")) {
-    baseMenuItems.push({
-      key: "sub-energy",
-      icon: <ThunderboltOutlined />,
-      label: "Quản lý Điện năng",
-      children: [
-        { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
-        { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
-        { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
-        { key: "/dashboard/energy/live", label: "Giám sát trực tiếp" },
-      ],
-    } as any);
-  }
+  // ========================================================
+  // CẤU HÌNH MENU — Phân nhóm rõ ràng
   // ========================================================
 
-  // 3b. Menu Báo cáo (Admin + Manager)
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
-    baseMenuItems.push({
-      key: "sub-reports",
-      icon: <LineChartOutlined />,
-      label: "Báo cáo",
+  // Tự động mở nhóm chứa trang hiện tại
+  const findOpenKeys = (items: any[], path: string): string[] => {
+    for (const item of items) {
+      if (item.children) {
+        for (const child of item.children) {
+          if (child.key === path) return [item.key];
+          if (child.children) {
+            const found = findOpenKeys([child], path);
+            if (found.length) return [item.key, ...found];
+          }
+        }
+      }
+    }
+    return [];
+  };
+  const menuItems: any[] = [
+    // ── TỔNG QUAN ──
+    {
+      key: "/",
+      icon: <DashboardOutlined />,
+      label: "Tổng quan",
+    },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ▸ SẢN XUẤT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    { type: "divider" },
+    { type: "group", label: "SẢN XUẤT", children: [] },
+
+    {
+      key: "sub-sx",
+      icon: <AppstoreOutlined />,
+      label: "Quản lý sản xuất",
       children: [
-        {
-          key: "/production/history",
-          label: "Lịch sử & Báo cáo",
-          icon: <HistoryOutlined />,
-        },
-        {
-          key: "/reports/production",
-          label: "Biểu đồ sản lượng",
-          icon: <LineChartOutlined />,
-        },
+        { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
+        { key: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
+        { key: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
+        { key: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
+        { key: "/machines/qr-machines", label: "QR Code máy", icon: <QrcodeOutlined /> },
       ],
-    } as any);
+    },
+    {
+      key: "sub-stops",
+      icon: <PauseCircleOutlined />,
+      label: "Dừng máy & Bảo dưỡng",
+      children: [
+        { key: "/production/machine-stops", label: "Ghi nhận dừng máy", icon: <PauseCircleOutlined /> },
+        { key: "/production/stop-history", label: "Lịch sử dừng máy", icon: <HistoryOutlined /> },
+        { key: "/dashboard/maintenance", label: "Nhật ký bảo dưỡng", icon: <ScheduleOutlined /> },
+      ],
+    },
+    {
+      key: "sub-mobile",
+      icon: <MobileOutlined />,
+      label: "Mobile",
+      children: [
+        { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
+        { key: "/production/mobile-report", label: "Báo cáo Mobile", icon: <MobileOutlined /> },
+        { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
+        { key: "/production/mobile-maintenance", label: "Bảo dưỡng", icon: <ToolOutlined /> },
+      ],
+    },
+  ];
+
+  // Import IoT — chèn ngay sau "Nhập sản lượng" trong Quản lý sản xuất
+  if (canView("iot")) {
+    const subSx = menuItems.find((item: any) => item.key === "sub-sx");
+    if (subSx?.children) {
+      subSx.children.splice(2, 0, { key: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> });
+    }
   }
 
-  // 3b2. Menu KD-SX — dùng canView('kdsx')
-  if (canView("kdsx")) {
-    baseMenuItems.push({
-      key: "sub-kdsx",
-      icon: <BarChartOutlined />,
-      label: "KH Kinh doanh - SX",
-      children: [
-        { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
-        { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
-        { key: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
-        { key: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
-        { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
-        { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
-        { key: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
-      ],
-    } as any);
-  }
-
-  // 3b3. Menu Định mức Năng suất — dùng canView('benchmark')
+  // Định mức Năng suất (nằm trong nhóm SẢN XUẤT)
   if (canView("benchmark")) {
-    baseMenuItems.push({
+    menuItems.push({
       key: "sub-benchmark",
       icon: <LineChartOutlined />,
       label: "Định mức Năng suất",
@@ -238,52 +184,132 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
         { key: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
       ],
-    } as any);
+    });
   }
 
-  // 3c. Menu Import IoT — dùng canView('iot')
-  if (canView("iot")) {
-    baseMenuItems.push({
-      key: "/iot-import",
-      icon: <UploadOutlined />,
-      label: "Import IoT",
-    } as any);
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ ĐIỆN NĂNG
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (canView("energy")) {
+    menuItems.push(
+      { type: "divider" },
+      { type: "group", label: "ĐIỆN NĂNG", children: [] },
+      {
+        key: "sub-energy",
+        icon: <ThunderboltOutlined />,
+        label: "Quản lý Điện năng",
+        children: [
+          { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
+          { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
+          { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
+          { key: "/dashboard/energy/live", label: "Giám sát trực tiếp" },
+        ],
+      }
+    );
   }
 
-  // 4. Menu Quản trị hệ thống (Chỉ Admin mới thấy)
-  if (isAdmin) {
-    baseMenuItems.push({
-      key: "sub-admin",
-      icon: <SafetyCertificateOutlined />,
-      label: "Quản trị hệ thống",
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ KINH DOANH
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (canView("kdsx")) {
+    menuItems.push(
+      { type: "divider" },
+      { type: "group", label: "KINH DOANH", children: [] },
+      {
+        key: "sub-kdsx",
+        icon: <BarChartOutlined />,
+        label: "KH Kinh doanh - SX",
+        children: [
+          { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
+          { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
+          { key: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
+          { key: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
+          { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
+          { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
+          { key: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
+        ],
+      }
+    );
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ BÁO CÁO
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
+    menuItems.push(
+      { type: "divider" },
+      { type: "group", label: "BÁO CÁO", children: [] },
+      {
+        key: "sub-reports",
+        icon: <LineChartOutlined />,
+        label: "Báo cáo sản xuất",
+        children: [
+          { key: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
+          { key: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
+        ],
+      }
+    );
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ DANH MỤC DỮ LIỆU
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  menuItems.push(
+    { type: "divider" },
+    { type: "group", label: "DANH MỤC", children: [] },
+    {
+      key: "sub-cat-sx",
+      icon: <DatabaseOutlined />,
+      label: "DM Sản xuất",
       children: [
-        {
-          key: "/users",
-          icon: <UserOutlined />,
-          label: "Quản lý Tài khoản",
-        },
-        {
-          key: "/admin/backup",
-          icon: <CloudSyncOutlined />,
-          label: "Sao lưu & Phục hồi",
-        },
+        { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
+        { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
+        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+        { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
+        { key: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
       ],
-    } as any);
+    },
+    {
+      key: "sub-cat-energy",
+      icon: <ThunderboltOutlined />,
+      label: "DM Điện năng",
+      children: [
+        { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
+        { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
+        { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+      ],
+    }
+  );
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ HỆ THỐNG
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const systemChildren: any[] = [];
+
+
+
+  if (isAdmin) {
+    systemChildren.push(
+      { key: "/users", icon: <UserOutlined />, label: "Quản lý Tài khoản" },
+      { key: "/admin/backup", icon: <CloudSyncOutlined />, label: "Sao lưu & Phục hồi" }
+    );
   }
 
-  // Góp ý & Đề xuất (tất cả user đều thấy)
-  baseMenuItems.push({
-    key: "/feedback",
-    icon: <CommentOutlined />,
-    label: "Góp ý & Đề xuất",
-  } as any);
+  systemChildren.push(
+    { key: "/feedback", icon: <CommentOutlined />, label: "Góp ý & Đề xuất" },
+    { key: "/settings", icon: <SettingOutlined />, label: "Cấu hình chung" }
+  );
 
-  // Thêm mục Cài đặt xuống cuối cùng
-  baseMenuItems.push({
-    key: "/settings",
-    icon: <SettingOutlined />,
-    label: "Cấu hình chung",
-  } as any);
+  menuItems.push(
+    { type: "divider" },
+    { type: "group", label: "HỆ THỐNG", children: [] },
+    {
+      key: "sub-system",
+      icon: <SafetyCertificateOutlined />,
+      label: "Quản trị & Cài đặt",
+      children: systemChildren,
+    }
+  );
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -314,8 +340,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={["sub1", "sub2", "sub-admin", "sub-energy", "sub-mobile", "sub-reports", "sub-kdsx", "sub-benchmark"]}
-          items={baseMenuItems}
+          defaultOpenKeys={findOpenKeys(menuItems, pathname)}
+          items={menuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
               router.push(key);

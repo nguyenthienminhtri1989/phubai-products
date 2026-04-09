@@ -24,3 +24,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Sidebar Menu Group Styling ── */
+.ant-layout-sider .ant-menu-item-group-title {
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.5px !important;
+  text-transform: uppercase !important;
+  padding: 8px 16px 2px !important;
+  margin-top: 0 !important;
+}
+
+.ant-layout-sider .ant-menu-item-divider {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  margin: 8px 16px !important;
+}
