@@ -116,6 +116,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     }
     return [];
   };
+
+  // Helper tạo label cho group header có thể thu/mở
+  const makeGroupLabel = (text: string) => (
+    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.45)" }}>
+      {text}
+    </span>
+  );
   const menuItems: any[] = [
     // ── TỔNG QUAN ──
     {
@@ -128,7 +135,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     // ▸ SẢN XUẤT
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     { type: "divider" },
-    { type: "group", label: "SẢN XUẤT", children: [] },
+    {
+      key: "group-sx",
+      icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
+      label: makeGroupLabel("SẢN XUẤT"),
+      style: { cursor: "pointer" },
+      children: [],
+    },
 
     {
       key: "sub-sx",
@@ -152,40 +165,66 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { key: "/dashboard/maintenance", label: "Nhật ký bảo dưỡng", icon: <ScheduleOutlined /> },
       ],
     },
-    {
-      key: "sub-mobile",
-      icon: <MobileOutlined />,
-      label: "Mobile",
-      children: [
-        { key: "/production/mobile-input", label: "Nhập liệu Mobile", icon: <MobileOutlined /> },
-        { key: "/production/mobile-report", label: "Báo cáo Mobile", icon: <MobileOutlined /> },
-        { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
-        { key: "/production/mobile-maintenance", label: "Bảo dưỡng", icon: <ToolOutlined /> },
-      ],
-    },
   ];
 
-  // Import IoT — chèn ngay sau "Nhập sản lượng" trong Quản lý sản xuất
+  // Children của group SẢN XUẤT = sub-sx, sub-stops (không có mobile nữa)
+  const sxGroupItem = menuItems.find((i: any) => i.key === "group-sx");
+  if (sxGroupItem) {
+    sxGroupItem.children = [
+      menuItems.find((i: any) => i.key === "sub-sx"),
+      menuItems.find((i: any) => i.key === "sub-stops"),
+    ].filter(Boolean);
+  }
+  // Xoá các item đã chuyển vào group khỏi root
+  const rootMenuItems = menuItems.filter(
+    (i: any) => !["sub-sx", "sub-stops"].includes(i.key)
+  );
+  menuItems.length = 0;
+  rootMenuItems.forEach((i: any) => menuItems.push(i));
+
+  // Import IoT — chèn vào sub-sx (nằm trong group-sx)
   if (canView("iot")) {
-    const subSx = menuItems.find((item: any) => item.key === "sub-sx");
+    const groupSx = menuItems.find((item: any) => item.key === "group-sx");
+    const subSx = groupSx?.children?.find((item: any) => item.key === "sub-sx");
     if (subSx?.children) {
       subSx.children.splice(2, 0, { key: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> });
     }
   }
 
-  // Định mức Năng suất (nằm trong nhóm SẢN XUẤT)
+  // Định mức Năng suất — thêm vào children của group-sx
   if (canView("benchmark")) {
-    menuItems.push({
-      key: "sub-benchmark",
-      icon: <LineChartOutlined />,
-      label: "Định mức Năng suất",
-      children: [
-        { key: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
-        { key: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
-        { key: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
-      ],
-    });
+    const groupSx = menuItems.find((item: any) => item.key === "group-sx");
+    if (groupSx?.children) {
+      groupSx.children.push({
+        key: "sub-benchmark",
+        icon: <LineChartOutlined />,
+        label: "Định mức Năng suất",
+        children: [
+          { key: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
+          { key: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
+          { key: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
+        ],
+      });
+    }
   }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ▸ MOBILE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  menuItems.push(
+    { type: "divider" },
+    {
+      key: "group-mobile",
+      icon: <MobileOutlined style={{ fontSize: 10 }} />,
+      label: makeGroupLabel("MOBILE"),
+      children: [
+        { key: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
+        { key: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
+        { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
+        { key: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
+      ],
+    }
+  );
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // ▸ ĐIỆN NĂNG
@@ -193,16 +232,15 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   if (canView("energy")) {
     menuItems.push(
       { type: "divider" },
-      { type: "group", label: "ĐIỆN NĂNG", children: [] },
       {
-        key: "sub-energy",
-        icon: <ThunderboltOutlined />,
-        label: "Quản lý Điện năng",
+        key: "group-energy",
+        icon: <ThunderboltOutlined style={{ fontSize: 10 }} />,
+        label: makeGroupLabel("ĐIỆN NĂNG"),
         children: [
-          { key: "/dashboard/energy/prices", label: "Đơn giá điện" },
-          { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện" },
-          { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ" },
-          { key: "/dashboard/energy/live", label: "Giám sát trực tiếp" },
+          { key: "/dashboard/energy/prices", label: "Đơn giá điện", icon: <ThunderboltOutlined /> },
+          { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện", icon: <UploadOutlined /> },
+          { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ", icon: <LineChartOutlined /> },
+          { key: "/dashboard/energy/live", label: "Giám sát trực tiếp", icon: <DashboardOutlined /> },
         ],
       }
     );
@@ -214,11 +252,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   if (canView("kdsx")) {
     menuItems.push(
       { type: "divider" },
-      { type: "group", label: "KINH DOANH", children: [] },
       {
-        key: "sub-kdsx",
-        icon: <BarChartOutlined />,
-        label: "KH Kinh doanh - SX",
+        key: "group-kdsx",
+        icon: <BarChartOutlined style={{ fontSize: 10 }} />,
+        label: makeGroupLabel("KINH DOANH"),
         children: [
           { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
           { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
@@ -238,11 +275,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
     menuItems.push(
       { type: "divider" },
-      { type: "group", label: "BÁO CÁO", children: [] },
       {
-        key: "sub-reports",
-        icon: <LineChartOutlined />,
-        label: "Báo cáo sản xuất",
+        key: "group-reports",
+        icon: <LineChartOutlined style={{ fontSize: 10 }} />,
+        label: makeGroupLabel("BÁO CÁO"),
         children: [
           { key: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
           { key: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
@@ -256,27 +292,33 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   menuItems.push(
     { type: "divider" },
-    { type: "group", label: "DANH MỤC", children: [] },
     {
-      key: "sub-cat-sx",
-      icon: <DatabaseOutlined />,
-      label: "DM Sản xuất",
+      key: "group-catalog",
+      icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
+      label: makeGroupLabel("DANH MỤC"),
       children: [
-        { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
-        { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
-        { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-        { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
-        { key: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
-      ],
-    },
-    {
-      key: "sub-cat-energy",
-      icon: <ThunderboltOutlined />,
-      label: "DM Điện năng",
-      children: [
-        { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
-        { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
-        { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+        {
+          key: "sub-cat-sx",
+          icon: <DatabaseOutlined />,
+          label: "DM Sản xuất",
+          children: [
+            { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
+            { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
+            { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+            { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
+            { key: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
+          ],
+        },
+        {
+          key: "sub-cat-energy",
+          icon: <ThunderboltOutlined />,
+          label: "DM Điện năng",
+          children: [
+            { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
+            { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
+            { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+          ],
+        },
       ],
     }
   );
@@ -302,14 +344,25 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   menuItems.push(
     { type: "divider" },
-    { type: "group", label: "HỆ THỐNG", children: [] },
     {
-      key: "sub-system",
-      icon: <SafetyCertificateOutlined />,
-      label: "Quản trị & Cài đặt",
+      key: "group-system",
+      icon: <SafetyCertificateOutlined style={{ fontSize: 10 }} />,
+      label: makeGroupLabel("HỆ THỐNG"),
       children: systemChildren,
     }
   );
+
+  // Tính openKeys mặc định (mở group + submenu chứa trang hiện tại)
+  const defaultOpenKeys = (() => {
+    const keys: string[] = [];
+    const groupKeys = ["group-sx", "group-mobile", "group-energy", "group-kdsx", "group-reports", "group-catalog", "group-system"];
+    // Luôn mở tất cả group theo mặc định
+    groupKeys.forEach(k => keys.push(k));
+    // Thêm submenu đang active
+    const activeSubKeys = findOpenKeys(menuItems, pathname);
+    activeSubKeys.forEach(k => { if (!keys.includes(k)) keys.push(k); });
+    return keys;
+  })();
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -340,7 +393,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           selectedKeys={[pathname]}
-          defaultOpenKeys={findOpenKeys(menuItems, pathname)}
+          defaultOpenKeys={defaultOpenKeys}
           items={menuItems}
           onClick={({ key }) => {
             if (key.startsWith("/")) {
