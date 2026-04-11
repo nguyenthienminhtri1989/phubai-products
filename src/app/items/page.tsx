@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import {
     Table, Button, Modal, Form, Input, InputNumber, Select,
-    message, Card, Space, Popconfirm, Tag, Upload, Alert,
+    message, Card, Space, Popconfirm, Tag, Upload, Alert, AutoComplete,
 } from "antd";
 import {
     PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
@@ -42,6 +42,7 @@ export default function ItemsManagementPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ItemData | null>(null);
     const [searchText, setSearchText] = useState("");
+    const [searchOptions, setSearchOptions] = useState<{ value: string }[]>([]);
 
     // Import state
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -74,6 +75,30 @@ export default function ItemsManagementPage() {
     useEffect(() => {
         fetchItems();
     }, []);
+
+    // Build autocomplete suggestions from loaded items
+    const handleSearchChange = (value: string) => {
+        setSearchText(value);
+        if (!value.trim()) {
+            setSearchOptions([]);
+            return;
+        }
+        const lower = value.toLowerCase();
+        const matched = items
+            .filter(item =>
+                item.name.toLowerCase().includes(lower) ||
+                (item.code && item.code.toLowerCase().includes(lower))
+            )
+            .slice(0, 8)
+            .map(item => ({ value: item.name }));
+        setSearchOptions(matched);
+    };
+
+    const handleSearchSelect = (value: string) => {
+        setSearchText(value);
+        setSearchOptions([]);
+        setTimeout(() => fetchItems(), 0);
+    };
 
     // --- 2. Xử lý Lưu (Thêm/Sửa) ---
     const handleSave = async (values: any) => {
@@ -302,14 +327,21 @@ export default function ItemsManagementPage() {
                 title="Danh mục Mặt hàng Sợi"
                 extra={
                     <Space>
-                        <Input
-                            placeholder="Tìm tên hoặc mã..."
-                            prefix={<SearchOutlined />}
+                        <AutoComplete
+                            options={searchOptions}
                             value={searchText}
-                            onChange={e => setSearchText(e.target.value)}
-                            onPressEnter={fetchItems}
-                            style={{ width: 200 }}
-                        />
+                            onChange={handleSearchChange}
+                            onSelect={handleSearchSelect}
+                            style={{ width: 240 }}
+                            allowClear
+                            onClear={() => { setSearchText(""); setSearchOptions([]); }}
+                        >
+                            <Input
+                                placeholder="Tìm tên hoặc mã sợi..."
+                                prefix={<SearchOutlined />}
+                                onPressEnter={fetchItems}
+                            />
+                        </AutoComplete>
                         <Button icon={<ReloadOutlined />} onClick={fetchItems}>Tải lại</Button>
                         {canEdit && (
                             <>
