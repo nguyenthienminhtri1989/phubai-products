@@ -42,7 +42,6 @@ export default function ItemsManagementPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ItemData | null>(null);
     const [searchText, setSearchText] = useState("");
-    const [searchOptions, setSearchOptions] = useState<{ value: string }[]>([]);
 
     // Import state
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -76,28 +75,27 @@ export default function ItemsManagementPage() {
         fetchItems();
     }, []);
 
-    // Build autocomplete suggestions from loaded items
-    const handleSearchChange = (value: string) => {
-        setSearchText(value);
-        if (!value.trim()) {
-            setSearchOptions([]);
-            return;
-        }
-        const lower = value.toLowerCase();
-        const matched = items
-            .filter(item =>
-                item.name.toLowerCase().includes(lower) ||
-                (item.code && item.code.toLowerCase().includes(lower))
-            )
-            .slice(0, 8)
-            .map(item => ({ value: item.name }));
-        setSearchOptions(matched);
-    };
+    // Lọc client-side: cập nhật bảng ngay khi gõ
+    const filteredItems = searchText.trim()
+        ? items.filter(item => {
+            const q = searchText.toLowerCase();
+            return (
+                item.name.toLowerCase().startsWith(q) ||
+                (item.code && item.code.toLowerCase().startsWith(q)) ||
+                (item.composition && item.composition.toLowerCase().startsWith(q)) ||
+                (item.material && item.material.toLowerCase().startsWith(q)) ||
+                (item.ne !== undefined && item.ne !== null && String(item.ne).startsWith(q))
+            );
+        })
+        : items;
 
-    const handleSearchSelect = (value: string) => {
+    const autoCompleteOptions = items.map(item => ({
+        value: item.name,
+        label: item.code ? `${item.name}  [${item.code}]` : item.name,
+    }));
+
+    const handleAutoCompleteSelect = (value: string) => {
         setSearchText(value);
-        setSearchOptions([]);
-        setTimeout(() => fetchItems(), 0);
     };
 
     // --- 2. Xử lý Lưu (Thêm/Sửa) ---
@@ -327,21 +325,26 @@ export default function ItemsManagementPage() {
                 title="Danh mục Mặt hàng Sợi"
                 extra={
                     <Space>
-                        <AutoComplete
-                            options={searchOptions}
-                            value={searchText}
-                            onChange={handleSearchChange}
-                            onSelect={handleSearchSelect}
-                            style={{ width: 240 }}
-                            allowClear
-                            onClear={() => { setSearchText(""); setSearchOptions([]); }}
-                        >
-                            <Input
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <SearchOutlined style={{
+                                position: 'absolute', left: 11,
+                                top: '50%', transform: 'translateY(-50%)',
+                                color: '#8c8c8c', zIndex: 1, pointerEvents: 'none'
+                            }} />
+                            <AutoComplete
+                                options={autoCompleteOptions}
+                                value={searchText}
+                                onChange={(val) => setSearchText(val ?? "")}
+                                onSelect={(val: string) => setSearchText(val)}
+                                filterOption={(inputValue, option) =>
+                                    option?.value?.toLowerCase().startsWith(inputValue.toLowerCase()) ?? false
+                                }
+                                allowClear
+                                onClear={() => setSearchText("")}
                                 placeholder="Tìm tên hoặc mã sợi..."
-                                prefix={<SearchOutlined />}
-                                onPressEnter={fetchItems}
+                                style={{ width: 260, paddingLeft: 22 }}
                             />
-                        </AutoComplete>
+                        </div>
                         <Button icon={<ReloadOutlined />} onClick={fetchItems}>Tải lại</Button>
                         {canEdit && (
                             <>
@@ -362,7 +365,7 @@ export default function ItemsManagementPage() {
                 <Table
                     rowKey="id"
                     columns={columns}
-                    dataSource={items}
+                    dataSource={filteredItems}
                     loading={loading}
                     pagination={{ pageSize: 20 }}
                     bordered
