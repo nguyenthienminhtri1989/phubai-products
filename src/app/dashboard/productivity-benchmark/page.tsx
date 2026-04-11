@@ -67,6 +67,10 @@ interface Benchmark {
   efficiency: number;
   stdOutputPerShift: number;
   note: string | null;
+  // Thực nghiệm
+  benchmarkType: "THEORY" | "EMPIRICAL";
+  empiricalOutputPerDay: number | null;
+  empiricalNote: string | null;
   item: { id: number; name: string };
   process: { id: number; name: string };
   version: { id: number; versionName: string; isActive: boolean };
@@ -113,6 +117,9 @@ export default function ProductivityBenchmarkPage() {
   const [preview, setPreview] = useState<{ theoretical: number; std: number } | null>(null);
   const [speedUnit, setSpeedUnit] = useState<"rpm" | "mpm">("rpm");
 
+  // Loại định mức đang chọn trong drawer
+  const [benchmarkType, setBenchmarkType] = useState<"THEORY" | "EMPIRICAL">("THEORY");
+
   const loadFactories = useCallback(async () => {
     const r = await fetch("/api/factories");
     if (r.ok) setFactories(await r.json());
@@ -152,7 +159,7 @@ export default function ProductivityBenchmarkPage() {
     if (activeTab === "benchmarks") loadBenchmarks();
   }, [activeTab, loadBenchmarks]);
 
-  // --- Preview tính realtime ---
+  // --- Preview tính realtime (chỉ cho THEORY) ---
   function updatePreview() {
     try {
       const vals = benchmarkForm.getFieldsValue();
@@ -257,15 +264,18 @@ export default function ProductivityBenchmarkPage() {
   function openCreateBenchmark() {
     setEditingBenchmark(null);
     benchmarkForm.resetFields();
-    benchmarkForm.setFieldsValue({ speedUnit: "rpm", efficiency: 0.95 });
+    benchmarkForm.setFieldsValue({ speedUnit: "rpm", efficiency: 0.95, benchmarkType: "THEORY" });
     setSpeedUnit("rpm");
     setPreview(null);
+    setBenchmarkType("THEORY");
     setBenchmarkDrawerOpen(true);
   }
 
   function openEditBenchmark(b: Benchmark) {
     if (b.version.isActive) { message.warning("Phiên bản đang active — không thể sửa. Hãy nhân bản trước."); return; }
     setEditingBenchmark(b);
+    const type = (b.benchmarkType as "THEORY" | "EMPIRICAL") || "THEORY";
+    setBenchmarkType(type);
     benchmarkForm.setFieldsValue({
       versionId: b.versionId,
       itemId: b.itemId,
@@ -279,9 +289,16 @@ export default function ProductivityBenchmarkPage() {
       spindleOrHeadCount: b.spindleOrHeadCount,
       efficiency: b.efficiency,
       note: b.note,
+      benchmarkType: type,
+      empiricalOutputPerDay: b.empiricalOutputPerDay,
+      empiricalNote: b.empiricalNote,
     });
     setSpeedUnit(b.speedUnit as "rpm" | "mpm");
-    setPreview({ theoretical: b.theoreticalOutput, std: b.stdOutputPerShift });
+    if (type === "THEORY") {
+      setPreview({ theoretical: b.theoreticalOutput, std: b.stdOutputPerShift });
+    } else {
+      setPreview(null);
+    }
     setBenchmarkDrawerOpen(true);
   }
 
@@ -387,6 +404,16 @@ export default function ProductivityBenchmarkPage() {
 
   const benchmarkColumns = [
     {
+      title: "Loại",
+      dataIndex: "benchmarkType",
+      key: "benchmarkType",
+      width: 120,
+      render: (type: string) =>
+        type === "EMPIRICAL"
+          ? <Tag color="green">Thực nghiệm</Tag>
+          : <Tag color="blue">Lý thuyết</Tag>,
+    },
+    {
       title: "Mặt hàng",
       key: "item",
       width: 200,
@@ -404,48 +431,57 @@ export default function ProductivityBenchmarkPage() {
       key: "machineModel",
       width: 160,
     },
-    { title: "Nm", dataIndex: "nm", key: "nm", width: 70, render: (v: number) => v.toFixed(2) },
-    { title: "Ne", dataIndex: "ne", key: "ne", width: 70, render: (v: number) => v.toFixed(2) },
+    { title: "Nm", dataIndex: "nm", key: "nm", width: 70, render: (v: number, row: Benchmark) => row.benchmarkType === "EMPIRICAL" ? "-" : v.toFixed(2) },
+    { title: "Ne", dataIndex: "ne", key: "ne", width: 70, render: (v: number, row: Benchmark) => row.benchmarkType === "EMPIRICAL" ? "-" : v.toFixed(2) },
     {
       title: "Độ săn",
       dataIndex: "twist",
       key: "twist",
       width: 90,
-      render: (v: number | null) => v ? v : "-",
+      render: (v: number | null, row: Benchmark) => row.benchmarkType === "EMPIRICAL" ? "-" : (v ? v : "-"),
     },
     {
       title: "Tốc độ",
       key: "speed",
       width: 110,
-      render: (_: unknown, row: Benchmark) => `${row.speedValue} ${row.speedUnit === "rpm" ? "v/p" : "m/p"}`,
+      render: (_: unknown, row: Benchmark) =>
+        row.benchmarkType === "EMPIRICAL"
+          ? "-"
+          : `${row.speedValue} ${row.speedUnit === "rpm" ? "v/p" : "m/p"}`,
     },
     {
       title: "NS lý thuyết",
       dataIndex: "theoreticalOutput",
       key: "theoreticalOutput",
       width: 120,
-      render: (v: number) => `${v.toFixed(2)} kg/ca`,
+      render: (v: number, row: Benchmark) =>
+        row.benchmarkType === "EMPIRICAL" ? "-" : `${v.toFixed(2)} kg/ca`,
     },
     {
       title: "Hiệu suất",
       dataIndex: "efficiency",
       key: "efficiency",
       width: 90,
-      render: (v: number) => `${(v * 100).toFixed(0)}%`,
+      render: (v: number, row: Benchmark) =>
+        row.benchmarkType === "EMPIRICAL" ? "-" : `${(v * 100).toFixed(0)}%`,
     },
     {
-      title: "Định mức (kg/ca)",
-      dataIndex: "stdOutputPerShift",
-      key: "stdOutputPerShift",
-      width: 140,
-      render: (v: number) => <Text strong style={{ color: "#1677ff" }}>{v.toFixed(2)}</Text>,
+      title: "Định mức",
+      key: "benchmarkValue",
+      width: 160,
+      render: (_: unknown, row: Benchmark) =>
+        row.benchmarkType === "EMPIRICAL"
+          ? <Text strong style={{ color: "#52c41a" }}>{row.empiricalOutputPerDay?.toLocaleString("vi-VN")} kg/ngày</Text>
+          : <Text strong style={{ color: "#1677ff" }}>{row.stdOutputPerShift.toFixed(2)} kg/ca</Text>,
     },
     {
       title: "Ghi chú",
-      dataIndex: "note",
       key: "note",
       width: 150,
-      render: (v: string | null) => v || "-",
+      render: (_: unknown, row: Benchmark) =>
+        row.benchmarkType === "EMPIRICAL"
+          ? (row.empiricalNote || row.note || "-")
+          : (row.note || "-"),
     },
     {
       title: "Phiên bản",
@@ -483,8 +519,6 @@ export default function ProductivityBenchmarkPage() {
     if (filterProcessId && b.processId !== filterProcessId) return false;
     return true;
   });
-
-  const activeVersionId = versions.find((v) => v.isActive)?.id;
 
   return (
     <div>
@@ -563,7 +597,7 @@ export default function ProductivityBenchmarkPage() {
                   rowKey="id"
                   bordered
                   size="middle"
-                  scroll={{ x: 1400 }}
+                  scroll={{ x: 1600 }}
                   pagination={{ pageSize: 20 }}
                 />
               </div>
@@ -631,7 +665,7 @@ export default function ProductivityBenchmarkPage() {
         title={editingBenchmark ? "Sửa dòng định mức" : "Thêm dòng định mức"}
         open={benchmarkDrawerOpen}
         onClose={() => setBenchmarkDrawerOpen(false)}
-        width={520}
+        width={540}
         footer={
           <Space style={{ float: "right" }}>
             <Button onClick={() => setBenchmarkDrawerOpen(false)}>Hủy</Button>
@@ -644,9 +678,24 @@ export default function ProductivityBenchmarkPage() {
         <Form
           form={benchmarkForm}
           layout="vertical"
-          onValuesChange={() => updatePreview()}
+          onValuesChange={(changed) => {
+            if (changed.benchmarkType) {
+              setBenchmarkType(changed.benchmarkType);
+              setPreview(null);
+            } else if (benchmarkType === "THEORY") {
+              updatePreview();
+            }
+          }}
         >
           <Divider plain>Liên kết</Divider>
+
+          {/* Chọn loại định mức */}
+          <Form.Item name="benchmarkType" label="Loại định mức" initialValue="THEORY">
+            <Radio.Group>
+              <Radio.Button value="THEORY">Lý thuyết — tính từ công thức</Radio.Button>
+              <Radio.Button value="EMPIRICAL">Thực nghiệm — nhập từ kinh nghiệm</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
 
           <Form.Item name="versionId" label="Phiên bản" rules={[{ required: true }]}>
             <Select
@@ -677,88 +726,143 @@ export default function ProductivityBenchmarkPage() {
             <Input placeholder="G32, Murata Qpro-EX, Rieter RSB-D50..." />
           </Form.Item>
 
-          <Form.Item name="speedUnit" label="Đơn vị tốc độ" rules={[{ required: true }]}>
-            <Radio.Group
-              onChange={(e) => {
-                setSpeedUnit(e.target.value);
-                if (e.target.value === "mpm") {
-                  benchmarkForm.setFieldValue("twist", undefined);
-                }
-                setPreview(null);
-              }}
-            >
-              <Radio value="rpm">Vòng/phút (rpm) — máy sợi con, máy thô</Radio>
-              <Radio value="mpm">Mét/phút (mpm) — máy ghép, máy ống</Radio>
-            </Radio.Group>
-          </Form.Item>
+          {/* ===== EMPIRICAL FIELDS ===== */}
+          {benchmarkType === "EMPIRICAL" && (
+            <>
+              <Divider plain>Sản lượng thực nghiệm</Divider>
 
-          <Divider plain>Thông số kỹ thuật</Divider>
-
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="nm" label="Chỉ số Nm" rules={[{ required: true }]}>
+              <Form.Item
+                name="empiricalOutputPerDay"
+                label="Sản lượng thực nghiệm (kg/ngày)"
+                rules={[
+                  { required: true, message: "Vui lòng nhập sản lượng" },
+                  { type: "number", min: 1, message: "Phải lớn hơn 0" },
+                ]}
+                tooltip="Sản lượng trung bình 1 ngày (3 ca) mà loại máy này thực tế chạy được cho mặt hàng này"
+              >
                 <InputNumber
+                  min={1}
+                  max={99999}
                   style={{ width: "100%" }}
-                  step={0.01}
-                  onChange={(v) => {
-                    if (v != null) benchmarkForm.setFieldValue("ne", +((v as number) / 1.6934).toFixed(3));
-                    updatePreview();
-                  }}
+                  placeholder="VD: 850"
+                  addonAfter="kg/ngày"
                 />
               </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="ne" label="Chỉ số Ne" rules={[{ required: true }]}>
-                <InputNumber
-                  style={{ width: "100%" }}
-                  step={0.01}
-                  onChange={(v) => {
-                    if (v != null) benchmarkForm.setFieldValue("nm", +((v as number) * 1.6934).toFixed(3));
-                    updatePreview();
-                  }}
+
+              <Form.Item name="empiricalNote" label="Ghi chú nguồn số liệu">
+                <Input.TextArea
+                  rows={2}
+                  placeholder="VD: Trung bình 3 tháng Q4/2025, đo trực tiếp tại xưởng..."
+                  maxLength={200}
+                  showCount
                 />
               </Form.Item>
-            </Col>
-          </Row>
 
-          {speedUnit === "rpm" && (
-            <Form.Item name="twist" label="Độ săn (x/m)" rules={[{ required: true, message: "Bắt buộc với máy rpm" }]}>
-              <InputNumber style={{ width: "100%" }} step={1} />
-            </Form.Item>
+              <div
+                style={{
+                  background: "#e6f4ff",
+                  border: "1px solid #91caff",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ fontSize: 12, color: "#1677ff" }}>
+                  💡 Số liệu này là <strong>kg/ngày (3 ca)</strong> cho toàn bộ máy loại{" "}
+                  <strong>{benchmarkForm.getFieldValue("machineModel") || "..."}</strong>{" "}
+                  chạy mặt hàng đã chọn. Hệ thống sẽ nhân với số máy thực tế để tính năng lực tháng.
+                </div>
+              </div>
+            </>
           )}
 
-          <Form.Item
-            name="speedValue"
-            label={`Tốc độ (${speedUnit === "rpm" ? "vòng/phút" : "mét/phút"})`}
-            rules={[{ required: true }]}
-          >
-            <InputNumber style={{ width: "100%" }} step={100} />
-          </Form.Item>
+          {/* ===== THEORY FIELDS ===== */}
+          {benchmarkType === "THEORY" && (
+            <>
+              <Form.Item name="speedUnit" label="Đơn vị tốc độ" rules={[{ required: true }]}>
+                <Radio.Group
+                  onChange={(e) => {
+                    setSpeedUnit(e.target.value);
+                    if (e.target.value === "mpm") {
+                      benchmarkForm.setFieldValue("twist", undefined);
+                    }
+                    setPreview(null);
+                  }}
+                >
+                  <Radio value="rpm">Vòng/phút (rpm) — máy sợi con, máy thô</Radio>
+                  <Radio value="mpm">Mét/phút (mpm) — máy ghép, máy ống</Radio>
+                </Radio.Group>
+              </Form.Item>
 
-          <Form.Item
-            name="spindleOrHeadCount"
-            label={speedUnit === "rpm" ? "Số cọc" : "Số đầu ra / trống"}
-          >
-            <InputNumber style={{ width: "100%" }} step={1} />
-          </Form.Item>
+              <Divider plain>Thông số kỹ thuật</Divider>
 
-          <Form.Item name="efficiency" label="Hiệu suất (0–1, ví dụ 0.95 = 95%)" rules={[{ required: true }]}>
-            <InputNumber style={{ width: "100%" }} step={0.01} min={0} max={1} />
-          </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="nm" label="Chỉ số Nm" rules={[{ required: true }]}>
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      step={0.01}
+                      onChange={(v) => {
+                        if (v != null) benchmarkForm.setFieldValue("ne", +((v as number) / 1.6934).toFixed(3));
+                        updatePreview();
+                      }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="ne" label="Chỉ số Ne" rules={[{ required: true }]}>
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      step={0.01}
+                      onChange={(v) => {
+                        if (v != null) benchmarkForm.setFieldValue("nm", +((v as number) * 1.6934).toFixed(3));
+                        updatePreview();
+                      }}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-          {/* Preview */}
-          {preview && (
-            <Card
-              size="small"
-              style={{ background: "#f0f7ff", border: "1px solid #91caff", marginBottom: 16 }}
-            >
-              <div>NS lý thuyết: <Text strong>{preview.theoretical.toFixed(2)} kg/ca</Text></div>
-              <div>Hiệu suất: × {(((benchmarkForm.getFieldValue("efficiency") as number) || 0) * 100).toFixed(0)}%</div>
-              <Divider style={{ margin: "8px 0" }} />
-              <div style={{ fontSize: 16 }}>
-                ► Định mức: <Text strong style={{ color: "#1677ff", fontSize: 18 }}>{preview.std.toFixed(2)} kg/ca/máy</Text>
-              </div>
-            </Card>
+              {speedUnit === "rpm" && (
+                <Form.Item name="twist" label="Độ săn (x/m)" rules={[{ required: true, message: "Bắt buộc với máy rpm" }]}>
+                  <InputNumber style={{ width: "100%" }} step={1} />
+                </Form.Item>
+              )}
+
+              <Form.Item
+                name="speedValue"
+                label={`Tốc độ (${speedUnit === "rpm" ? "vòng/phút" : "mét/phút"})`}
+                rules={[{ required: true }]}
+              >
+                <InputNumber style={{ width: "100%" }} step={100} />
+              </Form.Item>
+
+              <Form.Item
+                name="spindleOrHeadCount"
+                label={speedUnit === "rpm" ? "Số cọc" : "Số đầu ra / trống"}
+              >
+                <InputNumber style={{ width: "100%" }} step={1} />
+              </Form.Item>
+
+              <Form.Item name="efficiency" label="Hiệu suất (0–1, ví dụ 0.95 = 95%)" rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} step={0.01} min={0} max={1} />
+              </Form.Item>
+
+              {/* Preview */}
+              {preview && (
+                <Card
+                  size="small"
+                  style={{ background: "#f0f7ff", border: "1px solid #91caff", marginBottom: 16 }}
+                >
+                  <div>NS lý thuyết: <Text strong>{preview.theoretical.toFixed(2)} kg/ca</Text></div>
+                  <div>Hiệu suất: × {(((benchmarkForm.getFieldValue("efficiency") as number) || 0) * 100).toFixed(0)}%</div>
+                  <Divider style={{ margin: "8px 0" }} />
+                  <div style={{ fontSize: 16 }}>
+                    ► Định mức: <Text strong style={{ color: "#1677ff", fontSize: 18 }}>{preview.std.toFixed(2)} kg/ca/máy</Text>
+                  </div>
+                </Card>
+              )}
+            </>
           )}
 
           <Form.Item name="note" label="Ghi chú kỹ thuật">

@@ -15,8 +15,9 @@ import {
   Col,
   Statistic,
   Progress,
+  Segmented,
 } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined, InfoCircleOutlined } from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 
@@ -27,8 +28,10 @@ interface ItemOption { id: number; name: string }
 interface ComparisonRow {
   machineId: number;
   machineName: string;
-  avgActual: number;
-  benchmark: number;
+  avgActualPerShift: number;
+  avgActualPerDay: number;
+  benchmarkValue: number;
+  benchmarkType: string;
   efficiencyPct: number;
   shiftCount: number;
 }
@@ -38,11 +41,15 @@ interface ComparisonResult {
     stdOutputPerShift: number;
     item: { id: number; name: string };
     process: { id: number; name: string };
+    benchmarkType: string;
+    benchmarkValue: number;
   };
   dateFrom: string;
   dateTo: string;
   comparisons: ComparisonRow[];
 }
+
+type BenchmarkTypeOption = "THEORY" | "EMPIRICAL";
 
 function getEfficiencyColor(pct: number): string {
   if (pct >= 95) return "#52c41a";
@@ -73,6 +80,7 @@ export default function ComparisonPage() {
     return d.toISOString().split("T")[0];
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split("T")[0]);
+  const [benchmarkType, setBenchmarkType] = useState<BenchmarkTypeOption>("THEORY");
 
   useEffect(() => {
     fetch("/api/factories").then((r) => r.ok && r.json()).then((d) => d && setFactories(d));
@@ -99,6 +107,7 @@ export default function ComparisonPage() {
       factoryId: String(filterFactory),
       dateFrom,
       dateTo,
+      benchmarkType,
     });
 
     const r = await fetch(`/api/productivity-benchmark/comparison?${params}`);
@@ -117,21 +126,36 @@ export default function ComparisonPage() {
       ? result.comparisons.reduce((s, r) => s + r.efficiencyPct, 0) / result.comparisons.length
       : 0;
 
+  const isEmpirical = benchmarkType === "EMPIRICAL";
+
   const columns = [
     { title: "Tên máy", dataIndex: "machineName", key: "machineName", width: 180 },
     {
-      title: "Định mức (kg/ca)",
-      dataIndex: "benchmark",
-      key: "benchmark",
-      width: 140,
-      render: (v: number) => v.toFixed(2),
+      title: "Định mức dùng",
+      key: "benchmarkValue",
+      width: 180,
+      render: (_: unknown, row: ComparisonRow) => (
+        <span>
+          {row.benchmarkValue.toLocaleString("vi-VN")} kg/ngày{" "}
+          <Tag
+            color={row.benchmarkType === "EMPIRICAL" ? "green" : "blue"}
+            style={{ marginLeft: 4 }}
+          >
+            {row.benchmarkType === "EMPIRICAL" ? "TN" : "LT"}
+          </Tag>
+        </span>
+      ),
     },
     {
-      title: "TB thực tế (kg/ca)",
-      dataIndex: "avgActual",
+      title: isEmpirical ? "TB thực tế (kg/ngày)" : "TB thực tế (kg/ca)",
       key: "avgActual",
-      width: 160,
-      render: (v: number) => v > 0 ? v.toFixed(2) : <Text type="secondary">Chưa có dữ liệu</Text>,
+      width: 180,
+      render: (_: unknown, row: ComparisonRow) => {
+        const val = isEmpirical ? row.avgActualPerDay : row.avgActualPerShift;
+        return val > 0
+          ? val.toFixed(2)
+          : <Text type="secondary">Chưa có dữ liệu</Text>;
+      },
     },
     {
       title: "Số ca",
@@ -176,6 +200,16 @@ export default function ComparisonPage() {
 
       <Card style={{ marginBottom: 16 }}>
         <Form layout="inline" style={{ gap: 8, flexWrap: "wrap" }}>
+          <Form.Item label="Loại định mức" style={{ marginBottom: 0 }}>
+            <Segmented
+              options={[
+                { label: "Lý thuyết", value: "THEORY" },
+                { label: "Thực nghiệm", value: "EMPIRICAL" },
+              ]}
+              value={benchmarkType}
+              onChange={(v) => setBenchmarkType(v as BenchmarkTypeOption)}
+            />
+          </Form.Item>
           <Form.Item label="Nhà máy">
             <Select
               style={{ width: 140 }}
@@ -227,6 +261,24 @@ export default function ComparisonPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        {/* Note về loại định mức */}
+        <div style={{
+          marginTop: 12,
+          padding: "6px 12px",
+          background: isEmpirical ? "#f6ffed" : "#e6f4ff",
+          borderRadius: 6,
+          fontSize: 12,
+          color: isEmpirical ? "#52c41a" : "#1677ff",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}>
+          <InfoCircleOutlined />
+          {isEmpirical
+            ? "So sánh với định mức thực nghiệm (kg/ngày) — phù hợp để đánh giá năng suất vận hành thực tế"
+            : "So sánh với định mức lý thuyết (kg/ca) — dùng để kiểm tra máy có chạy đúng thiết kế không"}
+        </div>
       </Card>
 
       {loading && <div style={{ textAlign: "center", padding: 40 }}><Spin size="large" /></div>}
@@ -237,10 +289,10 @@ export default function ComparisonPage() {
             <Col span={6}>
               <Card>
                 <Statistic
-                  title="Định mức chuẩn"
-                  value={result.benchmark.stdOutputPerShift.toFixed(2)}
-                  suffix="kg/ca/máy"
-                  valueStyle={{ color: "#1677ff" }}
+                  title={isEmpirical ? "Định mức thực nghiệm" : "Định mức lý thuyết"}
+                  value={result.benchmark.benchmarkValue.toLocaleString("vi-VN")}
+                  suffix="kg/ngày"
+                  valueStyle={{ color: isEmpirical ? "#52c41a" : "#1677ff" }}
                 />
               </Card>
             </Col>
@@ -283,12 +335,6 @@ export default function ComparisonPage() {
             bordered
             size="middle"
             pagination={false}
-            rowClassName={(row) => {
-              if (row.shiftCount === 0) return "";
-              if (row.efficiencyPct >= 95) return "";
-              if (row.efficiencyPct >= 85) return "";
-              return "";
-            }}
           />
         </>
       )}

@@ -16,8 +16,10 @@ import {
   Divider,
   message,
   Spin,
+  Segmented,
+  Tag,
 } from "antd";
-import { SearchOutlined, FileExcelOutlined } from "@ant-design/icons";
+import { SearchOutlined, FileExcelOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
@@ -38,7 +40,12 @@ interface CapacityResult {
   month: number;
   capacityKg: number;
   capacityTon: number;
+  benchmarkType: string;
+  dailyOutputPerMachine: number;
+  empiricalOutputPerDay: number | null;
 }
+
+type BenchmarkType = "THEORY" | "EMPIRICAL";
 
 export default function CapacityPage() {
   const [factories, setFactories] = useState<Factory[]>([]);
@@ -54,6 +61,7 @@ export default function CapacityPage() {
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [benchmarkType, setBenchmarkType] = useState<BenchmarkType>("THEORY");
 
   useEffect(() => {
     fetch("/api/factories").then((r) => r.ok && r.json()).then((d) => d && setFactories(d));
@@ -83,6 +91,7 @@ export default function CapacityPage() {
         factoryId: String(filterFactory),
         year: String(filterYear),
         month: String(filterMonth),
+        benchmarkType,
       });
       const r = await fetch(`/api/productivity-benchmark/capacity?${params}`);
       if (r.ok) return r.json() as Promise<CapacityResult>;
@@ -97,10 +106,11 @@ export default function CapacityPage() {
 
   function exportExcel() {
     const rows = results.map((r) => ({
+      "Loại định mức": r.benchmarkType === "EMPIRICAL" ? "Thực nghiệm" : "Lý thuyết",
       "Mặt hàng": r.item.name,
       "Công đoạn": r.process.name,
       "Loại máy": r.machineModel,
-      "ĐM (kg/ca/máy)": r.stdOutputPerShift,
+      "ĐM (kg/ngày/máy)": r.dailyOutputPerMachine,
       "Số máy hiện có": r.machineCount,
       "Số ngày trong tháng": r.daysInMonth,
       "Năng lực tối đa (kg)": r.capacityKg,
@@ -109,23 +119,30 @@ export default function CapacityPage() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Năng lực SX");
-    XLSX.writeFile(wb, `nang-luc-sx-${filterYear}-${filterMonth}.xlsx`);
+    XLSX.writeFile(wb, `nang-luc-sx-${benchmarkType.toLowerCase()}-${filterYear}-${filterMonth}.xlsx`);
   }
 
   const totalCapacityTon = results.reduce((s, r) => s + r.capacityTon, 0);
 
   const daysNeeded = needed && results.length > 0
-    ? Math.ceil(needed / (results[0]?.stdOutputPerShift * results[0]?.machineCount * 3))
+    ? Math.ceil(needed / (results[0]?.dailyOutputPerMachine * results[0]?.machineCount))
     : null;
 
   const columns = [
-    { title: "Mặt hàng", key: "item", render: (_: unknown, r: CapacityResult) => r.item.name, width: 200 },
     {
-      title: "ĐM (kg/ca/máy)",
-      dataIndex: "stdOutputPerShift",
-      key: "std",
-      width: 140,
-      render: (v: number) => v.toFixed(2),
+      title: "Mặt hàng",
+      key: "item",
+      render: (_: unknown, r: CapacityResult) => r.item.name,
+      width: 200,
+    },
+    {
+      title: benchmarkType === "EMPIRICAL" ? "ĐM thực nghiệm (kg/ngày/máy)" : "ĐM lý thuyết (kg/ca/máy)",
+      key: "benchmarkValue",
+      width: 220,
+      render: (_: unknown, r: CapacityResult) =>
+        benchmarkType === "EMPIRICAL"
+          ? <span>{r.empiricalOutputPerDay?.toLocaleString("vi-VN")} <Tag color="green">TN</Tag></span>
+          : <span>{r.stdOutputPerShift.toFixed(2)} <Tag color="blue">LT</Tag></span>,
     },
     { title: "Số máy", dataIndex: "machineCount", key: "machineCount", width: 90 },
     { title: "Ngày trong tháng", dataIndex: "daysInMonth", key: "days", width: 130 },
@@ -160,7 +177,18 @@ export default function CapacityPage() {
       <Title level={3} style={{ marginBottom: 16 }}>Năng lực Sản xuất</Title>
 
       <Card style={{ marginBottom: 16 }}>
-        <Form layout="inline" style={{ gap: 8 }}>
+        <Form layout="inline" style={{ gap: 8, flexWrap: "wrap" }}>
+          <Form.Item label="Loại định mức" style={{ marginBottom: 0 }}>
+            <Segmented
+              options={[
+                { label: "Lý thuyết", value: "THEORY" },
+                { label: "Thực nghiệm", value: "EMPIRICAL" },
+              ]}
+              value={benchmarkType}
+              onChange={(v) => setBenchmarkType(v as BenchmarkType)}
+            />
+          </Form.Item>
+          <Divider type="vertical" style={{ height: 32, margin: "0 8px" }} />
           <Form.Item label="Nhà máy">
             <Select
               style={{ width: 140 }}
@@ -202,6 +230,24 @@ export default function CapacityPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        {/* Note về loại định mức */}
+        <div style={{
+          marginTop: 12,
+          padding: "6px 12px",
+          background: benchmarkType === "EMPIRICAL" ? "#f6ffed" : "#e6f4ff",
+          borderRadius: 6,
+          fontSize: 12,
+          color: benchmarkType === "EMPIRICAL" ? "#52c41a" : "#1677ff",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}>
+          <InfoCircleOutlined />
+          {benchmarkType === "EMPIRICAL"
+            ? "Dựa trên số liệu thực tế vận hành — phù hợp để lập kế hoạch và đàm phán với khách hàng"
+            : "Dựa trên thông số kỹ thuật lý thuyết — dùng để đánh giá máy có đúng thiết kế không"}
+        </div>
       </Card>
 
       {loading && <div style={{ textAlign: "center", padding: 40 }}><Spin size="large" /></div>}

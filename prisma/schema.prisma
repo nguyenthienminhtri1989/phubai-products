@@ -673,6 +673,11 @@ enum Department {
   WAREHOUSE    // Kho
 }
 
+enum BenchmarkType {
+  THEORY    // Định mức lý thuyết — tính từ công thức vật lý
+  EMPIRICAL // Định mức thực nghiệm — nhập tay từ kinh nghiệm
+}
+
 enum PlanStatus {
   DRAFT
   SUBMITTED
@@ -1049,6 +1054,12 @@ model ProductivityBenchmark {
   stdOutputPerShift Float   // ĐỊNH MỨC = theoreticalOutput × efficiency (kg/ca/máy)
 
   note              String? // ghi chú kỹ thuật
+
+  // --- THÊM MỚI: Định mức thực nghiệm (EMPIRICAL) ---
+  // Strictly additive — không ảnh hưởng rows cũ (default THEORY)
+  benchmarkType         BenchmarkType @default(THEORY)  // loại định mức
+  empiricalOutputPerDay Float?        // kg/ngày (3 ca) — chỉ dùng khi EMPIRICAL
+  empiricalNote         String?       // nguồn số liệu thực nghiệm
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

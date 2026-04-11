@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/productivity-benchmark/comparison
-// Query: itemId, processId, factoryId, dateFrom, dateTo
+// Query: itemId, processId, factoryId, dateFrom, dateTo, benchmarkType? (THEORY|EMPIRICAL, default: THEORY)
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const factoryId = searchParams.get("factoryId");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
+  const benchmarkType = searchParams.get("benchmarkType") ?? "THEORY";
 
   if (!itemId || !processId || !factoryId || !dateFrom || !dateTo) {
     return NextResponse.json(
@@ -22,11 +23,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 1. Lấy định mức hiện tại
+  // 1. Lấy định mức hiện tại theo benchmarkType
   const benchmark = await prisma.productivityBenchmark.findFirst({
     where: {
       itemId: parseInt(itemId),
       processId: parseInt(processId),
+      benchmarkType: benchmarkType as "THEORY" | "EMPIRICAL",
       version: {
         factoryId: parseInt(factoryId),
         isActive: true,
@@ -39,13 +41,22 @@ export async function GET(req: NextRequest) {
   });
 
   if (!benchmark) {
+    const typeLabel = benchmarkType === "EMPIRICAL" ? "thực nghiệm" : "lý thuyết";
     return NextResponse.json(
-      { error: "Không tìm thấy định mức active cho mặt hàng + công đoạn này" },
+      { error: `Không tìm thấy định mức ${typeLabel} active cho mặt hàng + công đoạn này` },
       { status: 404 }
     );
   }
 
-  // 2. Lấy danh sách máy trong process
+  // 2. Tính benchmarkValue (kg/ngày) theo loại định mức
+  // THEORY: stdOutputPerShift × 3 ca = kg/ngày
+  // EMPIRICAL: empiricalOutputPerDay đã là kg/ngày
+  const benchmarkValue =
+    benchmarkType === "EMPIRICAL"
+      ? (benchmark.empiricalOutputPerDay ?? 0)
+      : benchmark.stdOutputPerShift * 3;
+
+  // 3. Lấy danh sách máy trong process
   const machines = await prisma.machine.findMany({
     where: {
       processId: parseInt(processId),
@@ -55,12 +66,21 @@ export async function GET(req: NextRequest) {
   });
 
   if (machines.length === 0) {
-    return NextResponse.json({ benchmark, comparisons: [] });
+    return NextResponse.json({
+      benchmark: {
+        stdOutputPerShift: benchmark.stdOutputPerShift,
+        item: benchmark.item,
+        process: benchmark.process,
+        benchmarkType,
+        benchmarkValue,
+      },
+      comparisons: [],
+    });
   }
 
   const machineIds = machines.map((m) => m.id);
 
-  // 3. Query ProductionLog GROUP BY machineId
+  // 4. Query ProductionLog GROUP BY machineId, tính trung bình theo ngày
   const logs = await prisma.productionLog.groupBy({
     by: ["machineId"],
     where: {
@@ -75,18 +95,22 @@ export async function GET(req: NextRequest) {
     _count: { id: true },
   });
 
-  // 4. Tính hiệu suất thực tế
+  // 5. Tính hiệu suất thực tế so với benchmarkValue (kg/ngày)
+  // avgActual từ ProductionLog là kg/ca → nhân 3 để ra kg/ngày
   const machineMap = new Map(machines.map((m) => [m.id, m.name]));
   const comparisons = logs.map((log) => {
-    const avgActual = log._avg.finalOutput ?? 0;
-    const efficiencyPct = benchmark.stdOutputPerShift > 0
-      ? (avgActual / benchmark.stdOutputPerShift) * 100
+    const avgActualPerShift = log._avg.finalOutput ?? 0;
+    const avgActualPerDay = avgActualPerShift * 3; // quy đổi ra kg/ngày
+    const efficiencyPct = benchmarkValue > 0
+      ? (avgActualPerDay / benchmarkValue) * 100
       : 0;
     return {
       machineId: log.machineId,
       machineName: machineMap.get(log.machineId) ?? `Máy ${log.machineId}`,
-      avgActual: Math.round(avgActual * 100) / 100,
-      benchmark: benchmark.stdOutputPerShift,
+      avgActualPerShift: Math.round(avgActualPerShift * 100) / 100,
+      avgActualPerDay: Math.round(avgActualPerDay * 100) / 100,
+      benchmarkValue,       // kg/ngày
+      benchmarkType,
       efficiencyPct: Math.round(efficiencyPct * 10) / 10,
       shiftCount: log._count.id,
     };
@@ -99,8 +123,10 @@ export async function GET(req: NextRequest) {
       comparisons.push({
         machineId: machine.id,
         machineName: machine.name,
-        avgActual: 0,
-        benchmark: benchmark.stdOutputPerShift,
+        avgActualPerShift: 0,
+        avgActualPerDay: 0,
+        benchmarkValue,
+        benchmarkType,
         efficiencyPct: 0,
         shiftCount: 0,
       });
@@ -114,6 +140,8 @@ export async function GET(req: NextRequest) {
       stdOutputPerShift: benchmark.stdOutputPerShift,
       item: benchmark.item,
       process: benchmark.process,
+      benchmarkType,
+      benchmarkValue,
     },
     dateFrom,
     dateTo,

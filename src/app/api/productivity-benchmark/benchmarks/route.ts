@@ -44,10 +44,12 @@ export async function POST(req: NextRequest) {
     versionId, itemId, processId, machineModel, speedUnit,
     nm, ne, twist, speedValue, spindleOrHeadCount,
     efficiency, note,
+    benchmarkType, empiricalOutputPerDay, empiricalNote,
   } = body;
 
-  if (!versionId || !itemId || !processId || !machineModel || !speedUnit || !nm || !ne || !speedValue || !efficiency) {
-    return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
+  // Validate bắt buộc chung
+  if (!versionId || !itemId || !processId || !machineModel) {
+    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (phiên bản, mặt hàng, công đoạn, loại máy)" }, { status: 400 });
   }
 
   // Kiểm tra phiên bản đang active thì không cho thêm
@@ -57,45 +59,92 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Không thể sửa phiên bản đang active. Hãy nhân bản trước." }, { status: 400 });
   }
 
-  // Backend tự tính — không dùng số frontend gửi lên
-  let theoreticalOutput: number;
-  try {
-    theoreticalOutput = calcTheoreticalOutput({
-      speedValue: parseFloat(speedValue),
-      speedUnit,
-      nm: parseFloat(nm),
-      twist: twist ? parseFloat(twist) : undefined,
-      spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : undefined,
+  const type = benchmarkType === "EMPIRICAL" ? "EMPIRICAL" : "THEORY";
+
+  // --- Xử lý theo loại định mức ---
+  if (type === "EMPIRICAL") {
+    // Định mức thực nghiệm — chỉ cần empiricalOutputPerDay
+    if (!empiricalOutputPerDay || parseFloat(empiricalOutputPerDay) <= 0) {
+      return NextResponse.json({ error: "Sản lượng thực nghiệm phải > 0" }, { status: 400 });
+    }
+
+    const benchmark = await prisma.productivityBenchmark.create({
+      data: {
+        versionId: parseInt(versionId),
+        itemId: parseInt(itemId),
+        processId: parseInt(processId),
+        machineModel,
+        speedUnit: speedUnit || "rpm",
+        nm: nm ? parseFloat(nm) : 0,
+        ne: ne ? parseFloat(ne) : 0,
+        twist: null,
+        speedValue: speedValue ? parseFloat(speedValue) : 0,
+        spindleOrHeadCount: null,
+        theoreticalOutput: 0,
+        efficiency: efficiency ? parseFloat(efficiency) : 0,
+        stdOutputPerShift: 0,
+        note: note || null,
+        benchmarkType: "EMPIRICAL",
+        empiricalOutputPerDay: parseFloat(empiricalOutputPerDay),
+        empiricalNote: empiricalNote || null,
+      },
+      include: {
+        item: { select: { id: true, name: true } },
+        process: { select: { id: true, name: true } },
+      },
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 400 });
+
+    return NextResponse.json(benchmark, { status: 201 });
+
+  } else {
+    // Định mức lý thuyết (THEORY) — validation cũ giữ nguyên
+    if (!speedUnit || !nm || !ne || !speedValue || !efficiency) {
+      return NextResponse.json({ error: "Thiếu thông số kỹ thuật bắt buộc (đơn vị tốc độ, Nm, Ne, tốc độ, hiệu suất)" }, { status: 400 });
+    }
+
+    // Backend tự tính — không dùng số frontend gửi lên
+    let theoreticalOutput: number;
+    try {
+      theoreticalOutput = calcTheoreticalOutput({
+        speedValue: parseFloat(speedValue),
+        speedUnit,
+        nm: parseFloat(nm),
+        twist: twist ? parseFloat(twist) : undefined,
+        spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : undefined,
+      });
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+
+    const efficiencyVal = parseFloat(efficiency);
+    const stdOutputPerShift = theoreticalOutput * efficiencyVal;
+
+    const benchmark = await prisma.productivityBenchmark.create({
+      data: {
+        versionId: parseInt(versionId),
+        itemId: parseInt(itemId),
+        processId: parseInt(processId),
+        machineModel,
+        speedUnit,
+        nm: parseFloat(nm),
+        ne: parseFloat(ne),
+        twist: twist ? parseFloat(twist) : null,
+        speedValue: parseFloat(speedValue),
+        spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : null,
+        theoreticalOutput,
+        efficiency: efficiencyVal,
+        stdOutputPerShift,
+        note: note || null,
+        benchmarkType: "THEORY",
+        empiricalOutputPerDay: null,
+        empiricalNote: null,
+      },
+      include: {
+        item: { select: { id: true, name: true } },
+        process: { select: { id: true, name: true } },
+      },
+    });
+
+    return NextResponse.json(benchmark, { status: 201 });
   }
-
-  const efficiencyVal = parseFloat(efficiency);
-  const stdOutputPerShift = theoreticalOutput * efficiencyVal;
-
-  const benchmark = await prisma.productivityBenchmark.create({
-    data: {
-      versionId: parseInt(versionId),
-      itemId: parseInt(itemId),
-      processId: parseInt(processId),
-      machineModel,
-      speedUnit,
-      nm: parseFloat(nm),
-      ne: parseFloat(ne),
-      twist: twist ? parseFloat(twist) : null,
-      speedValue: parseFloat(speedValue),
-      spindleOrHeadCount: spindleOrHeadCount ? parseInt(spindleOrHeadCount) : null,
-      theoreticalOutput,
-      efficiency: efficiencyVal,
-      stdOutputPerShift,
-      note: note || null,
-    },
-    include: {
-      item: { select: { id: true, name: true } },
-      process: { select: { id: true, name: true } },
-    },
-  });
-
-  return NextResponse.json(benchmark, { status: 201 });
 }

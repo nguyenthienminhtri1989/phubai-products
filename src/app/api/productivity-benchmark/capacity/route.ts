@@ -7,7 +7,7 @@ function daysInMonth(year: number, month: number): number {
 }
 
 // GET /api/productivity-benchmark/capacity
-// Query: itemId, processId, factoryId, year, month
+// Query: itemId, processId, factoryId, year, month, benchmarkType? (THEORY|EMPIRICAL, default: THEORY)
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,16 +18,18 @@ export async function GET(req: NextRequest) {
   const factoryId = searchParams.get("factoryId");
   const year = searchParams.get("year");
   const month = searchParams.get("month");
+  const benchmarkType = searchParams.get("benchmarkType") ?? "THEORY";
 
   if (!itemId || !processId || !factoryId || !year || !month) {
     return NextResponse.json({ error: "Thiếu tham số: itemId, processId, factoryId, year, month" }, { status: 400 });
   }
 
-  // 1. Lấy stdOutputPerShift từ version đang active
+  // 1. Lấy định mức từ version đang active, theo benchmarkType
   const benchmark = await prisma.productivityBenchmark.findFirst({
     where: {
       itemId: parseInt(itemId),
       processId: parseInt(processId),
+      benchmarkType: benchmarkType as "THEORY" | "EMPIRICAL",
       version: {
         factoryId: parseInt(factoryId),
         isActive: true,
@@ -41,13 +43,31 @@ export async function GET(req: NextRequest) {
   });
 
   if (!benchmark) {
+    const typeLabel = benchmarkType === "EMPIRICAL" ? "thực nghiệm" : "lý thuyết";
     return NextResponse.json(
-      { error: "Không tìm thấy định mức cho mặt hàng + công đoạn này trong phiên bản đang active" },
+      { error: `Không tìm thấy định mức ${typeLabel} cho mặt hàng + công đoạn này trong phiên bản đang active` },
       { status: 404 }
     );
   }
 
-  // 2. Đếm số máy đang active trong process
+  // 2. Tính dailyOutputPerMachine theo loại định mức
+  let dailyOutputPerMachine: number;
+
+  if (benchmarkType === "EMPIRICAL") {
+    if (!benchmark.empiricalOutputPerDay || benchmark.empiricalOutputPerDay <= 0) {
+      return NextResponse.json(
+        { error: "Chưa có định mức thực nghiệm cho mặt hàng này" },
+        { status: 404 }
+      );
+    }
+    // empiricalOutputPerDay đã là kg/ngày — không nhân 3 ca nữa
+    dailyOutputPerMachine = benchmark.empiricalOutputPerDay;
+  } else {
+    // THEORY — logic cũ giữ nguyên: stdOutputPerShift × 3 ca
+    dailyOutputPerMachine = benchmark.stdOutputPerShift * 3;
+  }
+
+  // 3. Đếm số máy đang active trong process
   const machineCount = await prisma.machine.count({
     where: {
       processId: parseInt(processId),
@@ -55,11 +75,11 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // 3. Số ngày trong tháng
+  // 4. Số ngày trong tháng
   const days = daysInMonth(parseInt(year), parseInt(month));
 
-  // 4. capacity = stdOutputPerShift × machineCount × days × 3 (ca/ngày)
-  const capacityKg = benchmark.stdOutputPerShift * machineCount * days * 3;
+  // 5. capacity = dailyOutputPerMachine × machineCount × days
+  const capacityKg = dailyOutputPerMachine * machineCount * days;
   const capacityTon = capacityKg / 1000;
 
   return NextResponse.json({
@@ -74,5 +94,8 @@ export async function GET(req: NextRequest) {
     month: parseInt(month),
     capacityKg,
     capacityTon,
+    benchmarkType,
+    dailyOutputPerMachine,
+    empiricalOutputPerDay: benchmark.empiricalOutputPerDay,
   });
 }

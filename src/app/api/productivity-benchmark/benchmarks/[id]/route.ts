@@ -47,7 +47,29 @@ export async function PUT(
   }
 
   const body = await req.json();
-  const { machineModel, speedUnit, nm, ne, twist, speedValue, spindleOrHeadCount, efficiency, note } = body;
+  const { machineModel, speedUnit, nm, ne, twist, speedValue, spindleOrHeadCount, efficiency, note,
+    benchmarkType, empiricalOutputPerDay, empiricalNote } = body;
+
+  const type = benchmarkType === "EMPIRICAL" ? "EMPIRICAL" : "THEORY";
+
+  if (type === "EMPIRICAL") {
+    if (!empiricalOutputPerDay || parseFloat(empiricalOutputPerDay) <= 0) {
+      return NextResponse.json({ error: "Sản lượng thực nghiệm phải > 0" }, { status: 400 });
+    }
+    const updated = await prisma.productivityBenchmark.update({
+      where: { id: parseInt(id) },
+      data: {
+        machineModel,
+        benchmarkType: "EMPIRICAL",
+        empiricalOutputPerDay: parseFloat(empiricalOutputPerDay),
+        empiricalNote: empiricalNote ?? null,
+        note: note ?? null,
+        theoreticalOutput: 0,
+        stdOutputPerShift: 0,
+      },
+    });
+    return NextResponse.json(updated);
+  }
 
   let theoreticalOutput: number;
   try {
@@ -77,6 +99,9 @@ export async function PUT(
       efficiency: efficiencyVal,
       stdOutputPerShift: theoreticalOutput * efficiencyVal,
       note: note ?? null,
+      benchmarkType: "THEORY",
+      empiricalOutputPerDay: null,
+      empiricalNote: null,
     },
   });
 

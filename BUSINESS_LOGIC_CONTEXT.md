@@ -1176,3 +1176,65 @@ src/app/kdsx/customers/page.tsx                      â€” UI: báº£ng hiá»ƒn thá»‹
 
 - `customerType` lÆ°u dáº¡ng enum PostgreSQL: 'DOMESTIC' | 'FOREIGN'
 - Migration: `20260406000002_add_customer_fields` â€” cáº§n cháº¡y `npx prisma migrate deploy` trÃªn mÃ¡y dev
+
+---
+
+## MODULE Ð?NH M?C NÃNG SU?T — C?P NH?T 2026-04-11
+
+### Tính nãng m?i: Ð?nh m?c Th?c nghi?m (EMPIRICAL)
+
+**Ngày c?p nh?t:** 2026-04-11
+**Files thay ð?i:**
+- prisma/schema.prisma — thêm enum BenchmarkType, 3 fields m?i
+- src/app/api/productivity-benchmark/benchmarks/route.ts — POST h? tr? EMPIRICAL
+- src/app/api/productivity-benchmark/benchmarks/[id]/route.ts — PUT h? tr? EMPIRICAL
+- src/app/api/productivity-benchmark/capacity/route.ts — thêm param enchmarkType
+- src/app/api/productivity-benchmark/comparison/route.ts — thêm param enchmarkType
+- src/app/dashboard/productivity-benchmark/page.tsx — UI Radio ch?n lo?i + c?t m?i
+- src/app/dashboard/productivity-benchmark/capacity/page.tsx — Segmented ch?n lo?i
+- src/app/dashboard/productivity-benchmark/comparison/page.tsx — Segmented + c?t m?i
+
+### 2 lo?i ð?nh m?c song song
+
+| | L? thuy?t (THEORY) | Th?c nghi?m (EMPIRICAL) |
+|---|---|---|
+| Ngu?n g?c | Tính t? công th?c v?t l? | Ngý?i dùng t? nh?p t? kinh nghi?m |
+| Ðõn v? lýu | kg/ca/máy (stdOutputPerShift) | kg/ngày/lo?i máy (empiricalOutputPerDay) |
+| Thông s? c?n nh?p | Nm, Ne, twist, speed, hi?u su?t, s? c?c | Ch? c?n: lo?i máy + m?t hàng + kg/ngày |
+| Dùng ð? | Ðánh giá máy có ðúng thi?t k? không | L?p k? ho?ch và ðàm phán v?i khách |
+
+### Schema thay ð?i
+
+`prisma
+enum BenchmarkType {
+  THEORY    // Ð?nh m?c l? thuy?t
+  EMPIRICAL // Ð?nh m?c th?c nghi?m
+}
+
+model ProductivityBenchmark {
+  // ... fields c? gi? nguyên ...
+  benchmarkType         BenchmarkType @default(THEORY)
+  empiricalOutputPerDay Float?        // kg/ngày — ch? dùng khi EMPIRICAL
+  empiricalNote         String?       // ngu?n s? li?u
+}
+`
+
+Migration: prisma db push (dev) ð? ch?y thành công. DB ð? sync.
+
+### Business rules
+
+- **Unique constraint** (versionId, itemId, processId, machineModel) v?n áp d?ng — 1 t? h?p ch? có 1 d?ng dù là THEORY hay EMPIRICAL
+- **calcTheoreticalOutput()** trong src/utils/benchmark.ts KHÔNG thay ð?i g?
+- **API capacity** EMPIRICAL: dailyOutputPerMachine = empiricalOutputPerDay (ð? là kg/ngày, không nhân 3)
+- **API capacity** THEORY: dailyOutputPerMachine = stdOutputPerShift × 3 (nhý c?)
+- **API comparison**: enchmarkValue = kg/ngày — THEORY dùng stdOutputPerShift×3, EMPIRICAL dùng empiricalOutputPerDay
+
+### API params m?i
+
+| API | Param m?i | Giá tr? |
+|---|---|---|
+| GET /capacity | enchmarkType | THEORY (default) ho?c EMPIRICAL |
+| GET /comparison | enchmarkType | THEORY (default) ho?c EMPIRICAL |
+| POST /benchmarks | enchmarkType | THEORY (default) ho?c EMPIRICAL |
+| POST /benchmarks | empiricalOutputPerDay | Float (kg/ngày, b?t bu?c n?u EMPIRICAL) |
+| POST /benchmarks | empiricalNote | String (optional) |
