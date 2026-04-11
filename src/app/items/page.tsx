@@ -57,8 +57,8 @@ export default function ItemsManagementPage() {
     const fetchItems = async () => {
         setLoading(true);
         try {
-            const query = searchText ? `?search=${encodeURIComponent(searchText)}` : "";
-            const res = await fetch(`/api/items${query}`);
+            // Luôn lấy toàn bộ danh sách — việc lọc được xử lý client-side qua filteredItems
+            const res = await fetch(`/api/items`);
             if (res.ok) {
                 setItems(await res.json());
             } else {
