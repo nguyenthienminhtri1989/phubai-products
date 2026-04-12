@@ -176,8 +176,9 @@ export async function parseDanhOng(
 
   // Gán status + action — ngày và ca lấy từ file header (tất cả dùng chung)
   const rows = preRows.map((r) => {
-    let status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE";
-    if (!r.mappedMachineId) status = "NO_MACHINE";
+    let status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE" | "SKIPPED";
+    if (r.rawItem && maps.skipItems.has(r.rawItem)) status = "SKIPPED";
+    else if (!r.mappedMachineId) status = "NO_MACHINE";
     else if (!r.mappedItemId) status = "NO_ITEM";
     else status = "READY";
 

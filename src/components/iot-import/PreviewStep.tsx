@@ -25,7 +25,7 @@ interface ParsedRow {
   mappedItemId: number | null;
   mappedItemName: string | null;
   finalOutput: number;
-  status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE";
+  status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE" | "SKIPPED";
   action: "INSERT" | "UPDATE" | null;
 }
 
@@ -38,6 +38,7 @@ const statusReasonMap: Record<string, string> = {
   NO_ITEM: "Chưa có mapping mặt hàng",
   NO_SHIFT: "Chưa nhận ra ca làm việc",
   NO_DATE: "Không đọc được ngày",
+  SKIPPED: "Bỏ qua (đã khai báo)",
 };
 
 export default function PreviewStep({ rows }: PreviewStepProps) {
@@ -45,18 +46,21 @@ export default function PreviewStep({ rows }: PreviewStepProps) {
 
   const insertRows = rows.filter((r) => r.action === "INSERT");
   const updateRows = rows.filter((r) => r.action === "UPDATE");
-  const errorRows = rows.filter((r) => r.status !== "READY");
+  const skippedRows = rows.filter((r) => r.status === "SKIPPED");
+  const errorRows = rows.filter((r) => r.status !== "READY" && r.status !== "SKIPPED");
 
   const getFilteredRows = () => {
     switch (activeTab) {
       case "insert": return insertRows;
       case "update": return updateRows;
+      case "skipped": return skippedRows;
       case "error": return errorRows;
       default: return rows;
     }
   };
 
   const getRowStyle = (record: ParsedRow) => {
+    if (record.status === "SKIPPED") return { background: "#fafafa", opacity: 0.6 };
     if (record.status !== "READY") return { background: "#fff1f0" };
     if (record.action === "INSERT") return { background: "#f6ffed" };
     if (record.action === "UPDATE") return { background: "#e6f4ff" };
@@ -111,6 +115,13 @@ export default function PreviewStep({ rows }: PreviewStepProps) {
       key: "status",
       width: 150,
       render: (r: ParsedRow) => {
+        if (r.status === "SKIPPED") {
+          return (
+            <Tag color="default" icon={<MinusCircleOutlined />}>
+              Bỏ qua
+            </Tag>
+          );
+        }
         if (r.status !== "READY") {
           return (
             <Tooltip title={statusReasonMap[r.status] || r.status}>
@@ -154,8 +165,8 @@ export default function PreviewStep({ rows }: PreviewStepProps) {
         <Col span={6}>
           <Card size="small">
             <Statistic
-              title="Bỏ qua"
-              value={0}
+              title="Bỏ qua (đã khai báo)"
+              value={skippedRows.length}
               valueStyle={{ color: "#8c8c8c" }}
               prefix={<MinusCircleOutlined />}
             />
@@ -180,6 +191,7 @@ export default function PreviewStep({ rows }: PreviewStepProps) {
           { key: "all", label: `Tất cả (${rows.length})` },
           { key: "insert", label: `Thêm mới (${insertRows.length})` },
           { key: "update", label: `Cập nhật (${updateRows.length})` },
+          { key: "skipped", label: `Bỏ qua (${skippedRows.length})` },
           { key: "error", label: `Lỗi (${errorRows.length})` },
         ]}
       />

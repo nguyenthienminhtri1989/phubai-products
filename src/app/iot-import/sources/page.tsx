@@ -103,6 +103,7 @@ export default function SourcesPage() {
   const [machineMaps, setMachineMaps] = useState<MachineMap[]>([]);
   const [itemMaps, setItemMaps] = useState<ItemMap[]>([]);
   const [shiftMap, setShiftMap] = useState<Record<string, number>>({});
+  const [skipItems, setSkipItems] = useState<string[]>([]);
   const [mappingLoading, setMappingLoading] = useState(false);
 
   // ERP lookups
@@ -123,6 +124,10 @@ export default function SourcesPage() {
   const [newShiftIotName, setNewShiftIotName] = useState("");
   const [newShiftNumber, setNewShiftNumber] = useState<number | null>(null);
   const [savingShift, setSavingShift] = useState(false);
+
+  // Skip items form
+  const [newSkipItemName, setNewSkipItemName] = useState("");
+  const [savingSkip, setSavingSkip] = useState(false);
 
   useEffect(() => {
     loadSources();
@@ -163,6 +168,7 @@ export default function SourcesPage() {
         setMachineMaps(data.machineMaps || []);
         setItemMaps(data.itemMaps || []);
         setShiftMap((data.source?.shiftMap as Record<string, number>) || {});
+        setSkipItems((data.source?.skipItems as string[]) || []);
       }
     } finally {
       setMappingLoading(false);
@@ -232,6 +238,7 @@ export default function SourcesPage() {
     setNewItemErpId(null);
     setNewShiftIotName("");
     setNewShiftNumber(null);
+    setNewSkipItemName("");
     loadMapping(source.id);
     setMappingDrawerOpen(true);
   };
@@ -400,6 +407,57 @@ export default function SourcesPage() {
       setShiftMap(updatedShiftMap);
     } finally {
       setSavingShift(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────
+  // Skip items
+  // ──────────────────────────────────────────────
+  const handleAddSkipItem = async () => {
+    const name = newSkipItemName.trim();
+    if (!name) { message.warning("Nhập tên mặt hàng cần bỏ qua"); return; }
+    if (skipItems.includes(name)) { message.warning("Tên này đã có trong danh sách"); return; }
+    if (!selectedSource) return;
+    setSavingSkip(true);
+    const updated = [...skipItems, name];
+    try {
+      const res = await fetch("/api/iot/mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          machineMaps: [], itemMaps: [], shiftMap,
+          skipItems: updated,
+        }),
+      });
+      if (!res.ok) { message.error("Lỗi lưu danh sách bỏ qua"); return; }
+      message.success(`Đã thêm "${name}" vào danh sách bỏ qua`);
+      setSkipItems(updated);
+      setNewSkipItemName("");
+    } finally {
+      setSavingSkip(false);
+    }
+  };
+
+  const handleDeleteSkipItem = async (name: string) => {
+    if (!selectedSource) return;
+    setSavingSkip(true);
+    const updated = skipItems.filter((s) => s !== name);
+    try {
+      const res = await fetch("/api/iot/mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          machineMaps: [], itemMaps: [], shiftMap,
+          skipItems: updated,
+        }),
+      });
+      if (!res.ok) { message.error("Lỗi xóa"); return; }
+      message.success("Đã xóa khỏi danh sách bỏ qua");
+      setSkipItems(updated);
+    } finally {
+      setSavingSkip(false);
     }
   };
 
@@ -786,6 +844,52 @@ export default function SourcesPage() {
                     size="small"
                     locale={{ emptyText: "Chưa có mapping mặt hàng nào" }}
                   />
+
+                  {/* ── Phần bỏ qua ── */}
+                  <Divider orientation="left" style={{ fontSize: 13, marginTop: 20 }}>
+                    <Space>
+                      <span>🚫</span>
+                      <span>Mặt hàng bỏ qua ({skipItems.length})</span>
+                    </Space>
+                  </Divider>
+                  <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+                    Những mặt hàng dưới đây sẽ <b>không được import</b>, hiển thị màu xám trong bước Preview thay vì báo lỗi đỏ. Dùng cho các mặt hàng đặc thù như dao, phụ liệu không cần theo dõi sản lượng.
+                  </Text>
+                  <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                    <Col flex="1">
+                      <Input
+                        placeholder='Tên mặt hàng trong file IoT cần bỏ qua (VD: Dao soi)'
+                        value={newSkipItemName}
+                        onChange={(e) => setNewSkipItemName(e.target.value)}
+                        onPressEnter={handleAddSkipItem}
+                      />
+                    </Col>
+                    <Col>
+                      <Button
+                        icon={<PlusOutlined />}
+                        loading={savingSkip}
+                        onClick={handleAddSkipItem}
+                      >
+                        Thêm
+                      </Button>
+                    </Col>
+                  </Row>
+                  <Space wrap size={[8, 8]}>
+                    {skipItems.length === 0 && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>Chưa có mặt hàng nào trong danh sách bỏ qua</Text>
+                    )}
+                    {skipItems.map((name) => (
+                      <Tag
+                        key={name}
+                        closable
+                        color="default"
+                        onClose={() => handleDeleteSkipItem(name)}
+                        style={{ fontSize: 13, padding: "2px 8px" }}
+                      >
+                        {name}
+                      </Tag>
+                    ))}
+                  </Space>
                 </>
               ),
             },

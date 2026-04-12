@@ -67,6 +67,8 @@ export async function POST(req: Request) {
     for (const i of allItems) itemByErpName[i.name] = i;
 
     const shiftMap = (source.shiftMap as Record<string, number>) ?? {};
+    const skipItemsArr = ((source as any).skipItems as string[]) ?? [];
+    const skipItems = new Set<string>(skipItemsArr);
 
     // Đọc file buffer
     const buffer = await file.arrayBuffer();
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
       machineByErpName,
       itemByErpName,
       shiftMap,
+      skipItems,
       existingLogSet,
     };
 

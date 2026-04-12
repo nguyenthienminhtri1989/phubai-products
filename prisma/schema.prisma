@@ -557,6 +557,9 @@ model IotSource {
   // Mapping tên ca: lưu dạng JSON key-value
   // VD: {"Ca sáng":1, "Shift A":1, "Ca chiều":2, "Ca đêm":3}
   shiftMap    Json          @default("{}")
+  // Danh sách tên mặt hàng IoT cần bỏ qua, không import
+  // VD: ["Dao soi", "Dao", "TEST"]
+  skipItems   Json          @default("[]")
   isActive    Boolean       @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

@@ -13,7 +13,7 @@ export type ParsedRow = {
   mappedItemId: number | null;
   mappedItemName: string | null;
   finalOutput: number;
-  status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE";
+  status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE" | "SKIPPED";
   action: "INSERT" | "UPDATE" | null;
 };
 
@@ -38,5 +38,6 @@ export type LookupMaps = {
   machineByErpName: Record<string, { id: number; name: string }>;
   itemByErpName: Record<string, { id: number; name: string }>;
   shiftMap: Record<string, number>;
+  skipItems: Set<string>;      // tên mặt hàng IoT cần bỏ qua (không import)
   existingLogSet: Set<string>;
 };

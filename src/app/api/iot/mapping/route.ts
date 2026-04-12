@@ -43,11 +43,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { sourceId, machineMaps, itemMaps, shiftMap } = body as {
+    const { sourceId, machineMaps, itemMaps, shiftMap, skipItems } = body as {
       sourceId: number;
       machineMaps: { iotName: string; machineId: number }[];
       itemMaps: { iotName: string; itemId: number }[];
       shiftMap: Record<string, number>;
+      skipItems?: string[];
     };
 
     if (!sourceId) return NextResponse.json({ error: "sourceId bắt buộc" }, { status: 400 });
@@ -76,11 +77,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update shiftMap
+    // Update shiftMap và skipItems
     ops.push(
-      prisma.iotSource.update({
+      (prisma.iotSource.update as any)({
         where: { id: sourceId },
-        data: { shiftMap: shiftMap || {} },
+        data: {
+          shiftMap: shiftMap || {},
+          ...(skipItems !== undefined && { skipItems }),
+        },
       })
     );
 

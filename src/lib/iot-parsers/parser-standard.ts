@@ -121,8 +121,9 @@ export async function parseStandard(
 
   // Gán status + action
   const rows = preRows.map((r) => {
-    let status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE";
-    if (!r.mappedDate) status = "NO_DATE";
+    let status: "READY" | "NO_MACHINE" | "NO_ITEM" | "NO_SHIFT" | "NO_DATE" | "SKIPPED";
+    if (r.rawItem && maps.skipItems.has(r.rawItem)) status = "SKIPPED";
+    else if (!r.mappedDate) status = "NO_DATE";
     else if (!r.mappedShift) status = "NO_SHIFT";
     else if (!r.mappedMachineId) status = "NO_MACHINE";
     else if (!r.mappedItemId && colIndex.item >= 0) status = "NO_ITEM";
