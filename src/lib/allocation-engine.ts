@@ -143,6 +143,142 @@ async function checkAllItemsDone(salesOrderId: number): Promise<boolean> {
 }
 
 /**
+ * Phân bổ sản lượng KD vào hợp đồng.
+ * Đọc từ KdDailyInput thay vì ProductionLog.
+ * Logic waterfall giống hệt runAllocation.
+ * Idempotent — chạy lại cùng ngày cho kết quả giống nhau.
+ */
+export async function runAllocationKD(factoryId: number, date: Date) {
+  // 1. Tổng sản lượng KD theo mặt hàng trong ngày (bỏ qua máy dừng outputKg = 0)
+  const dailyOutput = await prisma.kdDailyInput.groupBy({
+    by: ['itemId'],
+    where: {
+      machine: { process: { factoryId } },
+      recordDate: date,
+      outputKg: { gt: 0 },
+    },
+    _sum: { outputKg: true },
+  })
+
+  for (const { itemId, _sum } of dailyOutput) {
+    const totalProduced = _sum.outputKg ?? 0
+    if (totalProduced <= 0) continue
+
+    // 2. Undo existing KD allocations for this date (idempotent — chỉ xóa source=KD)
+    const existingAllocs = await prisma.orderAllocation.findMany({
+      where: { productionDate: date, factoryId, itemId, source: 'KD' },
+      select: { salesOrderItemId: true, allocatedQty: true },
+    })
+
+    if (existingAllocs.length > 0) {
+      const decrements = new Map<number, number>()
+      for (const a of existingAllocs) {
+        decrements.set(
+          a.salesOrderItemId,
+          (decrements.get(a.salesOrderItemId) ?? 0) + a.allocatedQty,
+        )
+      }
+
+      await prisma.$transaction([
+        prisma.orderAllocation.deleteMany({
+          where: { productionDate: date, factoryId, itemId, source: 'KD' },
+        }),
+        ...Array.from(decrements.entries()).map(([id, qty]) =>
+          prisma.salesOrderItem.update({
+            where: { id },
+            data: { allocatedQty: { decrement: qty } },
+          }),
+        ),
+      ])
+
+      // Reset DONE orders về ACTIVE
+      const affectedOrders = await prisma.salesOrderItem.findMany({
+        where: { id: { in: Array.from(decrements.keys()) } },
+        select: { orderId: true },
+      })
+      const orderIds = [...new Set(affectedOrders.map((i) => i.orderId))]
+      if (orderIds.length > 0) {
+        await prisma.salesOrder.updateMany({
+          where: { id: { in: orderIds }, status: 'DONE' },
+          data: { status: 'ACTIVE', completedDate: null },
+        })
+      }
+    }
+
+    // 3. HĐ cần mặt hàng này, chưa xong, ưu tiên deadline sớm nhất
+    const pendingItems = await prisma.salesOrderItem.findMany({
+      where: {
+        itemId,
+        order: {
+          factoryId,
+          status: { in: ['ACTIVE', 'OVERDUE'] },
+        },
+      },
+      include: { order: true },
+      orderBy: [
+        { order: { deliveryDate: 'asc' } },
+        { plannedQty: 'asc' },
+      ],
+    })
+
+    // 4. Waterfall
+    let remaining = totalProduced
+
+    for (const orderItem of pendingItems) {
+      if (remaining <= 0) break
+
+      const stillNeeded = orderItem.plannedQty - orderItem.allocatedQty
+      if (stillNeeded <= 0) continue
+
+      const toAllocate = Math.min(remaining, stillNeeded)
+
+      await prisma.$transaction([
+        prisma.orderAllocation.create({
+          data: {
+            salesOrderItemId: orderItem.id,
+            productionDate: date,
+            factoryId,
+            itemId,
+            allocatedQty: toAllocate,
+            source: 'KD',
+          },
+        }),
+        prisma.salesOrderItem.update({
+          where: { id: orderItem.id },
+          data: { allocatedQty: { increment: toAllocate } },
+        }),
+      ])
+
+      // Kiểm tra HĐ đã hoàn thành chưa
+      const updatedItem = await prisma.salesOrderItem.findUnique({
+        where: { id: orderItem.id },
+      })
+      if (updatedItem && updatedItem.allocatedQty >= orderItem.plannedQty) {
+        const allDone = await checkAllItemsDone(orderItem.orderId)
+        if (allDone) {
+          await prisma.salesOrder.update({
+            where: { id: orderItem.orderId },
+            data: { status: 'DONE', completedDate: new Date() },
+          })
+        }
+      }
+
+      remaining -= toAllocate
+    }
+  }
+
+  // 5. Flag OVERDUE — quá deadline mà chưa xong
+  await prisma.salesOrder.updateMany({
+    where: {
+      factoryId,
+      status: 'ACTIVE',
+      deliveryDate: { lt: new Date() },
+    },
+    data: { status: 'OVERDUE' },
+  })
+}
+
+/**
  * Tính lại toàn bộ allocation từ đầu cho 1 nhà máy trong khoảng thời gian.
  * Dùng khi cần recalculate (ví dụ: sửa ProductionLog cũ, thêm/xóa HĐ).
  *

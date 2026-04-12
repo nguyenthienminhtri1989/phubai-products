@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { runAllocation } from "@/lib/allocation-engine";
+// runAllocation đã chuyển sang đọc từ KdDailyInput
+// Xem src/lib/allocation-engine.ts → runAllocationKD()
+// import { runAllocation } from "@/lib/allocation-engine";
 
 // Chuẩn hóa ngày về 00:00:00 UTC để khớp với @db.Date của Prisma/PostgreSQL
 const normalizeDate = (dateStr: string) => {
@@ -112,18 +114,20 @@ export async function POST(request: Request) {
       },
     });
 
-    // 6. Phân bổ sản lượng vào hợp đồng (non-blocking — lỗi không ảnh hưởng nhập liệu)
-    try {
-      const machine = await prisma.machine.findUnique({
-        where: { id: machineId },
-        include: { process: true },
-      });
-      if (machine?.process?.factoryId) {
-        await runAllocation(machine.process.factoryId, dateObj);
-      }
-    } catch (err) {
-      console.error("Allocation error (non-blocking):", err);
-    }
+    // 6. Allocation engine đã chuyển sang đọc từ KdDailyInput.
+    //    Phòng KD nhập liệu qua /api/kd-daily-input sẽ tự động gọi runAllocationKD.
+    //    Xem src/lib/allocation-engine.ts → runAllocationKD()
+    // try {
+    //   const machine = await prisma.machine.findUnique({
+    //     where: { id: machineId },
+    //     include: { process: true },
+    //   });
+    //   if (machine?.process?.factoryId) {
+    //     await runAllocation(machine.process.factoryId, dateObj);
+    //   }
+    // } catch (err) {
+    //   console.error("Allocation error (non-blocking):", err);
+    // }
 
     return NextResponse.json(savedLog);
   } catch (error: any) {

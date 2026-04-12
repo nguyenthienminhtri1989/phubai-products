@@ -38,6 +38,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   UnorderedListOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -264,6 +265,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
           { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
           { key: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
+          { key: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
         ],
       }
     );
