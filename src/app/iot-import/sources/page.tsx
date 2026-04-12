@@ -846,7 +846,7 @@ export default function SourcesPage() {
                   />
 
                   {/* ── Phần bỏ qua ── */}
-                  <Divider orientation="left" style={{ fontSize: 13, marginTop: 20 }}>
+                  <Divider style={{ fontSize: 13, marginTop: 20 }}>
                     <Space>
                       <span>🚫</span>
                       <span>Mặt hàng bỏ qua ({skipItems.length})</span>
