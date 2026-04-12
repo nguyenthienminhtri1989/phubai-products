@@ -12,11 +12,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await params;
     const body = await req.json();
-    const { name, description, isActive } = body;
+    const { name, description, fileFormat, isActive } = body;
 
     const updated = await prisma.iotSource.update({
       where: { id: parseInt(id) },
-      data: { name, description, isActive },
+      data: { name, description, ...(fileFormat && { fileFormat }), isActive },
     });
     return NextResponse.json(updated);
   } catch (error: any) {

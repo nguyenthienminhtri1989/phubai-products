@@ -1238,3 +1238,55 @@ Migration: prisma db push (dev) �? ch?y th�nh c�ng. DB �? sync.
 | POST /benchmarks | enchmarkType | THEORY (default) ho?c EMPIRICAL |
 | POST /benchmarks | empiricalOutputPerDay | Float (kg/ng�y, b?t bu?c n?u EMPIRICAL) |
 | POST /benchmarks | empiricalNote | String (optional) |
+
+---
+
+## IOT IMPORT — Multi-format parser architecture
+
+**Status:** ✅ Completed 2026-04-12
+
+### What was built
+
+Mở rộng hệ thống IoT import để hỗ trợ nhiều định dạng file khác nhau từ các dòng máy khác nhau. Thêm field `fileFormat` vào `IotSource`, tách `parse-excel/route.ts` thành dispatcher + sub-parsers độc lập. Viết sub-parser `DANH_ONG` cho file HTML-as-XLS của máy đánh ống.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                   — thêm enum IotFileFormat, field fileFormat vào IotSource
+prisma/migrations/20260412000001_add_iot_file_format/  — migration SQL
+src/lib/iot-parsers/types.ts                           — types dùng chung (ParseResult, LookupMaps, ParsedRow)
+src/lib/iot-parsers/utils.ts                           — hàm dùng chung (normalize, parseDate, parseShift, parseOutput)
+src/lib/iot-parsers/parser-standard.ts                 — sub-parser STANDARD (máy sợi con, format có cột Ngày/Ca/Máy/Mặt hàng)
+src/lib/iot-parsers/parser-danh-ong.ts                 — sub-parser DANH_ONG (máy đánh ống, HTML-as-XLS)
+src/app/api/iot/parse-excel/route.ts                   — dispatcher: đọc source.fileFormat, gọi sub-parser tương ứng
+src/app/api/iot/sources/route.ts                       — POST nhận thêm fileFormat
+src/app/api/iot/sources/[id]/route.ts                  — PUT nhận thêm fileFormat
+src/app/iot-import/sources/page.tsx                    — thêm cột + dropdown chọn fileFormat
+```
+
+### Key business logic implemented
+
+- `IotFileFormat` enum: `STANDARD` | `DANH_ONG` — thêm format mới chỉ cần thêm case vào switch
+- STANDARD parser: cột Ngày, Ca, Máy, Mặt hàng, Sản lượng; bỏ dòng "Tổng cộng"; detect cột bằng normalize()
+- DANH_ONG parser: file là HTML-as-XLS; ngày+ca lấy từ `<div>` ngoài bảng dạng "Ca: Apr/01/2026 - 2"; cột A=Lô (mặt hàng), B=Số thứ tự máy (cần mapping), M=PRKG(kg); bỏ dòng TỔNG + dòng cột B rỗng
+- Existing log check: load 90 ngày gần nhất thay vì tính date range (đơn giản hơn, phù hợp import thường xuyên)
+- Tất cả sub-parser trả về cùng `ParseResult` → wizard Preview/Import không cần thay đổi
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/iot/parse-excel | Dispatcher: đọc fileFormat của source, gọi sub-parser |
+| POST | /api/iot/sources | Nhận thêm fileFormat |
+| PUT | /api/iot/sources/:id | Nhận thêm fileFormat |
+
+### Known limitations
+
+- `as any` cast trong sources/route.ts POST vì Prisma client chưa regenerate (cần chạy migrate deploy + prisma generate trên máy)
+- Chưa viết parser cho các dòng máy khác (máy chải, máy ghép...) — thêm khi cần
+
+### Data notes
+
+- Tất cả IotSource hiện có mặc định fileFormat = STANDARD sau khi migrate
+- Cần chạy: `npx prisma migrate deploy && npx prisma generate`
+

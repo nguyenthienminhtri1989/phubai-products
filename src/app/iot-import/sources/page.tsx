@@ -31,10 +31,31 @@ import { useRouter } from "next/navigation";
 
 const { Title, Text } = Typography;
 
+type IotFileFormat = "STANDARD" | "DANH_ONG";
+
+const FILE_FORMAT_OPTIONS: { value: IotFileFormat; label: string; desc: string }[] = [
+  {
+    value: "STANDARD",
+    label: "Chuẩn (Máy sợi con...)",
+    desc: "File XLS/XLSX thông thường: có cột Ngày, Ca, Máy, Mặt hàng, Sản lượng",
+  },
+  {
+    value: "DANH_ONG",
+    label: "Máy đánh ống",
+    desc: "File HTML-as-XLS: ngày+ca trong tiêu đề, cột A = Lô, cột B = Số máy, cột M = sản lượng",
+  },
+];
+
+const FILE_FORMAT_COLOR: Record<IotFileFormat, string> = {
+  STANDARD: "blue",
+  DANH_ONG: "purple",
+};
+
 interface IotSource {
   id: number;
   name: string;
   description: string | null;
+  fileFormat: IotFileFormat;
   isActive: boolean;
   createdAt: string;
   _count: { machineMaps: number; itemMaps: number; importLogs: number };
@@ -155,8 +176,13 @@ export default function SourcesPage() {
     setEditingSource(source || null);
     form.setFieldsValue(
       source
-        ? { name: source.name, description: source.description, isActive: source.isActive }
-        : { name: "", description: "", isActive: true }
+        ? {
+            name: source.name,
+            description: source.description,
+            fileFormat: source.fileFormat,
+            isActive: source.isActive,
+          }
+        : { name: "", description: "", fileFormat: "STANDARD", isActive: true }
     );
     setFormDrawerOpen(true);
   };
@@ -397,6 +423,16 @@ export default function SourcesPage() {
       ),
     },
     {
+      title: "Định dạng file",
+      dataIndex: "fileFormat",
+      key: "fileFormat",
+      width: 160,
+      render: (v: IotFileFormat) => {
+        const opt = FILE_FORMAT_OPTIONS.find((o) => o.value === v);
+        return <Tag color={FILE_FORMAT_COLOR[v]}>{opt?.label ?? v}</Tag>;
+      },
+    },
+    {
       title: "Mapping máy",
       key: "machineMaps",
       width: 120,
@@ -599,10 +635,28 @@ export default function SourcesPage() {
             label="Tên nguồn"
             rules={[{ required: true, message: "Bắt buộc" }]}
           >
-            <Input placeholder="VD: IoT Chải thô NM1" />
+            <Input placeholder="VD: IoT Máy đánh ống NM1" />
           </Form.Item>
           <Form.Item name="description" label="Mô tả">
-            <Input.TextArea rows={3} placeholder="Mô tả về nguồn IoT này..." />
+            <Input.TextArea rows={2} placeholder="Mô tả về nguồn IoT này..." />
+          </Form.Item>
+          <Form.Item
+            name="fileFormat"
+            label="Định dạng file xuất"
+            rules={[{ required: true, message: "Bắt buộc" }]}
+            extra="Chọn đúng định dạng file mà phần mềm IoT của dòng máy này xuất ra"
+          >
+            <Select
+              options={FILE_FORMAT_OPTIONS.map((o) => ({
+                value: o.value,
+                label: (
+                  <Space direction="vertical" size={0}>
+                    <Text strong style={{ fontSize: 13 }}>{o.label}</Text>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{o.desc}</Text>
+                  </Space>
+                ),
+              }))}
+            />
           </Form.Item>
           {editingSource && (
             <Form.Item name="isActive" label="Trạng thái" valuePropName="checked">

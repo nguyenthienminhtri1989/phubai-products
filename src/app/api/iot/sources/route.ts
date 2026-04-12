@@ -29,13 +29,15 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, description } = body;
+    const { name, description, fileFormat } = body;
     if (!name) return NextResponse.json({ error: "Tên nguồn bắt buộc" }, { status: 400 });
 
     const exists = await prisma.iotSource.findUnique({ where: { name } });
     if (exists) return NextResponse.json({ error: "Tên nguồn đã tồn tại" }, { status: 409 });
 
-    const source = await prisma.iotSource.create({ data: { name, description } });
+    const source = await (prisma.iotSource.create as any)({
+      data: { name, description, fileFormat: fileFormat || "STANDARD" },
+    });
     return NextResponse.json(source, { status: 201 });
   } catch (error) {
     console.error(error);

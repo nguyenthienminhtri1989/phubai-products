@@ -542,15 +542,22 @@ model MachineStopLog {
 // MODULE IMPORT IOT EXCEL
 // ==========================================
 
+// Định dạng file mà nguồn IoT xuất ra
+enum IotFileFormat {
+  STANDARD   // File XLS/XLSX thông thường: có cột Ngày, Ca, Máy, Mặt hàng, Sản lượng
+  DANH_ONG   // File HTML-as-XLS của máy đánh ống: ngày+ca trong <div>, cột A=Lô, B=Số máy, M=PRKG
+}
+
 // Nguồn IoT — mỗi phần mềm IoT là 1 source
 model IotSource {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
   description String?
+  fileFormat  IotFileFormat @default(STANDARD)
   // Mapping tên ca: lưu dạng JSON key-value
   // VD: {"Ca sáng":1, "Shift A":1, "Ca chiều":2, "Ca đêm":3}
-  shiftMap    Json     @default("{}")
-  isActive    Boolean  @default(true)
+  shiftMap    Json          @default("{}")
+  isActive    Boolean       @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

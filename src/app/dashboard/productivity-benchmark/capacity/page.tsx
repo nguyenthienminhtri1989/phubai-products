@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Typography,
   Form,
@@ -12,17 +12,18 @@ import {
   Card,
   Statistic,
   InputNumber,
-  Space,
   Divider,
   message,
   Spin,
   Segmented,
   Tag,
+  theme,
 } from "antd";
 import { SearchOutlined, FileExcelOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
 
 const { Title, Text } = Typography;
+const { useToken } = theme;
 
 interface Factory { id: number; name: string }
 interface ProcessOption { id: number; name: string; factoryId: number }
@@ -48,13 +49,19 @@ interface CapacityResult {
 type BenchmarkType = "THEORY" | "EMPIRICAL";
 
 export default function CapacityPage() {
+  const { token } = useToken();
+
   const [factories, setFactories] = useState<Factory[]>([]);
   const [processes, setProcesses] = useState<ProcessOption[]>([]);
   const [items, setItems] = useState<ItemOption[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CapacityResult[]>([]);
-  const [needed, setNeeded] = useState<number | null>(null);
+
+  // --- State bộ tính toán nhanh ---
+  const [calcItem, setCalcItem] = useState<number | null>(null);
+  const [calcMachines, setCalcMachines] = useState<number>(1);
+  const [calcNeeded, setCalcNeeded] = useState<number | null>(null);
 
   const [filterFactory, setFilterFactory] = useState<number | null>(null);
   const [filterProcess, setFilterProcess] = useState<number | null>(null);
@@ -124,9 +131,25 @@ export default function CapacityPage() {
 
   const totalCapacityTon = results.reduce((s, r) => s + r.capacityTon, 0);
 
-  const daysNeeded = needed && results.length > 0
-    ? Math.ceil(needed / (results[0]?.dailyOutputPerMachine * results[0]?.machineCount))
-    : null;
+  // --- Tính toán realtime bộ tính toán nhanh ---
+  const selectedResult =
+    results.find((r) => r.item.id === calcItem) ?? results[0] ?? null;
+  const dmPerDay = selectedResult?.dailyOutputPerMachine ?? 0;
+  const dailyCapacity = dmPerDay * calcMachines;
+  const daysNeeded =
+    calcNeeded && dailyCapacity > 0
+      ? Math.ceil(calcNeeded / dailyCapacity)
+      : null;
+
+  const statusLabel = !daysNeeded
+    ? null
+    : daysNeeded <= 10
+      ? { text: "Rất thoải mái", color: "success" }
+      : daysNeeded <= 20
+        ? { text: "Khả thi trong tháng", color: "success" }
+        : daysNeeded <= 26
+          ? { text: "Cần theo dõi", color: "warning" }
+          : { text: "Không kịp tháng này", color: "error" };
 
   const columns = [
     {
@@ -171,6 +194,9 @@ export default function CapacityPage() {
     value: i + 1,
     label: `Tháng ${i + 1}`,
   }));
+
+  // Danh sách số máy để so sánh
+  const machineOptions = [1, 2, 3, 5, 8, 10, 15, 20];
 
   return (
     <div>
@@ -222,6 +248,10 @@ export default function CapacityPage() {
               onChange={setSelectedItems}
               placeholder="Để trống = tất cả mặt hàng"
               maxTagCount={2}
+              showSearch
+              filterOption={(input, option) =>
+                String(option?.label ?? "").toLowerCase().startsWith(input.toLowerCase())
+              }
             />
           </Form.Item>
           <Form.Item>
@@ -254,8 +284,9 @@ export default function CapacityPage() {
 
       {results.length > 0 && (
         <>
+          {/* KPI cards tổng hợp */}
           <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={6}>
+            <Col span={12}>
               <Card>
                 <Statistic
                   title="Tổng năng lực"
@@ -265,7 +296,7 @@ export default function CapacityPage() {
                 />
               </Card>
             </Col>
-            <Col span={6}>
+            <Col span={12}>
               <Card>
                 <Statistic
                   title="Số mặt hàng có định mức"
@@ -274,33 +305,16 @@ export default function CapacityPage() {
                 />
               </Card>
             </Col>
-            <Col span={12}>
-              <Card>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <Text>Cần sản xuất:</Text>
-                  <InputNumber
-                    style={{ width: 150 }}
-                    placeholder="Nhập số kg"
-                    onChange={(v) => setNeeded(v != null ? Number(v) : null)}
-                    step={1000}
-                    addonAfter="kg"
-                  />
-                  {daysNeeded !== null && (
-                    <Text strong style={{ color: "#52c41a" }}>
-                      → Cần khoảng <Text strong style={{ color: "#f5222d", fontSize: 18 }}>{daysNeeded}</Text> ngày
-                    </Text>
-                  )}
-                </div>
-              </Card>
-            </Col>
           </Row>
 
+          {/* Nút xuất Excel */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
             <Button icon={<FileExcelOutlined />} onClick={exportExcel}>
               Xuất báo cáo năng lực
             </Button>
           </div>
 
+          {/* Bảng kết quả chính */}
           <Table
             dataSource={results}
             columns={columns}
@@ -309,6 +323,209 @@ export default function CapacityPage() {
             size="middle"
             pagination={false}
           />
+
+          {/* Card 1: Bộ tính toán nhanh */}
+          <Card
+            title="Bộ tính toán nhanh — Cần bao nhiêu ngày?"
+            style={{ marginTop: 16 }}
+          >
+            <Row gutter={[16, 16]} align="middle">
+              {/* Chọn mặt hàng */}
+              <Col xs={24} sm={8}>
+                <div style={{ fontSize: 12, color: token.colorTextSecondary, marginBottom: 6 }}>
+                  Mặt hàng cần tính
+                </div>
+                <Select
+                  style={{ width: "100%" }}
+                  value={calcItem ?? results[0]?.item.id}
+                  onChange={setCalcItem}
+                  options={results.map((r) => ({
+                    value: r.item.id,
+                    label: `${r.item.name} — ĐM: ${r.dailyOutputPerMachine.toLocaleString("vi-VN")} kg/ngày/máy`,
+                  }))}
+                />
+              </Col>
+
+              {/* Số máy bố trí */}
+              <Col xs={24} sm={7}>
+                <div style={{ fontSize: 12, color: token.colorTextSecondary, marginBottom: 6 }}>
+                  Số máy bố trí chạy mặt hàng này
+                </div>
+                <InputNumber
+                  style={{ width: "100%" }}
+                  min={1}
+                  max={999}
+                  value={calcMachines}
+                  onChange={(v) => setCalcMachines(v ?? 1)}
+                  addonAfter="máy"
+                />
+                {results[0]?.machineCount != null && (
+                  <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 4 }}>
+                    Tổng công đoạn có {results[0].machineCount} máy
+                  </div>
+                )}
+              </Col>
+
+              {/* Sản lượng cần SX */}
+              <Col xs={24} sm={9}>
+                <div style={{ fontSize: 12, color: token.colorTextSecondary, marginBottom: 6 }}>
+                  Sản lượng cần sản xuất
+                </div>
+                <InputNumber
+                  style={{ width: "100%" }}
+                  min={0}
+                  step={1000}
+                  value={calcNeeded}
+                  onChange={setCalcNeeded}
+                  addonAfter="kg"
+                  placeholder="Nhập số kg..."
+                />
+              </Col>
+            </Row>
+
+            {/* Kết quả */}
+            {daysNeeded !== null && (
+              <div
+                style={{
+                  marginTop: 16,
+                  background: token.colorFillSecondary,
+                  borderRadius: token.borderRadiusLG,
+                  padding: "14px 20px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                    Số ngày cần thiết
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 32, fontWeight: 500, color: token.colorPrimary }}>
+                      {daysNeeded}
+                    </span>
+                    <span style={{ fontSize: 14, color: token.colorTextSecondary }}>
+                      ngày
+                    </span>
+                    {statusLabel && (
+                      <Tag color={statusLabel.color}>{statusLabel.text}</Tag>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                    Năng lực/ngày với {calcMachines} máy
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 500, marginTop: 4 }}>
+                    {dailyCapacity.toLocaleString("vi-VN")}
+                    <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                      {" "}kg/ngày
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Công thức hiển thị minh bạch */}
+            {daysNeeded !== null && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "6px 12px",
+                  background: token.colorInfoBg,
+                  borderRadius: token.borderRadiusSM,
+                  fontSize: 12,
+                  color: token.colorInfoText,
+                }}
+              >
+                Công thức: {(calcNeeded ?? 0).toLocaleString("vi-VN")} kg ÷ (
+                {dmPerDay.toLocaleString("vi-VN")} kg/ngày/máy × {calcMachines} máy) ={" "}
+                {((calcNeeded ?? 0) / dailyCapacity).toFixed(2)} → làm tròn lên{" "}
+                <strong>{daysNeeded} ngày</strong>
+              </div>
+            )}
+          </Card>
+
+          {/* Card 2: Bảng so sánh phương án bố trí máy — chỉ hiện khi đã nhập calcNeeded */}
+          {calcNeeded && selectedResult && (
+            <Card
+              title={`So sánh phương án bố trí máy — ${selectedResult.item.name}, cần ${calcNeeded.toLocaleString("vi-VN")} kg`}
+              style={{ marginTop: 12 }}
+              size="small"
+            >
+              <Table
+                size="small"
+                pagination={false}
+                dataSource={machineOptions
+                  .filter((m) => m <= (results[0]?.machineCount ?? 99))
+                  .map((m) => ({
+                    key: m,
+                    machines: m,
+                    dailyCap: dmPerDay * m,
+                    days: Math.ceil(calcNeeded / (dmPerDay * m)),
+                  }))}
+                rowClassName={(r) =>
+                  r.machines === calcMachines ? "ant-table-row-selected" : ""
+                }
+                columns={[
+                  {
+                    title: "Số máy bố trí",
+                    dataIndex: "machines",
+                    width: 160,
+                    render: (v: number) => (
+                      <span>
+                        {v} máy
+                        {v === calcMachines && (
+                          <Tag color="blue" style={{ marginLeft: 8 }}>
+                            Đang chọn
+                          </Tag>
+                        )}
+                      </span>
+                    ),
+                  },
+                  {
+                    title: "Năng lực/ngày",
+                    dataIndex: "dailyCap",
+                    render: (v: number) => `${v.toLocaleString("vi-VN")} kg`,
+                  },
+                  {
+                    title: "Số ngày cần",
+                    dataIndex: "days",
+                    render: (v: number) => <Text strong>{v} ngày</Text>,
+                  },
+                  {
+                    title: "Đánh giá",
+                    dataIndex: "days",
+                    render: (v: number) => {
+                      if (v <= 10) return <Tag color="success">Rất thoải mái</Tag>;
+                      if (v <= 20) return <Tag color="success">Khả thi</Tag>;
+                      if (v <= 26) return <Tag color="warning">Cần theo dõi</Tag>;
+                      return <Tag color="error">Không kịp tháng</Tag>;
+                    },
+                  },
+                  {
+                    title: "",
+                    width: 80,
+                    render: (_: unknown, r: { machines: number }) => (
+                      <Button
+                        size="small"
+                        type={r.machines === calcMachines ? "primary" : "default"}
+                        onClick={() => setCalcMachines(r.machines)}
+                      >
+                        Chọn
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+              <div style={{ fontSize: 11, color: token.colorTextTertiary, marginTop: 8 }}>
+                Click &quot;Chọn&quot; để điền số máy vào bộ tính toán bên trên
+              </div>
+            </Card>
+          )}
         </>
       )}
     </div>
