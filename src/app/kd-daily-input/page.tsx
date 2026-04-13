@@ -16,11 +16,13 @@ import {
   Statistic,
   Spin,
   Alert,
+  Tooltip,
 } from "antd";
 import {
   SaveOutlined,
   ReloadOutlined,
   KeyOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/vi";
@@ -35,6 +37,7 @@ interface RowData {
   machineName: string;
   itemId: number;
   itemName: string;
+  originalItemId: number; // để detect thay đổi khi lưu
   outputKg: number | null; // null = chưa nhập
   note: string;
   isDirty: boolean;
@@ -60,6 +63,11 @@ interface Machine {
   currentItem?: { id: number; name: string } | null;
 }
 
+interface ItemOption {
+  id: number;
+  name: string;
+}
+
 // ============================================================
 // Main Page
 // ============================================================
@@ -73,12 +81,25 @@ export default function KdDailyInputPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
 
+  // Danh sách mặt hàng cho dropdown thay đổi
+  const [items, setItems] = useState<ItemOption[]>([]);
+  // Index của row đang ở chế độ chọn mặt hàng
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+
   // Load factories on mount
   useEffect(() => {
     fetch("/api/factories")
       .then((r) => r.json())
       .then((data) => setFactories(Array.isArray(data) ? data : []))
       .catch(() => message.error("Không tải được danh sách nhà máy"));
+  }, []);
+
+  // Load items on mount (dùng cho dropdown thay đổi mặt hàng)
+  useEffect(() => {
+    fetch("/api/items?all=true")
+      .then((r) => r.json())
+      .then((data) => setItems(Array.isArray(data) ? data : []))
+      .catch(() => message.error("Không tải được danh sách mặt hàng"));
   }, []);
 
   // Load processes when factory changes
@@ -109,6 +130,7 @@ export default function KdDailyInputPage() {
     }
 
     setFetching(true);
+    setEditingItemIndex(null);
     try {
       const dateStr = date.format("YYYY-MM-DD");
 
@@ -149,18 +171,20 @@ export default function KdDailyInputPage() {
             machineName: machine.name,
             itemId: currentItemId,
             itemName: currentItemName,
+            originalItemId: currentItemId,
             outputKg: existing ? existing.outputKg : null,
             note: existing?.note ?? "",
             isDirty: false,
             existingId: existing?.id,
           });
         } else {
-          // Máy chưa cấu hình mặt hàng — vẫn hiện để biết
+          // Máy chưa cấu hình mặt hàng — vẫn hiện để biết + có thể chọn
           newRows.push({
             machineId: machine.id,
             machineName: machine.name,
             itemId: 0,
             itemName: "Chưa cấu hình",
+            originalItemId: 0,
             outputKg: null,
             note: "",
             isDirty: false,
@@ -178,6 +202,7 @@ export default function KdDailyInputPage() {
             machineName: d.machine?.name ?? `Máy #${d.machineId}`,
             itemId: d.itemId,
             itemName: d.item?.name ?? `Mặt hàng #${d.itemId}`,
+            originalItemId: d.itemId,
             outputKg: d.outputKg,
             note: d.note ?? "",
             isDirty: false,
@@ -203,14 +228,16 @@ export default function KdDailyInputPage() {
   // Điền 0 cho máy dừng chưa nhập
   // ============================================================
   const handleFillZero = useCallback(() => {
-    const count = rows.filter((r) => r.outputKg === null).length;
+    const count = rows.filter((r) => r.outputKg === null && r.itemId !== 0).length;
     if (count === 0) {
       message.info("Tất cả máy đã được nhập liệu rồi");
       return;
     }
     setRows((prev) =>
       prev.map((r) =>
-        r.outputKg === null ? { ...r, outputKg: 0, isDirty: true } : r,
+        r.outputKg === null && r.itemId !== 0
+          ? { ...r, outputKg: 0, isDirty: true }
+          : r,
       ),
     );
     message.info(`Đã điền 0 cho ${count} máy chưa nhập`);
@@ -278,6 +305,34 @@ export default function KdDailyInputPage() {
 
     setLoading(true);
     try {
+      // 1. Cập nhật điều phối máy nếu mặt hàng thay đổi
+      const itemChangedRows = rows.filter(
+        (r) => r.itemId !== r.originalItemId && r.itemId !== 0,
+      );
+      if (itemChangedRows.length > 0) {
+        // Gọi từng máy riêng (single update, operator được phép)
+        for (const r of itemChangedRows) {
+          const res = await fetch("/api/machines/batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              machineIds: [r.machineId],
+              itemId: r.itemId,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(
+              `Không thể cập nhật điều phối máy ${r.machineName}: ${data.error ?? ""}`,
+            );
+          }
+        }
+        message.info(
+          `Đã cập nhật điều phối cho ${itemChangedRows.length} máy đổi mặt hàng`,
+        );
+      }
+
+      // 2. Lưu dữ liệu sản lượng
       const res = await fetch("/api/kd-daily-input", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,8 +356,10 @@ export default function KdDailyInputPage() {
       message.success(
         `Đã lưu ${dirty.length} máy và cập nhật tiến độ hợp đồng`,
       );
-      // Reset isDirty
-      setRows((prev) => prev.map((r) => ({ ...r, isDirty: false })));
+      // Reset isDirty + cập nhật originalItemId
+      setRows((prev) =>
+        prev.map((r) => ({ ...r, isDirty: false, originalItemId: r.itemId })),
+      );
     } catch (err: any) {
       message.error(err.message ?? "Lỗi lưu dữ liệu");
     } finally {
@@ -336,16 +393,80 @@ export default function KdDailyInputPage() {
     {
       title: "Mặt hàng đang chạy",
       dataIndex: "itemName",
-      render: (v: string, r: RowData) => (
-        <>
-          <Tag color={r.itemId === 0 ? "default" : "blue"}>{v}</Tag>
-          {rows.filter((row) => row.machineId === r.machineId).length > 1 && (
-            <Tag color="warning" style={{ fontSize: 11 }}>
-              Đổi MH
-            </Tag>
-          )}
-        </>
-      ),
+      width: 240,
+      render: (v: string, r: RowData, i: number) => {
+        const isEditing = editingItemIndex === i;
+        const itemChanged = r.itemId !== r.originalItemId && r.itemId !== 0;
+        const hasMultipleRows =
+          rows.filter((row) => row.machineId === r.machineId).length > 1;
+
+        // Máy chưa cấu hình hoặc đang ở chế độ chỉnh sửa → hiện Select
+        if (isEditing || r.itemId === 0) {
+          return (
+            <Select
+              autoFocus={isEditing}
+              showSearch
+              filterOption={(input, opt) =>
+                (opt?.label as string)
+                  ?.toLowerCase()
+                  .includes(input.toLowerCase())
+              }
+              style={{
+                width: 210,
+                background: r.itemId === 0 ? "#fffbe6" : undefined,
+              }}
+              placeholder="Chọn mặt hàng..."
+              value={r.itemId || undefined}
+              onChange={(val) => {
+                const item = items.find((it) => it.id === val);
+                if (!item) return;
+                setRows((prev) => {
+                  const next = [...prev];
+                  next[i] = {
+                    ...next[i],
+                    itemId: item.id,
+                    itemName: item.name,
+                    isDirty: true,
+                  };
+                  return next;
+                });
+                setEditingItemIndex(null);
+              }}
+              options={items.map((it) => ({ label: it.name, value: it.id }))}
+              onBlur={() => {
+                // Chỉ thoát edit mode nếu đã có item (không phải Chưa cấu hình)
+                if (r.itemId !== 0) setEditingItemIndex(null);
+              }}
+            />
+          );
+        }
+
+        // Chế độ hiển thị bình thường
+        return (
+          <Space size={4} wrap={false}>
+            <Tag color={itemChanged ? "orange" : "blue"}>{v}</Tag>
+            {hasMultipleRows && (
+              <Tag color="warning" style={{ fontSize: 11 }}>
+                Đổi MH
+              </Tag>
+            )}
+            {itemChanged && (
+              <Tag color="orange" style={{ fontSize: 11 }}>
+                ✓ Sẽ cập nhật
+              </Tag>
+            )}
+            <Tooltip title="Thay đổi mặt hàng">
+              <Button
+                type="text"
+                size="small"
+                icon={<EditOutlined style={{ color: "#8c8c8c", fontSize: 13 }} />}
+                onClick={() => setEditingItemIndex(i)}
+                style={{ padding: "0 4px", height: 22 }}
+              />
+            </Tooltip>
+          </Space>
+        );
+      },
     },
     {
       title: "Sản lượng cả ngày (kg)",
@@ -397,10 +518,10 @@ export default function KdDailyInputPage() {
     },
     {
       title: "Trạng thái",
-      width: 110,
+      width: 120,
       render: (_: any, r: RowData) => {
         if (r.itemId === 0)
-          return <Tag color="default">Chưa cấu hình</Tag>;
+          return <Tag color="warning">Chọn mặt hàng</Tag>;
         if (r.isDirty)
           return <Tag color="processing">Chưa lưu</Tag>;
         if (r.outputKg !== null)

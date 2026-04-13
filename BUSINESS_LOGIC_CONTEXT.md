@@ -1290,3 +1290,49 @@ src/app/iot-import/sources/page.tsx                    — thêm cột + dropdow
 - Tất cả IotSource hiện có mặc định fileFormat = STANDARD sau khi migrate
 - Cần chạy: `npx prisma migrate deploy && npx prisma generate`
 
+
+---
+
+## KD DAILY INPUT — Quick item assignment inline
+
+**Status:** ✅ Completed 2026-04-13
+
+### What was built
+
+Bổ sung chức năng thay đổi mặt hàng ngay trong bảng nhập sản lượng phòng KD (`kd-daily-input/page.tsx`), tương tự chức năng đã làm cho `production/daily-input/page.tsx` nhưng dành cho giao diện bảng (table-based, không modal).
+
+### Files created/modified
+
+```
+src/app/kd-daily-input/page.tsx   — thêm inline item selection + cập nhật điều phối khi lưu
+```
+
+### Key business logic implemented
+
+- `RowData` thêm field `originalItemId` để detect xem mặt hàng có thay đổi so với lúc tải không
+- Load danh sách mặt hàng từ `/api/items?all=true` khi mount trang
+- Cột "Mặt hàng đang chạy": Tag xanh (bình thường) / Tag cam (đã thay đổi) + icon ✏️ để bật Select dropdown
+- Máy chưa cấu hình (`itemId === 0`): hiện Select dropdown trực tiếp (nền vàng), không hiện Tag; ô nhập kg bị disabled cho đến khi chọn xong
+- `editingItemIndex: number | null` — chỉ 1 row mở select tại 1 thời điểm; blur → đóng lại
+- Trạng thái "Chưa cấu hình" → "Chọn mặt hàng" (màu warning) để user biết cần chọn
+- Trong `handleSave`: với mỗi row có `itemId !== originalItemId`, gọi `/api/machines/batch` (single machine) để cập nhật `currentItemId` TRƯỚC khi lưu sản lượng
+- Sau khi lưu thành công: cập nhật `originalItemId = itemId` cho tất cả rows
+- `handleFillZero`: bỏ qua rows có `itemId === 0` (tránh ghi 0 cho máy chưa cấu hình)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/machines/batch | Cập nhật điều phối 1 máy (machineIds.length=1, operator được phép) |
+| GET | /api/items?all=true | Tải danh sách mặt hàng cho dropdown |
+
+### Known limitations
+
+- Khi user thay đổi mặt hàng rồi bấm "Tải danh sách" lại mà chưa lưu → thay đổi mất (expected behavior)
+- rowKey dựa trên `machineId-itemId`: nếu user đổi item thì rowKey thay đổi → React re-render row; không gây bug nhưng có thể mất focus ô nhập kg (acceptable)
+
+### Data notes
+
+- Sau khi đổi mặt hàng và lưu: `machine.currentItemId` được cập nhật trong DB; lần tải sau sẽ hiện mặt hàng mới
+- Lịch sử sản xuất (production_logs / kd_daily_outputs) không bị ảnh hưởng khi đổi currentItemId
+

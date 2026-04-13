@@ -57,6 +57,10 @@ export default function DailyInputPage() {
     const [newItemId, setNewItemId] = useState<number | null>(null);
     const [itemChangeSaving, setItemChangeSaving] = useState(false);
 
+    // Gán / thay đổi mặt hàng điều phối ngay trong modal
+    const [quickAssignItemId, setQuickAssignItemId] = useState<number | null>(null);
+    const [showQuickAssign, setShowQuickAssign] = useState(false);
+
     // Cảnh báo ca thiếu
     const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
     const [warningDismissed, setWarningDismissed] = useState(false);
@@ -228,21 +232,21 @@ export default function DailyInputPage() {
     useEffect(() => { fetchMachines(); }, [selectedProcessId, selectedDate, selectedShift]);
 
     const handleOpenMachine = async (machine: Machine) => {
-        if (!machine.currentItem) {
-            message.warning(`Máy ${machine.name} chưa gán mặt hàng!`);
-            return;
-        }
         setCurrentMachine(machine);
         form.resetFields();
         setIsItemChangeVisible(false);
         setCutoverIndex(null);
         setNewItemId(null);
 
+        // Khởi tạo quick assign: nếu chưa có currentItem → bắt buộc chọn; nếu đã có → ẩn, chỉ hiện khi bấm "Thay đổi"
+        setQuickAssignItemId(machine.currentItem?.id ?? null);
+        setShowQuickAssign(!machine.currentItem); // tự động mở nếu chưa gán
+
         const initValues: any = {
             isReset: false,
             isStopped: false,
             inputNE: machine.currentNE || 30,
-            itemId: machine.currentItem?.id,
+            itemId: machine.currentItem?.id ?? null,
             startIndex: 0,
             endIndex: null
         };
@@ -352,11 +356,38 @@ export default function DailyInputPage() {
 
     const submitData = async (values: any, saveAndNext: boolean) => {
         try {
+            // Xác định mặt hàng sẽ lưu vào log: ưu tiên quickAssignItemId (đã được người dùng chọn/giữ nguyên)
+            const effectiveItemId = quickAssignItemId ?? values.itemId;
+            if (!effectiveItemId) {
+                message.error('Vui lòng chọn mặt hàng đang chạy trước khi lưu');
+                return;
+            }
+
+            // Nếu mặt hàng thay đổi so với điều phối hiện tại → cập nhật điều phối máy luôn
+            const prevItemId = currentMachine?.currentItem?.id ?? null;
+            if (effectiveItemId !== prevItemId) {
+                const assignRes = await fetch('/api/machines/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machineIds: [currentMachine?.id], itemId: effectiveItemId }),
+                });
+                if (!assignRes.ok) {
+                    message.warning('Không thể cập nhật điều phối, nhưng vẫn lưu sản lượng.');
+                } else {
+                    // Cập nhật local state để Card và modal title hiển thị đúng ngay
+                    const newItem = items.find(i => i.id === effectiveItemId);
+                    setCurrentMachine(prev => prev ? { ...prev, currentItem: newItem } : prev);
+                    setMachines(prev => prev.map(m =>
+                        m.id === currentMachine?.id ? { ...m, currentItem: newItem } : m
+                    ));
+                }
+            }
+
             const payload = {
                 recordDate: selectedDate.format('YYYY-MM-DD'),
                 shift: selectedShift,
                 machineId: currentMachine?.id,
-                itemId: values.itemId,
+                itemId: effectiveItemId,
                 startIndex: values.startIndex,
                 endIndex: values.endIndex,
                 inputNE: values.inputNE,
@@ -370,11 +401,13 @@ export default function DailyInputPage() {
             });
             if (!res.ok) throw new Error('Lỗi lưu');
             message.success("Đã lưu thành công!");
+            const savedItem = items.find(i => i.id === effectiveItemId);
             setMachines(prev => prev.map(m => m.id === currentMachine?.id ? {
                 ...m,
                 todayLog: {
                     id: m.todayLog?.id ?? 0,
-                    itemId: payload.itemId, // Lưu lại itemId để khi sửa upsert tìm đúng bản ghi
+                    itemId: effectiveItemId,
+                    item: savedItem ? { id: savedItem.id, name: savedItem.name } : m.todayLog?.item,
                     finalOutput: calculatedOutput,
                     startIndex: payload.startIndex,
                     endIndex: payload.endIndex,
@@ -577,7 +610,7 @@ export default function DailyInputPage() {
             {/* MODAL NHẬP LIỆU */}
             <Modal
                 open={isModalOpen}
-                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); }}
+                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); setShowQuickAssign(false); setQuickAssignItemId(null); }}
                 footer={null}
                 width={isMobile ? '96vw' : 500}
                 style={isMobile ? { top: 8 } : undefined}
@@ -615,6 +648,61 @@ export default function DailyInputPage() {
                             >
                                 [Bỏ qua]
                             </Button>
+                        </div>
+                    )}
+
+                    {/* ── Gán / Thay đổi mặt hàng điều phối ── */}
+                    {!showQuickAssign ? (
+                        // Đã có mặt hàng → hiển thị tên + nút "Thay đổi"
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, background: '#f0f5ff', borderRadius: 8, padding: '8px 12px' }}>
+                            <span style={{ fontSize: 12, color: '#666' }}>Mặt hàng:</span>
+                            <Tag color="blue" style={{ margin: 0 }}>
+                                {currentMachine?.todayLog?.item?.name ?? currentMachine?.currentItem?.name ?? '—'}
+                            </Tag>
+                            {!currentMachine?.todayLog && ( // Chỉ cho đổi điều phối khi chưa có log ca này
+                                <Button
+                                    type="link" size="small"
+                                    style={{ padding: 0, marginLeft: 'auto', color: '#d46b08', fontSize: 12 }}
+                                    onClick={() => setShowQuickAssign(true)}
+                                >
+                                    ✏️ Thay đổi
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        // Chưa gán hoặc đang chọn lại
+                        <div style={{
+                            marginBottom: 14, padding: '10px 12px', borderRadius: 8,
+                            background: !currentMachine?.currentItem ? '#fff1f0' : '#fffbe6',
+                            border: `1px solid ${!currentMachine?.currentItem ? '#ffccc7' : '#faad14'}`,
+                        }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: !currentMachine?.currentItem ? '#cf1322' : '#d48806' }}>
+                                {!currentMachine?.currentItem ? '⚠️ Máy chưa gán mặt hàng — chọn mặt hàng để tiếp tục' : '✏️ Thay đổi mặt hàng điều phối'}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <Select
+                                    style={{ flex: 1 }}
+                                    placeholder="Chọn mặt hàng đang chạy..."
+                                    value={quickAssignItemId}
+                                    onChange={val => setQuickAssignItemId(val)}
+                                    showSearch
+                                    optionFilterProp="label"
+                                    options={items.map(i => ({ value: i.id, label: i.name }))}
+                                />
+                                {currentMachine?.currentItem && (
+                                    <Button size="small" onClick={() => {
+                                        setQuickAssignItemId(currentMachine.currentItem!.id);
+                                        setShowQuickAssign(false);
+                                    }}>
+                                        Hủy
+                                    </Button>
+                                )}
+                            </div>
+                            {quickAssignItemId && quickAssignItemId !== currentMachine?.currentItem?.id && (
+                                <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 6 }}>
+                                    Khi lưu sản lượng sẽ tự cập nhật điều phối máy sang mặt hàng này.
+                                </div>
+                            )}
                         </div>
                     )}
 
