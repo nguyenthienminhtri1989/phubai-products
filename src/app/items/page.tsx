@@ -12,6 +12,20 @@ import {
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 
+const ITEM_COLORS = [
+    "magenta", "red", "volcano", "orange", "gold",
+    "lime", "green", "cyan", "blue", "geekblue", "purple"
+];
+
+const getItemColor = (name: string) => {
+    if (!name) return "default";
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return ITEM_COLORS[Math.abs(hash) % ITEM_COLORS.length];
+};
+
 interface ItemData {
     id: number;
     name: string;
@@ -230,12 +244,17 @@ export default function ItemsManagementPage() {
             title: "Tên mặt hàng",
             dataIndex: "name",
             key: "name",
-            render: (text: string, r: ItemData) => (
-                <div>
-                    <div style={{ fontWeight: 600 }}>{text}</div>
-                    {r.code && <Tag color="blue">{r.code}</Tag>}
-                </div>
-            )
+            render: (text: string, r: ItemData) => {
+                const color = getItemColor(text);
+                return (
+                    <div>
+                        <Tag color={color} style={{ fontSize: 14, fontWeight: 600, padding: '2px 8px', marginBottom: r.code ? 4 : 0 }}>
+                            {text}
+                        </Tag>
+                        {r.code && <div><Tag color="default" style={{ fontSize: 12 }}>{r.code}</Tag></div>}
+                    </div>
+                );
+            }
         },
         {
             title: "Chi số (NE)",
