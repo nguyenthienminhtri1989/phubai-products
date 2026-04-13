@@ -11,20 +11,7 @@ import {
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-
-const ITEM_COLORS = [
-    "magenta", "red", "volcano", "orange", "gold",
-    "lime", "green", "cyan", "blue", "geekblue", "purple"
-];
-
-const getItemColor = (name: string) => {
-    if (!name) return "default";
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return ITEM_COLORS[Math.abs(hash) % ITEM_COLORS.length];
-};
+import { getItemColor } from "@/utils/itemColors";
 
 interface ItemData {
     id: number;

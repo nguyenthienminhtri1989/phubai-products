@@ -31,6 +31,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
+import { getItemColor } from "@/utils/itemColors";
 
 const { Title, Text } = Typography;
 
@@ -253,7 +254,7 @@ export default function SalesOrdersPage() {
       render: (_: any, row: SalesOrder) => (
         <Space size={4} wrap>
           {row.items.map((it) => (
-            <Tag key={it.id} style={{ margin: 0 }}>{it.item.name}</Tag>
+            <Tag key={it.id} color={getItemColor(it.item.name)} style={{ margin: 0, fontWeight: 600 }}>{it.item.name}</Tag>
           ))}
         </Space>
       ),
@@ -480,8 +481,8 @@ export default function SalesOrdersPage() {
 
                   return (
                     <div key={item.itemId} style={{ marginBottom: idx < order.items.length - 1 ? 12 : 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <Text strong style={{ fontSize: 13 }}>{item.itemName}</Text>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <Tag color={getItemColor(item.itemName)} style={{ fontWeight: 600 }}>{item.itemName}</Tag>
                         <Text style={{ fontSize: 12 }}>{item.progressPct.toFixed(1)}%</Text>
                       </div>
                       <Progress

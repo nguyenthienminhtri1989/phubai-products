@@ -29,6 +29,7 @@ import {
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
+import { getItemColor } from "@/utils/itemColors";
 import {
   LineChart,
   Line,
@@ -221,6 +222,7 @@ export default function SalesOrderDetailPage() {
       title: "Mặt hàng",
       dataIndex: ["item", "name"],
       key: "name",
+      render: (name: string) => <Tag color={getItemColor(name)} style={{ fontWeight: 600 }}>{name}</Tag>
     },
     {
       title: "Cần giao",

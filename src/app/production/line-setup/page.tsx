@@ -14,6 +14,7 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useSession } from "next-auth/react";
+import { getItemColor } from "@/utils/itemColors";
 
 const { Title, Text } = Typography;
 
@@ -368,7 +369,7 @@ export default function LineSetupPage() {
                 <div><b>{t}</b><div style={{ fontSize: 11, color: "#888" }}>{r.factory.name}</div></div>
             ),
         },
-        { title: "Mặt hàng", key: "item", render: (_: any, r: ProductionLine) => <Tag color="blue">{r.item.name}</Tag> },
+        { title: "Mặt hàng", key: "item", render: (_: any, r: ProductionLine) => <Tag color={getItemColor(r.item.name)} style={{ fontWeight: 600 }}>{r.item.name}</Tag> },
         {
             title: "Loại", key: "routeType", width: 120,
             render: (_: any, r: ProductionLine) => (

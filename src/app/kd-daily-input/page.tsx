@@ -26,6 +26,7 @@ import {
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/vi";
+import { getItemColor } from "@/utils/itemColors";
 
 const { Text, Title } = Typography;
 
@@ -444,7 +445,7 @@ export default function KdDailyInputPage() {
         // Chế độ hiển thị bình thường
         return (
           <Space size={4} wrap={false}>
-            <Tag color={itemChanged ? "orange" : "blue"}>{v}</Tag>
+            <Tag color={itemChanged ? "orange" : getItemColor(v)} style={{ fontSize: 13, fontWeight: 600 }}>{v}</Tag>
             {hasMultipleRows && (
               <Tag color="warning" style={{ fontSize: 11 }}>
                 Đổi MH

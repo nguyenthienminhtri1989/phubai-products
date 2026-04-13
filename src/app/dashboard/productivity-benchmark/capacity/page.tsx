@@ -21,6 +21,7 @@ import {
 } from "antd";
 import { SearchOutlined, FileExcelOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
+import { getItemColor } from "@/utils/itemColors";
 
 const { Title, Text } = Typography;
 const { useToken } = theme;
@@ -155,7 +156,7 @@ export default function CapacityPage() {
     {
       title: "Mặt hàng",
       key: "item",
-      render: (_: unknown, r: CapacityResult) => r.item.name,
+      render: (_: unknown, r: CapacityResult) => <Tag color={getItemColor(r.item.name)} style={{ fontWeight: 600 }}>{r.item.name}</Tag>,
       width: 200,
     },
     {

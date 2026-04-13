@@ -5,6 +5,7 @@ import { Card, DatePicker, Select, Button, Table, Tag, Row, Col, Statistic, Spac
 import { SearchOutlined, FileExcelOutlined, ReloadOutlined, FilterOutlined, BarChartOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
+import { getItemColor } from "@/utils/itemColors";
 // Thư viện biểu đồ
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -149,7 +150,7 @@ export default function ProductionHistoryPage() {
         { title: "Ca", dataIndex: "shift", width: 60, align: 'center' as const, sorter: true, render: (s: number) => <Tag color="blue">{s}</Tag> },
         { title: "Công đoạn", dataIndex: ["machine", "process", "name"], sorter: true, responsive: ['lg'] as any }, // Ẩn trên mobile
         { title: "Máy", dataIndex: ["machine", "name"], width: 100, sorter: true, render: (t: string) => <b>{t}</b> },
-        { title: "Mặt hàng", dataIndex: ["item", "name"], sorter: true },
+        { title: "Mặt hàng", dataIndex: ["item", "name"], sorter: true, render: (t: string) => <Tag color={getItemColor(t)} style={{ fontWeight: 600 }}>{t}</Tag> },
         {
             title: "Sản lượng",
             dataIndex: "finalOutput",
