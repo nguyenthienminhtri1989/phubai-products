@@ -3,8 +3,8 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Input } from 'antd';
-import { SaveOutlined, ArrowRightOutlined, SwapOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { Card, Select, DatePicker, Button, Row, Col, Modal, Form, InputNumber, Switch, message, Tag, Statistic, Input, Popconfirm } from 'antd';
+import { SaveOutlined, ArrowRightOutlined, SwapOutlined, LeftOutlined, RightOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
@@ -428,6 +428,9 @@ export default function DailyInputPage() {
     const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
     const isAdmin = session?.user?.role === "ADMIN";
     const isReadOnly = !isAdmin && (session?.user as any)?.accessLevel === "READ_ONLY";
+    const userRole = (session?.user as any)?.userRole as string | undefined;
+    const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
+    const canDelete = isAdmin || (userRole ? ALLOWED_DELETE_ROLES.includes(userRole) : false);
     // Lock selectors only when user has exactly 1 process (auto-assigned). Multi-process users can switch between their own.
     const isLocked = !isAdmin && userProcessIds.length === 1;
     // Filter options for non-admin users to only their allowed factories & processes
@@ -435,6 +438,27 @@ export default function DailyInputPage() {
     const allowedFactoryIds = isAdmin ? null : [...new Set(visibleProcesses.map(p => p.factoryId))];
     const visibleFactories = isAdmin ? factories : factories.filter(f => allowedFactoryIds!.includes(f.id));
     const doneMachines = machines.filter(m => m.todayLog).length;
+
+    const handleDeleteLog = async () => {
+        if (!currentMachine?.todayLog?.id) return;
+        try {
+            const res = await fetch(`/api/production/daily-input?id=${currentMachine.todayLog.id}`, {
+                method: 'DELETE',
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                message.error(err.error || 'Lỗi xóa bản ghi');
+                return;
+            }
+            message.success('Đã xóa bản ghi ca này');
+            setMachines(prev => prev.map(m =>
+                m.id === currentMachine.id ? { ...m, todayLog: undefined } : m
+            ));
+            setIsModalOpen(false);
+        } catch {
+            message.error('Lỗi kết nối khi xóa bản ghi');
+        }
+    };
 
     // --- GIAO DIỆN ---
     return (
@@ -833,6 +857,24 @@ export default function DailyInputPage() {
                                     </Button>
                                 </Col>
                             </Row>
+                        </div>
+                    )}
+
+                    {/* Nút xóa bản ghi — chỉ hiện khi đã có log và user có quyền */}
+                    {canDelete && currentMachine?.todayLog && (
+                        <div style={{ marginBottom: 10, textAlign: 'right' }}>
+                            <Popconfirm
+                                title="Xóa bản ghi ca này?"
+                                description="Thao tác này không thể hoàn tác. Bạn chắc chắn muốn xóa?"
+                                onConfirm={handleDeleteLog}
+                                okText="Xóa"
+                                okButtonProps={{ danger: true }}
+                                cancelText="Hủy"
+                            >
+                                <Button danger icon={<DeleteOutlined />} size="small">
+                                    Xóa bản ghi ca này
+                                </Button>
+                            </Popconfirm>
                         </div>
                     )}
 

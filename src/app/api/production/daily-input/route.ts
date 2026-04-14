@@ -146,4 +146,38 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id)
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+
+  // Phân quyền: ADMIN hoặc các role quản lý mới được xóa
+  const userRole = (session.user as any)?.userRole as string | undefined;
+  const role = (session.user as any)?.role as string | undefined;
+  const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
+  const canDelete =
+    role === "ADMIN" ||
+    (userRole && ALLOWED_DELETE_ROLES.includes(userRole));
+
+  if (!canDelete) {
+    return NextResponse.json({ error: "Không có quyền xóa bản ghi" }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id || isNaN(parseInt(id))) {
+    return NextResponse.json({ error: "Thiếu hoặc sai id" }, { status: 400 });
+  }
+
+  try {
+    await prisma.productionLog.delete({ where: { id: parseInt(id) } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    if (error.code === "P2025") {
+      return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
+    }
+    return NextResponse.json({ error: "Lỗi xóa bản ghi", detail: error.message }, { status: 500 });
+  }
+}
+
 // CODE ĐÃ THỰC SỰ ĐƯỢC ĐẨY LÊN GIT CHƯA??????

@@ -1336,3 +1336,46 @@ src/app/kd-daily-input/page.tsx   — thêm inline item selection + cập nhật
 - Sau khi đổi mặt hàng và lưu: `machine.currentItemId` được cập nhật trong DB; lần tải sau sẽ hiện mặt hàng mới
 - Lịch sử sản xuất (production_logs / kd_daily_outputs) không bị ảnh hưởng khi đổi currentItemId
 
+
+---
+
+## PRODUCTION DAILY INPUT — Xóa bản ghi production_logs
+
+**Status:** ✅ Completed 2026-04-14
+
+### What was built
+
+Thêm tính năng xóa bản ghi sản lượng ca (`ProductionLog`) cho trang nhập liệu sản xuất. Bao gồm cả DELETE API endpoint và nút xóa có Popconfirm trong modal nhập liệu.
+
+### Files created/modified
+
+```
+src/app/api/production/daily-input/route.ts  — Thêm DELETE handler mới
+src/app/production/daily-input/page.tsx      — Thêm nút "Xóa bản ghi ca này" + hàm handleDeleteLog
+```
+
+### Key business logic implemented
+
+- DELETE endpoint nhận `?id=X` (id của ProductionLog), xóa bằng `prisma.productionLog.delete`
+- Phân quyền xóa: ADMIN (old role), hoặc userRole thuộc `["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"]`
+- Nút xóa chỉ hiện trong modal khi: (1) `currentMachine.todayLog` tồn tại, VÀ (2) user có `canDelete = true`
+- Sau khi xóa thành công: cập nhật local state (`todayLog → undefined`), đóng modal
+- Popconfirm yêu cầu xác nhận trước khi xóa (không thể hoàn tác)
+- Lỗi P2025 (không tìm thấy bản ghi) → trả về 404
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| DELETE | /api/production/daily-input?id=X | Xóa ProductionLog theo id |
+
+### Known limitations
+
+- Không xóa được log có `status = APPROVED` (không có trường này trong ProductionLog — không áp dụng)
+- Sau khi xóa, `machine.currentItemId` không được rollback (còn giữ item của ca bị xóa)
+- Chưa có audit log khi xóa (ai xóa, khi nào)
+
+### Data notes
+
+- `ProductionLog.id` là auto-increment int, unique — đủ để identify chính xác bản ghi cần xóa
+- Xóa log không ảnh hưởng đến bảng `KdDailyInput` (hai bảng độc lập)
