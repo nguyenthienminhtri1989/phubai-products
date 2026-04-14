@@ -1379,3 +1379,49 @@ src/app/production/daily-input/page.tsx      — Thêm nút "Xóa bản ghi ca n
 
 - `ProductionLog.id` là auto-increment int, unique — đủ để identify chính xác bản ghi cần xóa
 - Xóa log không ảnh hưởng đến bảng `KdDailyInput` (hai bảng độc lập)
+
+---
+
+## PRODUCTIVITY BENCHMARK — Migrate permission system
+
+**Status:** ✅ Completed 2026-04-14
+
+### What was built
+
+Migrate 6 API route của module Định mức Năng suất từ hệ thống phân quyền cũ (`?.role` / `accessLevel`) sang hệ thống mới (`?.userRole` + `ALLOWED_ROLES`).
+
+### Files created/modified
+
+```
+src/app/api/productivity-benchmark/versions/route.ts              — POST: cập nhật permission
+src/app/api/productivity-benchmark/versions/[id]/route.ts         — PUT + DELETE: cập nhật permission
+src/app/api/productivity-benchmark/versions/[id]/activate/route.ts — POST: cập nhật permission
+src/app/api/productivity-benchmark/versions/[id]/clone/route.ts   — POST: cập nhật permission
+src/app/api/productivity-benchmark/benchmarks/route.ts            — POST: cập nhật permission
+src/app/api/productivity-benchmark/benchmarks/[id]/route.ts       — PUT + DELETE: cập nhật permission
+```
+
+### Key business logic implemented
+
+- Tất cả write operations (POST/PUT/CLONE) cho phép: `["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"]`
+- DELETE version và DELETE benchmark: chỉ `ADMIN`
+- Activate version: chỉ `ADMIN`
+- Logic nghiệp vụ không thay đổi: phiên bản `isActive = true` không thể sửa/xóa benchmark
+
+### API endpoints
+
+| Method | Path | Permission |
+|--------|------|------------|
+| POST | /api/productivity-benchmark/versions | ALLOWED_ROLES |
+| PUT | /api/productivity-benchmark/versions/[id] | ALLOWED_ROLES |
+| DELETE | /api/productivity-benchmark/versions/[id] | ADMIN only |
+| POST | /api/productivity-benchmark/versions/[id]/activate | ADMIN only |
+| POST | /api/productivity-benchmark/versions/[id]/clone | ALLOWED_ROLES |
+| POST | /api/productivity-benchmark/benchmarks | ALLOWED_ROLES |
+| PUT | /api/productivity-benchmark/benchmarks/[id] | ALLOWED_ROLES |
+| DELETE | /api/productivity-benchmark/benchmarks/[id] | ADMIN only |
+
+### Known limitations
+
+- Sửa/xóa benchmark của phiên bản đang `isActive` vẫn bị block (intentional)
+- Để sửa phiên bản active → phải clone ra phiên bản nháp trước

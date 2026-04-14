@@ -10,9 +10,9 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userRole = (session.user as any)?.role;
-  const accessLevel = (session.user as any)?.accessLevel;
-  if (userRole !== "ADMIN" && accessLevel !== "MANAGER") {
+  const userRole = (session.user as any)?.userRole as string | undefined;
+  const ALLOWED_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
+  if (!userRole || !ALLOWED_ROLES.includes(userRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
