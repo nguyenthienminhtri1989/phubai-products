@@ -24,13 +24,12 @@ export const authConfig = {
     // 2. Tùy biến JWT để lưu thêm thông tin
     jwt({ token, user, trigger, session }) {
       if (user) {
-        token.role = (user as any).role;
+        token.userRole = (user as any).userRole;
+        token.factoryId = (user as any).factoryId;
         token.processIds = (user as any).processIds;
-        token.accessLevel = (user as any).accessLevel;
         token.username = (user as any).username;
         token.fullName = (user as any).fullName;
-        token.department = (user as any).department;
-        token.extraModules = (user as any).extraModules;
+        token.pagePermissions = (user as any).pagePermissions;
       }
       if (trigger === "update" && session) {
         return { ...token, ...session.user };
@@ -41,13 +40,17 @@ export const authConfig = {
     session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.sub as string;
-        session.user.role = token.role as string;
+        (session.user as any).userRole = token.userRole as string;
+        (session.user as any).factoryId = token.factoryId;
         (session.user as any).processIds = token.processIds as number[];
-        session.user.accessLevel = token.accessLevel as string;
-        session.user.username = token.username as string;
-        session.user.fullName = token.fullName as string;
-        (session.user as any).department = token.department as string;
-        (session.user as any).extraModules = (token.extraModules as string[]) ?? [];
+        (session.user as any).username = token.username as string;
+        (session.user as any).fullName = token.fullName as string;
+        (session.user as any).pagePermissions = token.pagePermissions;
+        // Backward compatibility
+        (session.user as any).role = token.userRole as string;
+        (session.user as any).accessLevel = "MANAGER"; // Default for backward compat
+        (session.user as any).department = "FACTORY";
+        (session.user as any).extraModules = [];
       }
       return session;
     },

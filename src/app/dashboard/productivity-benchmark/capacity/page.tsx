@@ -130,7 +130,7 @@ export default function CapacityPage() {
     XLSX.writeFile(wb, `nang-luc-sx-${benchmarkType.toLowerCase()}-${filterYear}-${filterMonth}.xlsx`);
   }
 
-  const totalCapacityTon = results.reduce((s, r) => s + r.capacityTon, 0);
+  const totalCapacityTon = Math.round(results.reduce((s, r) => s + r.capacityTon, 0));
 
   // --- Tính toán realtime bộ tính toán nhanh ---
   const selectedResult =
@@ -175,7 +175,7 @@ export default function CapacityPage() {
       dataIndex: "capacityTon",
       key: "capacityTon",
       width: 200,
-      render: (v: number) => <Text strong style={{ color: "#1677ff" }}>{v.toFixed(3)}</Text>,
+      render: (v: number) => <Text strong style={{ color: "#1677ff" }}>{Math.round(v).toLocaleString("vi-VN")}</Text>,
     },
     {
       title: "Năng lực tối đa (kg/tháng)",
@@ -291,7 +291,7 @@ export default function CapacityPage() {
               <Card>
                 <Statistic
                   title="Tổng năng lực"
-                  value={totalCapacityTon.toFixed(2)}
+                  value={totalCapacityTon.toLocaleString("vi-VN")}
                   suffix="tấn/tháng"
                   valueStyle={{ color: "#1677ff" }}
                 />

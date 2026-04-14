@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 export async function GET() {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json(
         { error: "Không có quyền truy cập" },
         { status: 403 },
@@ -16,7 +16,10 @@ export async function GET() {
 
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
-      include: { userProcesses: { include: { process: true } } },
+      include: {
+        userProcesses: { include: { process: true } },
+        factory: { select: { id: true, name: true } },
+      },
     });
 
     // Loại bỏ mật khẩu
@@ -28,11 +31,11 @@ export async function GET() {
   }
 }
 
-// 2. POST: Tạo mới (ĐÃ SỬA: Dùng username)
+// 2. POST: Tạo mới
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json(
         { error: "Không có quyền truy cập" },
         { status: 403 },
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { username, password, fullName, role, accessLevel, processIds, department, extraModules } = body;
+    const { username, password, fullName, userRole, processIds, factoryId } = body;
 
     // Validate
     if (!username || !password || !fullName) {
@@ -67,11 +70,9 @@ export async function POST(req: Request) {
         username,
         password: hashedPassword,
         fullName,
-        role: role || "USER",
-        accessLevel: accessLevel || "READ_ONLY",
+        userRole: userRole || "VIEWER",
+        factoryId: factoryId ? parseInt(factoryId) : null,
         isActive: true,
-        department: department || "FACTORY",
-        extraModules: Array.isArray(extraModules) ? extraModules : [],
         userProcesses: {
           create: pIds.map((pid) => ({ processId: pid })),
         },
@@ -86,11 +87,11 @@ export async function POST(req: Request) {
   }
 }
 
-// 3. PUT: Cập nhật (Giữ nguyên logic cũ, chỉ clean code)
+// 3. PUT: Cập nhật
 export async function PUT(req: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json(
         { error: "Không có quyền truy cập" },
         { status: 403 },
@@ -98,16 +99,14 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { id, isActive, role, accessLevel, processIds, newPassword, fullName, department, extraModules } = body;
+    const { id, isActive, userRole, processIds, newPassword, fullName, factoryId } = body;
     const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
 
     const updateData: any = {
       isActive,
-      role,
-      accessLevel,
+      userRole: userRole || "VIEWER",
       fullName,
-      ...(department ? { department } : {}),
-      ...(Array.isArray(extraModules) ? { extraModules } : {}),
+      factoryId: factoryId ? parseInt(factoryId) : null,
     };
 
     if (newPassword && newPassword.trim() !== "") {

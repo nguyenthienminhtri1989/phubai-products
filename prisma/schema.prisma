@@ -10,6 +10,20 @@ datasource db {
 }
 
 // ==========================================
+// ENUM: VAI TRÒ NGƯỜI DÙNG
+// ==========================================
+enum UserRole {
+  ADMIN            // Quản trị hệ thống — full quyền
+  DIRECTOR         // Tổng/Phó Tổng GĐ — xem tất cả, sửa trang được gán
+  FACTORY_MANAGER  // Giám đốc Nhà máy — xem/sửa NM mình, xem NM khác
+  SALES            // Phòng Kinh doanh
+  PROCESS_LEAD     // Trưởng công đoạn
+  STATISTICIAN     // Người thống kê (nhập liệu sản lượng, điện năng)
+  TEAM_LEAD        // Tổ trưởng — nhập liệu + xem CĐ mình
+  VIEWER           // Chỉ xem — mặc định cho user mới
+}
+
+// ==========================================
 // 1. DANH MỤC NHÀ MÁY (Hierarchy)
 // ==========================================
 
@@ -32,6 +46,9 @@ model Factory {
 
   // Định mức năng suất
   benchmarkVersions BenchmarkVersion[]
+
+  // Users assigned to this factory
+  users User[]
 
   @@map("factories")
 }
@@ -202,15 +219,19 @@ model User {
   password String // Lưu hash (đã mã hóa)
   fullName String
 
-  // --- PHÂN QUYỀN ---
-  role        String @default("USER") // "ADMIN" hoặc "USER"
-  accessLevel String @default("READ_ONLY") // "READ_ONLY", "OPERATOR", "MANAGER"
+  // --- PHÂN QUYỀN MỚI ---
+  userRole  UserRole @default(VIEWER) // Vai trò chính của user
+
+  // Gán nhà máy (cho FACTORY_MANAGER, STATISTICIAN, TEAM_LEAD)
+  factoryId Int?
+  factory   Factory? @relation(fields: [factoryId], references: [id])
 
   // --- TRẠNG THÁI ---
   isActive Boolean @default(false) // false: Chờ duyệt, true: Được dùng
 
   // --- PHẠM VI CÔNG VIỆC ---
-  userProcesses UserProcess[] // User thuộc các công đoạn nào?
+  userProcesses   UserProcess[]    // User thuộc các công đoạn nào?
+  pagePermissions PagePermission[] // Quyền xem/sửa từng trang
 
   createdLogs   ProductionLog[] // Quan hệ: Ai nhập dòng này?
   createdAt     DateTime         @default(now())
@@ -219,11 +240,6 @@ model User {
 
   // KD Daily Input
   kdDailyInputs KdDailyInput[]
-
-  // --- PHÂN QUYỀN THEO BỘ PHẬN ---
-  department   Department @default(FACTORY)
-  extraModules String[]   @default([])
-  // extraModules lưu mảng key module: ["kdsx", "energy", "benchmark", "production", "maintenance", "iot"]
 
   @@map("users")
 }
@@ -683,14 +699,6 @@ model MeterGroupCategory {
 // ==========================================
 
 // --- Enums ---
-
-enum Department {
-  FACTORY      // Nhà máy — có userProcesses
-  MANAGEMENT   // Ban giám đốc
-  SALES        // Phòng kinh doanh
-  ACCOUNTING   // Phòng kế toán
-  WAREHOUSE    // Kho
-}
 
 enum BenchmarkType {
   THEORY    // Định mức lý thuyết — tính từ công thức vật lý
@@ -1160,4 +1168,38 @@ model MonthlySummarySnapshot {
   @@unique([factoryId, yearMonth, type])
   @@index([factoryId])
   @@map("monthly_summary_snapshots")
+}
+
+// ==========================================
+// MODULE PHÂN QUYỀN THEO TRANG (Page-Level Permissions)
+// ==========================================
+
+// Danh mục các trang trong hệ thống — seed khi khởi tạo
+model PageRegistry {
+  id        Int    @id @default(autoincrement())
+  pageKey   String @unique   // VD: "production.daily-input", "kdsx.plans"
+  pageName  String           // VD: "Nhập sản lượng", "Kế hoạch tháng"
+  pageGroup String           // VD: "SẢN XUẤT", "KINH DOANH", "ĐIỆN NĂNG"
+  path      String           // VD: "/production/daily-input"
+  sortOrder Int    @default(0) // Thứ tự hiển thị trong bảng quản lý
+
+  permissions PagePermission[]
+
+  @@map("page_registry")
+}
+
+// Bảng phân quyền: User <-> Page (nhiều-nhiều) với 2 cờ VIEW/EDIT
+model PagePermission {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageId Int
+  page   PageRegistry @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  canView Boolean @default(true)  // Được xem trang này?
+  canEdit Boolean @default(false) // Được chỉnh sửa trên trang này?
+
+  @@unique([userId, pageId])
+  @@index([userId])
+  @@map("page_permissions")
 }

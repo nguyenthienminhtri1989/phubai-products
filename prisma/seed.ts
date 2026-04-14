@@ -127,8 +127,7 @@ async function main() {
       username: "admin",
       password: hashedPassword,
       fullName: "Quản trị viên",
-      role: "ADMIN",
-      accessLevel: "MANAGER",
+      userRole: "ADMIN",
       isActive: true,
     },
   });

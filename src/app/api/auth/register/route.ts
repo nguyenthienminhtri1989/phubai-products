@@ -37,14 +37,13 @@ export async function POST(req: Request) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // 4. Tạo User mới
-    // Lưu ý: isActive = false (Chờ duyệt), role = USER
+    // Lưu ý: isActive = false (Chờ duyệt), userRole = VIEWER
     const newUser = await prisma.user.create({
       data: {
         username,
         password: hashedPassword,
         fullName,
-        role: "USER",
-        accessLevel: "READ_ONLY",
+        userRole: "VIEWER",
         isActive: false,
         userProcesses: {
           create: [{ processId: parseInt(processId) }],

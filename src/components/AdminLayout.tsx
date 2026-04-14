@@ -1,7 +1,7 @@
 "use client";
 
 import UserDropdown from "@/components/UserDropdown";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Layout, Menu, Button, theme, Spin } from "antd";
 import {
   MenuFoldOutlined,
@@ -39,16 +39,180 @@ import {
   CheckCircleOutlined,
   UnorderedListOutlined,
   EditOutlined,
+  LockOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { canViewModule, type ModuleKey } from "@/lib/permissions";
+import {
+  canViewPage,
+  type PermUser,
+  type UserRole,
+} from "@/lib/permissions";
 
 const { Header, Sider, Content, Footer } = Layout;
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
+
+// ==========================================
+// Cấu trúc trang — tĩnh, dùng cho sidebar
+// ==========================================
+interface PageDef {
+  pageKey: string;
+  pageGroup: string;
+  path: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+// Tất cả trang — mapping từ PageRegistry
+const ALL_PAGES: PageDef[] = [
+  // TỔNG QUAN
+  { pageKey: "dashboard.overview", pageGroup: "TỔNG QUAN", path: "/", label: "Tổng quan", icon: <DashboardOutlined /> },
+  // SẢN XUẤT
+  { pageKey: "sx.machines", pageGroup: "SẢN XUẤT", path: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
+  { pageKey: "sx.daily-input", pageGroup: "SẢN XUẤT", path: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
+  { pageKey: "sx.iot-import", pageGroup: "SẢN XUẤT", path: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> },
+  { pageKey: "sx.line-setup", pageGroup: "SẢN XUẤT", path: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
+  { pageKey: "sx.line-diagram", pageGroup: "SẢN XUẤT", path: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
+  { pageKey: "sx.qr-machines", pageGroup: "SẢN XUẤT", path: "/machines/qr-machines", label: "QR Code máy", icon: <QrcodeOutlined /> },
+  { pageKey: "sx.machine-stops", pageGroup: "SẢN XUẤT", path: "/production/machine-stops", label: "Ghi nhận dừng máy", icon: <PauseCircleOutlined /> },
+  { pageKey: "sx.stop-history", pageGroup: "SẢN XUẤT", path: "/production/stop-history", label: "Lịch sử dừng máy", icon: <HistoryOutlined /> },
+  { pageKey: "sx.maintenance", pageGroup: "SẢN XUẤT", path: "/dashboard/maintenance", label: "Nhật ký bảo dưỡng", icon: <ScheduleOutlined /> },
+  // ĐỊNH MỨC
+  { pageKey: "benchmark.versions", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
+  { pageKey: "benchmark.capacity", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
+  { pageKey: "benchmark.comparison", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
+  // ĐIỆN NĂNG
+  { pageKey: "energy.prices", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/prices", label: "Đơn giá điện", icon: <ThunderboltOutlined /> },
+  { pageKey: "energy.daily-input", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện", icon: <UploadOutlined /> },
+  { pageKey: "energy.reports", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ", icon: <LineChartOutlined /> },
+  { pageKey: "energy.live", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/live", label: "Giám sát trực tiếp", icon: <DashboardOutlined /> },
+  // KINH DOANH
+  { pageKey: "kdsx.dashboard", pageGroup: "KINH DOANH", path: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
+  { pageKey: "kdsx.customers", pageGroup: "KINH DOANH", path: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
+  { pageKey: "kdsx.sales-orders", pageGroup: "KINH DOANH", path: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
+  { pageKey: "kdsx.order-progress", pageGroup: "KINH DOANH", path: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
+  { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
+  { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
+  { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
+  { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
+  // BÁO CÁO
+  { pageKey: "report.history", pageGroup: "BÁO CÁO", path: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
+  { pageKey: "report.production", pageGroup: "BÁO CÁO", path: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
+  // DANH MỤC SX
+  { pageKey: "catalog.factories", pageGroup: "DANH MỤC", path: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
+  { pageKey: "catalog.processes", pageGroup: "DANH MỤC", path: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
+  { pageKey: "catalog.items", pageGroup: "DANH MỤC", path: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+  { pageKey: "catalog.shifts", pageGroup: "DANH MỤC", path: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
+  { pageKey: "catalog.stop-cats", pageGroup: "DANH MỤC", path: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
+  // DANH MỤC ĐIỆN NĂNG
+  { pageKey: "catalog.energy-type", pageGroup: "DANH MỤC", path: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
+  { pageKey: "catalog.meter-group", pageGroup: "DANH MỤC", path: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
+  { pageKey: "catalog.meters", pageGroup: "DANH MỤC", path: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+  // HỆ THỐNG
+  { pageKey: "system.users", pageGroup: "HỆ THỐNG", path: "/users", label: "Quản lý Tài khoản", icon: <UserOutlined /> },
+  { pageKey: "system.permissions", pageGroup: "HỆ THỐNG", path: "/admin/permissions", label: "Phân quyền", icon: <LockOutlined /> },
+  { pageKey: "system.backup", pageGroup: "HỆ THỐNG", path: "/admin/backup", label: "Sao lưu & Phục hồi", icon: <CloudSyncOutlined /> },
+  { pageKey: "system.feedback", pageGroup: "HỆ THỐNG", path: "/feedback", label: "Góp ý & Đề xuất", icon: <CommentOutlined /> },
+];
+
+// ==========================================
+// Sidebar Group Definitions
+// ==========================================
+interface SidebarGroup {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  subGroups?: {
+    key: string;
+    label: string;
+    icon: React.ReactNode;
+    pageKeys: string[];
+  }[];
+  pageKeys?: string[];
+}
+
+const SIDEBAR_GROUPS: SidebarGroup[] = [
+  {
+    key: "group-sx",
+    label: "SẢN XUẤT",
+    icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
+    subGroups: [
+      {
+        key: "sub-sx",
+        label: "Quản lý sản xuất",
+        icon: <AppstoreOutlined />,
+        pageKeys: ["sx.machines", "sx.daily-input", "sx.iot-import", "sx.line-setup", "sx.line-diagram", "sx.qr-machines"],
+      },
+      {
+        key: "sub-stops",
+        label: "Dừng máy & Bảo dưỡng",
+        icon: <PauseCircleOutlined />,
+        pageKeys: ["sx.machine-stops", "sx.stop-history", "sx.maintenance"],
+      },
+      {
+        key: "sub-benchmark",
+        label: "Định mức Năng suất",
+        icon: <LineChartOutlined />,
+        pageKeys: ["benchmark.versions", "benchmark.capacity", "benchmark.comparison"],
+      },
+    ],
+  },
+  {
+    key: "group-mobile",
+    label: "MOBILE",
+    icon: <MobileOutlined style={{ fontSize: 10 }} />,
+    pageKeys: [], // Mobile pages don't need permission check — they use their own auth
+  },
+  {
+    key: "group-energy",
+    label: "ĐIỆN NĂNG",
+    icon: <ThunderboltOutlined style={{ fontSize: 10 }} />,
+    pageKeys: ["energy.prices", "energy.daily-input", "energy.reports", "energy.live"],
+  },
+  {
+    key: "group-kdsx",
+    label: "KINH DOANH",
+    icon: <BarChartOutlined style={{ fontSize: 10 }} />,
+    pageKeys: [
+      "kdsx.dashboard", "kdsx.customers", "kdsx.sales-orders", "kdsx.order-progress",
+      "kdsx.plans", "kdsx.actuals", "kdsx.sales-tracking", "kdsx.daily-input",
+    ],
+  },
+  {
+    key: "group-reports",
+    label: "BÁO CÁO",
+    icon: <LineChartOutlined style={{ fontSize: 10 }} />,
+    pageKeys: ["report.history", "report.production"],
+  },
+  {
+    key: "group-catalog",
+    label: "DANH MỤC",
+    icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
+    subGroups: [
+      {
+        key: "sub-cat-sx",
+        label: "DM Sản xuất",
+        icon: <DatabaseOutlined />,
+        pageKeys: ["catalog.factories", "catalog.processes", "catalog.items", "catalog.shifts", "catalog.stop-cats"],
+      },
+      {
+        key: "sub-cat-energy",
+        label: "DM Điện năng",
+        icon: <ThunderboltOutlined />,
+        pageKeys: ["catalog.energy-type", "catalog.meter-group", "catalog.meters"],
+      },
+    ],
+  },
+  {
+    key: "group-system",
+    label: "HỆ THỐNG",
+    icon: <SafetyCertificateOutlined style={{ fontSize: 10 }} />,
+    pageKeys: ["system.users", "system.permissions", "system.backup", "system.feedback"],
+  },
+];
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const { data: session, status } = useSession();
@@ -87,20 +251,119 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   }
 
   // ========================================================
-  // PHÂN QUYỀN
+  // PHÂN QUYỀN — Dùng permission engine mới
   // ========================================================
-  const userRole = (session?.user as any)?.role ?? "USER";
-  const userDepartment = (session?.user as any)?.department ?? "FACTORY";
-  const userExtraModules: string[] = (session?.user as any)?.extraModules ?? [];
-
+  const userRole = ((session?.user as any)?.userRole ?? "VIEWER") as UserRole;
   const isAdmin = userRole === "ADMIN";
+  const pagePermsRaw: { pageKey: string; canView: boolean; canEdit: boolean }[] =
+    (session?.user as any)?.pagePermissions ?? [];
 
-  const canView = (module: ModuleKey) =>
-    canViewModule(userDepartment, userExtraModules, userRole, module);
+  const permUser: PermUser = {
+    userRole,
+    factoryId: (session?.user as any)?.factoryId ?? null,
+    processIds: (session?.user as any)?.processIds ?? [],
+    pagePermissions: pagePermsRaw,
+  };
+
+  // Helper: check if user can see a page
+  const canView = (pageKey: string): boolean => {
+    const pageDef = ALL_PAGES.find((p) => p.pageKey === pageKey);
+    if (!pageDef) return false;
+    return canViewPage(permUser, pageKey, pageDef.pageGroup);
+  };
 
   // ========================================================
-  // CẤU HÌNH MENU — Phân nhóm rõ ràng
+  // BUILD MENU ITEMS — Lọc theo quyền
   // ========================================================
+  const makeGroupLabel = (text: string) => (
+    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.45)" }}>
+      {text}
+    </span>
+  );
+
+  const buildMenuItems = (): any[] => {
+    const items: any[] = [];
+
+    // Tổng quan — luôn hiện
+    const overviewPage = ALL_PAGES.find((p) => p.pageKey === "dashboard.overview");
+    if (overviewPage && canView("dashboard.overview")) {
+      items.push({
+        key: overviewPage.path,
+        icon: overviewPage.icon,
+        label: overviewPage.label,
+      });
+    }
+
+    // Build sidebar groups
+    for (const group of SIDEBAR_GROUPS) {
+      // Build children for this group
+      let groupChildren: any[] = [];
+
+      if (group.subGroups) {
+        // Has sub-groups
+        for (const sub of group.subGroups) {
+          const subChildren = sub.pageKeys
+            .filter((pk) => canView(pk))
+            .map((pk) => {
+              const p = ALL_PAGES.find((pp) => pp.pageKey === pk)!;
+              return { key: p.path, label: p.label, icon: p.icon };
+            });
+
+          if (subChildren.length > 0) {
+            groupChildren.push({
+              key: sub.key,
+              icon: sub.icon,
+              label: sub.label,
+              children: subChildren,
+            });
+          }
+        }
+      } else if (group.pageKeys && group.pageKeys.length > 0) {
+        // Flat page list
+        groupChildren = group.pageKeys
+          .filter((pk) => canView(pk))
+          .map((pk) => {
+            const p = ALL_PAGES.find((pp) => pp.pageKey === pk)!;
+            return { key: p.path, label: p.label, icon: p.icon };
+          });
+      }
+
+      // Special: Mobile group — always show, no permission check
+      if (group.key === "group-mobile") {
+        groupChildren = [
+          { key: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
+          { key: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
+          { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
+          { key: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
+        ];
+      }
+
+      // Special: Hệ thống group — filter admin-only items
+      if (group.key === "group-system") {
+        groupChildren = groupChildren.filter((child) => {
+          // Quản lý Tài khoản, Phân quyền, Sao lưu chỉ cho ADMIN
+          const adminOnlyPaths = ["/users", "/admin/permissions", "/admin/backup"];
+          if (adminOnlyPaths.includes(child.key) && !isAdmin) return false;
+          return true;
+        });
+      }
+
+      // Only add group if it has visible children
+      if (groupChildren.length > 0) {
+        items.push({ type: "divider" });
+        items.push({
+          key: group.key,
+          icon: group.icon,
+          label: makeGroupLabel(group.label),
+          children: groupChildren,
+        });
+      }
+    }
+
+    return items;
+  };
+
+  const menuItems = buildMenuItems();
 
   // Tự động mở nhóm chứa trang hiện tại
   const findOpenKeys = (items: any[], path: string): string[] => {
@@ -118,251 +381,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     return [];
   };
 
-  // Helper tạo label cho group header có thể thu/mở
-  const makeGroupLabel = (text: string) => (
-    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.45)" }}>
-      {text}
-    </span>
-  );
-  const menuItems: any[] = [
-    // ── TỔNG QUAN ──
-    {
-      key: "/",
-      icon: <DashboardOutlined />,
-      label: "Tổng quan",
-    },
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ▸ SẢN XUẤT
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    { type: "divider" },
-    {
-      key: "group-sx",
-      icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
-      label: makeGroupLabel("SẢN XUẤT"),
-      style: { cursor: "pointer" },
-      children: [],
-    },
-
-    {
-      key: "sub-sx",
-      icon: <AppstoreOutlined />,
-      label: "Quản lý sản xuất",
-      children: [
-        { key: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
-        { key: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
-        { key: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
-        { key: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
-        { key: "/machines/qr-machines", label: "QR Code máy", icon: <QrcodeOutlined /> },
-      ],
-    },
-    {
-      key: "sub-stops",
-      icon: <PauseCircleOutlined />,
-      label: "Dừng máy & Bảo dưỡng",
-      children: [
-        { key: "/production/machine-stops", label: "Ghi nhận dừng máy", icon: <PauseCircleOutlined /> },
-        { key: "/production/stop-history", label: "Lịch sử dừng máy", icon: <HistoryOutlined /> },
-        { key: "/dashboard/maintenance", label: "Nhật ký bảo dưỡng", icon: <ScheduleOutlined /> },
-      ],
-    },
-  ];
-
-  // Children của group SẢN XUẤT = sub-sx, sub-stops (không có mobile nữa)
-  const sxGroupItem = menuItems.find((i: any) => i.key === "group-sx");
-  if (sxGroupItem) {
-    sxGroupItem.children = [
-      menuItems.find((i: any) => i.key === "sub-sx"),
-      menuItems.find((i: any) => i.key === "sub-stops"),
-    ].filter(Boolean);
-  }
-  // Xoá các item đã chuyển vào group khỏi root
-  const rootMenuItems = menuItems.filter(
-    (i: any) => !["sub-sx", "sub-stops"].includes(i.key)
-  );
-  menuItems.length = 0;
-  rootMenuItems.forEach((i: any) => menuItems.push(i));
-
-  // Import IoT — chèn vào sub-sx (nằm trong group-sx)
-  if (canView("iot")) {
-    const groupSx = menuItems.find((item: any) => item.key === "group-sx");
-    const subSx = groupSx?.children?.find((item: any) => item.key === "sub-sx");
-    if (subSx?.children) {
-      subSx.children.splice(2, 0, { key: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> });
-    }
-  }
-
-  // Định mức Năng suất — thêm vào children của group-sx
-  if (canView("benchmark")) {
-    const groupSx = menuItems.find((item: any) => item.key === "group-sx");
-    if (groupSx?.children) {
-      groupSx.children.push({
-        key: "sub-benchmark",
-        icon: <LineChartOutlined />,
-        label: "Định mức Năng suất",
-        children: [
-          { key: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
-          { key: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
-          { key: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
-        ],
-      });
-    }
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ MOBILE
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  menuItems.push(
-    { type: "divider" },
-    {
-      key: "group-mobile",
-      icon: <MobileOutlined style={{ fontSize: 10 }} />,
-      label: makeGroupLabel("MOBILE"),
-      children: [
-        { key: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
-        { key: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
-        { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
-        { key: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
-      ],
-    }
-  );
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ ĐIỆN NĂNG
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (canView("energy")) {
-    menuItems.push(
-      { type: "divider" },
-      {
-        key: "group-energy",
-        icon: <ThunderboltOutlined style={{ fontSize: 10 }} />,
-        label: makeGroupLabel("ĐIỆN NĂNG"),
-        children: [
-          { key: "/dashboard/energy/prices", label: "Đơn giá điện", icon: <ThunderboltOutlined /> },
-          { key: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện", icon: <UploadOutlined /> },
-          { key: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ", icon: <LineChartOutlined /> },
-          { key: "/dashboard/energy/live", label: "Giám sát trực tiếp", icon: <DashboardOutlined /> },
-        ],
-      }
-    );
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ KINH DOANH
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (canView("kdsx")) {
-    menuItems.push(
-      { type: "divider" },
-      {
-        key: "group-kdsx",
-        icon: <BarChartOutlined style={{ fontSize: 10 }} />,
-        label: makeGroupLabel("KINH DOANH"),
-        children: [
-          { key: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
-          { key: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
-          { key: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
-          { key: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
-          { key: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
-          { key: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
-          { key: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
-          { key: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
-        ],
-      }
-    );
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ BÁO CÁO
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (isAdmin || (session?.user as any)?.accessLevel === "MANAGER") {
-    menuItems.push(
-      { type: "divider" },
-      {
-        key: "group-reports",
-        icon: <LineChartOutlined style={{ fontSize: 10 }} />,
-        label: makeGroupLabel("BÁO CÁO"),
-        children: [
-          { key: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
-          { key: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
-        ],
-      }
-    );
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ DANH MỤC DỮ LIỆU
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  menuItems.push(
-    { type: "divider" },
-    {
-      key: "group-catalog",
-      icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
-      label: makeGroupLabel("DANH MỤC"),
-      children: [
-        {
-          key: "sub-cat-sx",
-          icon: <DatabaseOutlined />,
-          label: "DM Sản xuất",
-          children: [
-            { key: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
-            { key: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
-            { key: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-            { key: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
-            { key: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
-          ],
-        },
-        {
-          key: "sub-cat-energy",
-          icon: <ThunderboltOutlined />,
-          label: "DM Điện năng",
-          children: [
-            { key: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
-            { key: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
-            { key: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
-          ],
-        },
-      ],
-    }
-  );
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // ▸ HỆ THỐNG
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const systemChildren: any[] = [];
-
-
-
-  if (isAdmin) {
-    systemChildren.push(
-      { key: "/users", icon: <UserOutlined />, label: "Quản lý Tài khoản" },
-      { key: "/admin/backup", icon: <CloudSyncOutlined />, label: "Sao lưu & Phục hồi" }
-    );
-  }
-
-  systemChildren.push(
-    { key: "/feedback", icon: <CommentOutlined />, label: "Góp ý & Đề xuất" },
-    { key: "/settings", icon: <SettingOutlined />, label: "Cấu hình chung" }
-  );
-
-  menuItems.push(
-    { type: "divider" },
-    {
-      key: "group-system",
-      icon: <SafetyCertificateOutlined style={{ fontSize: 10 }} />,
-      label: makeGroupLabel("HỆ THỐNG"),
-      children: systemChildren,
-    }
-  );
-
   // Tính openKeys mặc định (mở group + submenu chứa trang hiện tại)
   const defaultOpenKeys = (() => {
     const keys: string[] = [];
-    const groupKeys = ["group-sx", "group-mobile", "group-energy", "group-kdsx", "group-reports", "group-catalog", "group-system"];
+    const groupKeys = SIDEBAR_GROUPS.map((g) => g.key);
     // Luôn mở tất cả group theo mặc định
-    groupKeys.forEach(k => keys.push(k));
+    groupKeys.forEach((k) => keys.push(k));
     // Thêm submenu đang active
     const activeSubKeys = findOpenKeys(menuItems, pathname);
-    activeSubKeys.forEach(k => { if (!keys.includes(k)) keys.push(k); });
+    activeSubKeys.forEach((k) => {
+      if (!keys.includes(k)) keys.push(k);
+    });
     return keys;
   })();
 
