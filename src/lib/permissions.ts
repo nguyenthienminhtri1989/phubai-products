@@ -65,8 +65,8 @@ const ROLE_DEFAULTS: Record<UserRole, RoleDefault> = {
     description: "Xem tất cả, sửa theo trang được gán",
   },
   FACTORY_MANAGER: {
-    viewGroups: ["SẢN XUẤT", "ĐỊNH MỨC", "BÁO CÁO", "DANH MỤC", "TỔNG QUAN"],
-    editGroups: ["SẢN XUẤT", "ĐỊNH MỨC"],
+    viewGroups: ["SẢN XUẤT", "ĐỊNH MỨC", "BÁO CÁO", "DANH MỤC", "TỔNG QUAN", "MOBILE"],
+    editGroups: ["SẢN XUẤT", "ĐỊNH MỨC", "MOBILE"],
     description: "Xem/sửa NM mình, xem NM khác (data filter theo factoryId)",
   },
   SALES: {
@@ -75,18 +75,18 @@ const ROLE_DEFAULTS: Record<UserRole, RoleDefault> = {
     description: "Module Kinh doanh",
   },
   PROCESS_LEAD: {
-    viewGroups: ["SẢN XUẤT", "ĐỊNH MỨC", "BÁO CÁO", "TỔNG QUAN"],
-    editGroups: ["SẢN XUẤT"],
+    viewGroups: ["SẢN XUẤT", "ĐỊNH MỨC", "BÁO CÁO", "TỔNG QUAN", "MOBILE"],
+    editGroups: ["SẢN XUẤT", "MOBILE"],
     description: "Xem SX tất cả CĐ, sửa CĐ mình (data filter theo processIds)",
   },
   STATISTICIAN: {
-    viewGroups: ["SẢN XUẤT", "ĐIỆN NĂNG", "TỔNG QUAN"],
-    editGroups: ["SẢN XUẤT", "ĐIỆN NĂNG"],
+    viewGroups: ["SẢN XUẤT", "ĐIỆN NĂNG", "TỔNG QUAN", "MOBILE"],
+    editGroups: ["SẢN XUẤT", "ĐIỆN NĂNG", "MOBILE"],
     description: "Nhập liệu SL + điện năng cho NM được phân công",
   },
   TEAM_LEAD: {
-    viewGroups: ["SẢN XUẤT", "TỔNG QUAN"],
-    editGroups: ["SẢN XUẤT"],
+    viewGroups: ["SẢN XUẤT", "TỔNG QUAN", "MOBILE"],
+    editGroups: ["SẢN XUẤT", "MOBILE"],
     description: "Xem CĐ mình, nhập liệu CĐ mình (data filter theo processIds)",
   },
   VIEWER: {

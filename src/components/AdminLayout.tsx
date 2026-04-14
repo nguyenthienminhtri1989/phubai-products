@@ -98,6 +98,11 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
   { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
+  // MOBILE
+  { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
+  { pageKey: "mobile.report", pageGroup: "MOBILE", path: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
+  { pageKey: "mobile.stops", pageGroup: "MOBILE", path: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
+  { pageKey: "mobile.maintenance", pageGroup: "MOBILE", path: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
   // BÁO CÁO
   { pageKey: "report.history", pageGroup: "BÁO CÁO", path: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
   { pageKey: "report.production", pageGroup: "BÁO CÁO", path: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
@@ -164,7 +169,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-mobile",
     label: "MOBILE",
     icon: <MobileOutlined style={{ fontSize: 10 }} />,
-    pageKeys: [], // Mobile pages don't need permission check — they use their own auth
+    pageKeys: ["mobile.input", "mobile.report", "mobile.stops", "mobile.maintenance"],
   },
   {
     key: "group-energy",
@@ -328,15 +333,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           });
       }
 
-      // Special: Mobile group — always show, no permission check
-      if (group.key === "group-mobile") {
-        groupChildren = [
-          { key: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
-          { key: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
-          { key: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
-          { key: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
-        ];
-      }
+
 
       // Special: Hệ thống group — filter admin-only items
       if (group.key === "group-system") {
