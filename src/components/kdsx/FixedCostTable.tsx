@@ -75,7 +75,7 @@ export default function FixedCostTable({
 
   function updateAmount(costType: string, value: number | null) {
     setRows((prev) =>
-      prev.map((r) => r.costType === costType ? { ...r, amountVnd: (value ?? 0) * 1e9 } : r)
+      prev.map((r) => r.costType === costType ? { ...r, amountVnd: value ?? 0 } : r)
     );
   }
 
@@ -164,20 +164,20 @@ export default function FixedCostTable({
     {
       title: "Số tiền (VNĐ)",
       key: "amountVnd",
-      width: 200,
+      width: 220,
       render: (_: unknown, row: FixedCostRow) =>
         readonly ? (
           <Text>{row.amountVnd.toLocaleString("vi-VN")}</Text>
         ) : (
           <InputNumber
-            value={row.amountVnd / 1e9}
+            value={row.amountVnd}
             onChange={(v) => updateAmount(row.costType, v)}
             formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
             parser={(v) => parseFloat(v!.replace(/,/g, "")) as any}
             min={0}
-            step={0.001}
+            step={100000000}
             style={{ width: "100%" }}
-            addonAfter="tỷ"
+            placeholder="VD: 1,900,000,000"
           />
         ),
     },
