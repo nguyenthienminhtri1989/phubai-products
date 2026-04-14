@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
-  const userRole = session.user.role;
+  const userRole = (session.user as any)?.userRole as string | undefined;
   const userProcessIds: number[] = (session.user as any).processIds || [];
 
   const machineWhere: any = {};

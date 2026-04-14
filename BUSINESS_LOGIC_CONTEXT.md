@@ -1425,3 +1425,49 @@ src/app/api/productivity-benchmark/benchmarks/[id]/route.ts       — PUT + DELE
 
 - Sửa/xóa benchmark của phiên bản đang `isActive` vẫn bị block (intentional)
 - Để sửa phiên bản active → phải clone ra phiên bản nháp trước
+
+---
+
+## TOÀN HỆ THỐNG — Migrate permission sang hệ thống mới (userRole)
+
+**Status:** ✅ Completed 2026-04-14
+
+### What was built
+
+Migrate toàn bộ ~35 API route còn sót từ hệ thống phân quyền cũ (`?.role` / `accessLevel`) sang hệ thống mới (`?.userRole`). Sau đợt này KHÔNG còn file nào trong `src/app/api` còn dùng `accessLevel` hay `session.user.role`.
+
+### Files modified (theo nhóm)
+
+**ADMIN-only routes** — thay `?.role !== "ADMIN"` → `?.userRole !== "ADMIN"`:
+- `factories/route.ts`, `factories/[id]/route.ts`
+- `processes/route.ts`, `processes/[id]/route.ts`
+- `production/stop-categories/route.ts`, `production/stop-categories/[id]/route.ts`
+- `shift-categories/route.ts`, `shift-categories/[code]/route.ts`
+- `energy/meters/route.ts`, `energy/prices/route.ts`, `energy/substations/route.ts`
+- `energy-type-categories/route.ts`, `energy-type-categories/[code]/route.ts`
+- `meter-group-categories/route.ts`, `meter-group-categories/[id]/route.ts`
+- `items/import/route.ts`, `admin/backup/route.ts`, `admin/backup-sql/route.ts`
+- `kdsx/monthly-plans/[id]/unapprove/route.ts`
+
+**ALLOWED_ROLES routes** (`["ADMIN","DIRECTOR","FACTORY_MANAGER"]`) — thay `role !== "ADMIN" && accessLevel !== "MANAGER"`:
+- `iot/import/route.ts`, `iot/import-logs/route.ts`, `iot/mapping/route.ts`
+- `iot/parse-excel/route.ts`, `iot/sources/route.ts`, `iot/sources/[id]/route.ts`
+- `productivity-benchmark/benchmarks/bulk/route.ts`
+- `production/lines/route.ts`, `production/lines/[id]/route.ts`
+
+**Special cases**:
+- `kd-daily-input/route.ts`, `production/daily-input/route.ts` POST — bỏ check READ_ONLY, cho phép mọi user đã login ghi nhập liệu
+- `production/daily-input/route.ts` DELETE — dọn fallback `role` cũ
+- `machines/batch/route.ts` — `isAdmin`/`isManager` dùng `userRole` mới
+- `production/machine-stops/route.ts`, `machine-stops/stats/route.ts`, `machine-stops/[id]/route.ts` — `userRole` cho data-level filtering
+
+### Key business logic
+
+- ADMIN-only: các bảng danh mục (factories, processes, categories, items, energy, backup...)
+- ALLOWED_ROLES `["ADMIN","DIRECTOR","FACTORY_MANAGER"]`: IoT import/mapping, production lines, benchmark bulk
+- Write nhập liệu sản xuất: mọi user authenticated (không phân biệt role)
+- Sau migration: `accessLevel` và `session.user.role` KHÔNG còn được đọc ở bất kỳ API route nào
+
+### Known limitations
+
+- Frontend pages (`.tsx`) chưa được scan — một số trang vẫn dùng `session?.user?.role === "ADMIN"` để ẩn/hiện UI button. Đây là acceptable vì chỉ ảnh hưởng hiển thị, không ảnh hưởng bảo mật (backend đã chuẩn)

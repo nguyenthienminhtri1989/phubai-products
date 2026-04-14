@@ -11,7 +11,7 @@ const execPromise = util.promisify(exec);
 export async function GET() {
     try {
         const session = await auth();
-        if (session?.user?.role !== "ADMIN") {
+        if ((session?.user as any)?.userRole !== "ADMIN") {
             return NextResponse.json(
                 { error: "Chỉ Admin mới được backup" },
                 { status: 403 }
@@ -46,7 +46,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
     try {
         const session = await auth();
-        if (session?.user?.role !== "ADMIN") {
+        if ((session?.user as any)?.userRole !== "ADMIN") {
             return NextResponse.json(
                 { error: "Chỉ Admin mới được restore" },
                 { status: 403 }

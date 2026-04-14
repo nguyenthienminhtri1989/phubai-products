@@ -10,7 +10,7 @@ interface Params {
 export async function PUT(req: Request, { params }: Params) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Không có quyền thực hiện thao tác này" }, { status: 403 });
     }
 
@@ -69,7 +69,7 @@ export async function PUT(req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Không có quyền thực hiện thao tác này" }, { status: 403 });
     }
 

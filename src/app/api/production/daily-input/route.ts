@@ -72,10 +72,7 @@ export async function POST(request: Request) {
     const dateObj = normalizeDate(recordDate);
 
     // 3. Kiểm tra quyền
-    const accessLevel = (session.user as any).accessLevel;
-    if (session.user.role !== "ADMIN" && accessLevel === "READ_ONLY") {
-      return NextResponse.json({ error: "Chỉ có quyền xem" }, { status: 403 });
-    }
+    // Mọi user đã đăng nhập đều được ghi nhập liệu sản xuất
 
     const dataToSave = {
       machineId,
@@ -153,13 +150,8 @@ export async function DELETE(request: Request) {
 
   // Phân quyền: ADMIN hoặc các role quản lý mới được xóa
   const userRole = (session.user as any)?.userRole as string | undefined;
-  const role = (session.user as any)?.role as string | undefined;
   const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
-  const canDelete =
-    role === "ADMIN" ||
-    (userRole && ALLOWED_DELETE_ROLES.includes(userRole));
-
-  if (!canDelete) {
+  if (!userRole || !ALLOWED_DELETE_ROLES.includes(userRole)) {
     return NextResponse.json({ error: "Không có quyền xóa bản ghi" }, { status: 403 });
   }
 

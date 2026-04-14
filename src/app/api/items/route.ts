@@ -36,7 +36,8 @@ export async function POST(req: Request) {
   try {
     const session = await auth();
     // Chỉ ADMIN mới được tạo mặt hàng
-    if (session?.user?.role !== "ADMIN") {
+    const userRole = (session?.user as any)?.userRole as string | undefined;
+    if (userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được thêm mặt hàng" }, { status: 403 });
     }
 

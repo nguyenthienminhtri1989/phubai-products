@@ -23,7 +23,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được thêm nhà máy" }, { status: 403 });
     }
 

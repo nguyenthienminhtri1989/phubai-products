@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if ((session.user as any)?.userRole !== "ADMIN") {
     return NextResponse.json({ error: "Chỉ Admin mới được thực hiện thao tác này" }, { status: 403 });
   }
 

@@ -15,8 +15,9 @@ export async function POST(req: Request) {
 
     // Batch update nhiều máy (từ trang Machines) chỉ dành cho ADMIN/MANAGER
     // Còn update 1 máy (từ trang nhập sản lượng) thì ai cũng được
-    const isAdmin = (session.user as any).role === "ADMIN";
-    const isManager = (session.user as any).accessLevel === "MANAGER";
+    const _batchRole = (session.user as any)?.userRole as string | undefined;
+    const isAdmin = _batchRole === "ADMIN";
+    const isManager = ["ADMIN","DIRECTOR","FACTORY_MANAGER"].includes(_batchRole ?? "");
     if (machineIds.length > 1 && !isAdmin && !isManager) {
       return NextResponse.json(
         { error: "Chỉ Admin hoặc Manager mới được điều phối hàng loạt" },

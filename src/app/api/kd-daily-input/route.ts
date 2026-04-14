@@ -66,10 +66,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
 
     // Kiểm tra quyền
-    const accessLevel = (session.user as any).accessLevel;
-    if (session.user.role !== "ADMIN" && accessLevel === "READ_ONLY") {
-      return NextResponse.json({ error: "Chỉ có quyền xem" }, { status: 403 });
-    }
+    // Mọi user đã đăng nhập đều được ghi nhập liệu sản xuất
 
     const body = await request.json();
     const { date, factoryId, items } = body;

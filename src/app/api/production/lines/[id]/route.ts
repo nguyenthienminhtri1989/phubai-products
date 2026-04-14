@@ -49,8 +49,7 @@ export async function PUT(
       return NextResponse.json({ error: "Chua dang nhap" }, { status: 401 });
     }
     if (
-      session.user.role !== "ADMIN" &&
-      session.user.accessLevel !== "MANAGER"
+      !["ADMIN","DIRECTOR","FACTORY_MANAGER"].includes((session.user as any)?.userRole)
     ) {
       return NextResponse.json({ error: "Khong co quyen" }, { status: 403 });
     }
@@ -135,7 +134,7 @@ export async function DELETE(
 ) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json(
         { error: "Chi Admin duoc xoa" },
         { status: 403 },

@@ -22,8 +22,7 @@ export async function POST(req: Request) {
     if (!session?.user)
       return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
     if (
-      (session.user as any).role !== "ADMIN" &&
-      (session.user as any).accessLevel !== "MANAGER"
+      !["ADMIN","DIRECTOR","FACTORY_MANAGER"].includes((session.user as any)?.userRole)
     )
       return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
 

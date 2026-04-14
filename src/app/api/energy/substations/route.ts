@@ -20,7 +20,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được thêm trạm biến áp" }, { status: 403 });
     }
 
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được xóa trạm biến áp" }, { status: 403 });
     }
 
@@ -58,7 +58,7 @@ export async function DELETE(request: Request) {
 export async function PUT(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được sửa trạm biến áp" }, { status: 403 });
     }
 

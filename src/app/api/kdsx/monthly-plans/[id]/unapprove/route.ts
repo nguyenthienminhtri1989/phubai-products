@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || (session.user as any)?.role !== "ADMIN") {
+  if (!session || (session.user as any)?.userRole !== "ADMIN") {
     return NextResponse.json({ error: "Chỉ Admin mới được hủy duyệt" }, { status: 403 });
   }
 

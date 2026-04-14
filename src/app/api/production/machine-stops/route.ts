@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const page = parseInt(searchParams.get("page") || "1");
   const pageSize = parseInt(searchParams.get("pageSize") || "20");
 
-  const userRole = session.user.role;
+  const userRole = (session.user as any)?.userRole as string | undefined;
   const userProcessIds: number[] = (session.user as any).processIds || [];
 
   // Build machine filter
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Thời gian dừng không được trong tương lai" }, { status: 400 });
     }
 
-    const userRole = session.user.role;
+    const userRole = (session.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session.user as any).processIds || [];
 
     // Authorization: non-admin can only add stops for their process machines

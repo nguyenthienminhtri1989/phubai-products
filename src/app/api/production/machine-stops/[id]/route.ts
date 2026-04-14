@@ -85,7 +85,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   const userId = parseInt(session.user.id);
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = (session.user as any)?.userRole === "ADMIN";
   const isReporter = existing.reportedById === userId;
 
   if (!isAdmin && !isReporter) {

@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được thêm đồng hồ điện" }, { status: 403 });
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được xóa đồng hồ điện" }, { status: 403 });
     }
 
@@ -76,7 +76,7 @@ export async function DELETE(request: Request) {
 export async function PUT(request: Request) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được sửa đồng hồ điện" }, { status: 403 });
     }
 

@@ -66,8 +66,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chua dang nhap" }, { status: 401 });
     }
     if (
-      session.user.role !== "ADMIN" &&
-      session.user.accessLevel !== "MANAGER"
+      !["ADMIN","DIRECTOR","FACTORY_MANAGER"].includes((session.user as any)?.userRole)
     ) {
       return NextResponse.json({ error: "Khong co quyen" }, { status: 403 });
     }

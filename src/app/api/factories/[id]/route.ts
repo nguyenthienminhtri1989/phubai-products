@@ -10,7 +10,7 @@ export async function PUT(
 ) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được sửa nhà máy" }, { status: 403 });
     }
 
@@ -43,7 +43,7 @@ export async function DELETE(
 ) {
   try {
     const session = await auth();
-    if (session?.user?.role !== "ADMIN") {
+    if ((session?.user as any)?.userRole !== "ADMIN") {
       return NextResponse.json({ error: "Chỉ Admin mới được xóa nhà máy" }, { status: 403 });
     }
 
