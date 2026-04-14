@@ -32,9 +32,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userRole = (session.user as any)?.role;
-  const accessLevel = (session.user as any)?.accessLevel;
-  if (userRole !== "ADMIN" && accessLevel !== "MANAGER") {
+  const userRole = (session.user as any)?.userRole as string | undefined;
+  const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
+  if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -52,10 +52,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userRole = (session.user as any)?.role;
-  const accessLevel = (session.user as any)?.accessLevel;
+  const userRole = (session.user as any)?.userRole as string | undefined;
+  const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   const isAdmin = userRole === "ADMIN";
-  const isManager = accessLevel === "MANAGER";
+  const isManager = userRole ? KDSX_EDIT_ROLES.includes(userRole) : false;
 
   const { id } = await params;
   const plan = await prisma.monthlyPlan.findUnique({ where: { id: Number(id) } });

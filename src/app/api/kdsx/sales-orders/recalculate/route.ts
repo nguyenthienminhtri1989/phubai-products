@@ -8,7 +8,7 @@ import { recalculateAllocation } from "@/lib/allocation-engine";
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userRole = (session.user as any)?.role;
+  const userRole = (session.user as any)?.userRole as string | undefined;
   if (userRole !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden — chỉ Admin" }, { status: 403 });
   }
