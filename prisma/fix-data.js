@@ -45,6 +45,7 @@ async function main() {
     { pageKey: "kdsx.actuals", pageName: "Thực hiện tháng", pageGroup: "KINH DOANH", path: "/kdsx/actuals", sortOrder: 405 },
     { pageKey: "kdsx.sales-tracking", pageName: "Theo dõi đơn hàng", pageGroup: "KINH DOANH", path: "/sales-orders", sortOrder: 406 },
     { pageKey: "kdsx.daily-input", pageName: "Nhập SL ngày (KD)", pageGroup: "KINH DOANH", path: "/kd-daily-input", sortOrder: 407 },
+    { pageKey: "kdsx.raw-material-rates", pageName: "Định mức NVL", pageGroup: "KINH DOANH", path: "/kdsx/raw-material-rates", sortOrder: 408 },
     { pageKey: "report.history", pageName: "Lịch sử & Báo cáo", pageGroup: "BÁO CÁO", path: "/production/history", sortOrder: 500 },
     { pageKey: "report.production", pageName: "Biểu đồ sản lượng", pageGroup: "BÁO CÁO", path: "/reports/production", sortOrder: 501 },
     { pageKey: "catalog.factories", pageName: "Nhà máy", pageGroup: "DANH MỤC", path: "/factories", sortOrder: 600 },

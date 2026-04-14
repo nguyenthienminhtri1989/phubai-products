@@ -40,6 +40,7 @@ import {
   UnorderedListOutlined,
   EditOutlined,
   LockOutlined,
+  ExperimentOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -98,6 +99,7 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
   { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
+  { pageKey: "kdsx.raw-material-rates", pageGroup: "KINH DOANH", path: "/kdsx/raw-material-rates", label: "Định mức NVL", icon: <ExperimentOutlined /> },
   // MOBILE
   { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
   { pageKey: "mobile.report", pageGroup: "MOBILE", path: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
@@ -184,6 +186,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     pageKeys: [
       "kdsx.dashboard", "kdsx.customers", "kdsx.sales-orders", "kdsx.order-progress",
       "kdsx.plans", "kdsx.actuals", "kdsx.sales-tracking", "kdsx.daily-input",
+      "kdsx.raw-material-rates",
     ],
   },
   {
