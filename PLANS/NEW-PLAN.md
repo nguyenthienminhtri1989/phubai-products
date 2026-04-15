@@ -1,258 +1,233 @@
-# TASK: Xây dựng trang UI Quản lý Định mức Tiêu hao NVL
+# TASK: Chuyển sellingCostRate từ RawMaterialRate sang SalesOrderItem
 
-## Bối cảnh
+## Lý do thay đổi
 
-Module KD-SX đã có API backend CRUD cho `RawMaterialRate` (hoạt động đúng), nhưng **CHƯA CÓ trang UI** để nhập/sửa/xem định mức. Hậu quả: nếu bảng `raw_material_rates` trống, `calculateLineItem()` sẽ lấy `cottonRate = 0` → chi phí NVL tính ra = 0 → lợi nhuận kế hoạch sai hoàn toàn.
+Từ file Excel gốc, cùng 1 loại sợi (VD: 40/2 COCD) nhưng CP bán hàng khác nhau theo từng hợp đồng:
 
-## Yêu cầu tạo mới
+- HĐ 60PB26 → 10%
+- HĐ 83PB26 → 8%
+- HĐ 100PB26 → 14%
+- HĐ 93PB26 → 10%
 
-### 1. File mới: `src/app/kdsx/raw-material-rates/page.tsx`
+→ `sellingCostRate` thuộc **hợp đồng**, KHÔNG thuộc mặt hàng. Giữ nó trong `RawMaterialRate` là sai nghiệp vụ.
 
-**Stack**: Next.js App Router ("use client"), Ant Design, dayjs, fetch API.
+## Nguyên tắc: Chỉ sửa chỗ cần sửa
 
-**Chức năng:**
+Trang Định mức NVL (`/kdsx/raw-material-rates`) đã build xong — KHÔNG viết lại. Chỉ cần:
 
-- Bảng danh sách tất cả định mức hiện có (Table Ant Design)
-- Nút "Thêm định mức" → Modal form tạo mới
-- Nút Sửa/Xóa từng dòng
-- Lọc theo nhóm sợi (yarnCategory): COCD / COCM / CVCM / CRC / Tất cả
-- Tìm kiếm theo tên mặt hàng
-- Hiển thị cảnh báo mặt hàng chưa có định mức (Alert vàng)
-- 4 card thống kê ở đầu trang: mỗi nhóm sợi hiển thị "đã cấu hình / tổng" + Progress bar
+1. Bỏ cột/field `sellingCostRate` khỏi trang đó
+2. Thêm field `sellingCostRate` vào SalesOrderItem + UI tạo HĐ
+3. Sửa logic tính toán để lấy sellingCostRate từ đúng nguồn
 
-**Các cột trong bảng:**
+---
 
-| Cột          | Source                 | Format                                                        |
-| ------------ | ---------------------- | ------------------------------------------------------------- |
-| Mặt hàng     | rate.item.name         | Text, bold                                                    |
-| Nhóm sợi     | rate.item.yarnCategory | Tag màu: COCD=blue, COCM=green, CVCM=orange, CRC=purple       |
-| ĐM Cotton    | rate.cottonRate        | Number, 3 decimals. VD: 1.120                                 |
-| ĐM PE/Benma  | rate.peRate            | Number, 2 decimals. Chỉ hiển thị nếu CVCM, còn lại hiện "—"   |
-| Phế thu hồi  | rate.wasteRecoveryRate | Hiển thị dạng %. VD: 0.07 → "7%", 0.28 → "28%"                |
-| CP Bán hàng  | rate.sellingCostRate   | Hiển thị dạng %. VD: 0.08 → "8%"                              |
-| CP GC xe đôi | rate.gcDoubleTwistRate | Number, 2 decimals. Chỉ hiển thị nếu yarnPly ≥ 2, còn lại "—" |
-| Hiệu lực từ  | rate.effectiveFrom     | Date format DD/MM/YYYY                                        |
-| Đến          | rate.effectiveTo       | Date hoặc "Không thời hạn" (nếu null)                         |
-| Thao tác     | —                      | Nút Sửa + Popconfirm Xóa                                      |
+## Bước 1: Sửa Schema Prisma
 
-**Sort mặc định:** nhóm sợi (COCD → COCM → CVCM → CRC) rồi theo yarnCount tăng dần.
+Mở `prisma/schema.prisma`:
 
-**Modal Form tạo/sửa:**
+**a) Model RawMaterialRate — BỎ field sellingCostRate (nếu có):**
 
-- Select mặt hàng (load từ `/api/items?all=true`). Khi tạo mới: chỉ hiện mặt hàng CHƯA CÓ định mức. Khi sửa: disabled.
-- InputNumber "Định mức Cotton" — bắt buộc, step=0.001, placeholder="VD: 1.12"
-- InputNumber "Định mức PE/Benma" — chỉ enable khi item.yarnCategory === "CVCM", step=0.01
-- InputNumber "Hệ số Phế thu hồi" — bắt buộc, step=0.01, min=0, max=1, placeholder="VD: 0.07"
-- InputNumber "Hệ số CP Bán hàng" — bắt buộc, step=0.01, min=0, max=1, placeholder="VD: 0.08"
-- InputNumber "CP GC xe đôi (USD/kg)" — chỉ enable khi item.yarnPly ≥ 2, step=0.01
-- DatePicker "Hiệu lực từ" — bắt buộc, mặc định = hôm nay
-- DatePicker "Hiệu lực đến" — optional, để trống = không thời hạn
+Tìm model `RawMaterialRate`, xóa dòng `sellingCostRate`:
 
-**Logic form thông minh:**
-
-- Khi chọn mặt hàng → tự động detect yarnCategory và yarnPly từ item
-- Nếu KHÔNG phải CVCM → disable + clear trường PE
-- Nếu KHÔNG phải sợi xe đôi (yarnPly < 2) → disable + clear trường GC xe đôi
-- Hiện preview: "= X%" bên cạnh trường nhập tỷ lệ (0.07 → "= 7%")
-
-### 2. File sửa: `src/components/AdminLayout.tsx`
-
-Thêm menu item vào nhóm **"KH Kinh doanh - SX"** (SubMenu kdsx):
-
-```tsx
-// Thêm sau menu item "Khách hàng" hoặc cuối nhóm KD-SX
-{
-  key: '/kdsx/raw-material-rates',
-  icon: <ExperimentOutlined />,
-  label: 'Định mức NVL',
+```diff
+model RawMaterialRate {
+  ...
+  cottonRate          Float?
+  peRate              Float?
+  wasteRecoveryRate   Float?
+- sellingCostRate     Float?    // XÓA DÒNG NÀY
+  gcDoubleTwistRate   Float?
+  ...
 }
 ```
 
-Điều kiện hiển thị: `canViewModule('kdsx')` — giống các menu khác trong nhóm KD-SX.
+**b) Model SalesOrderItem — THÊM field sellingCostRate:**
 
-### 3. KHÔNG cần sửa API — Các endpoint đã có sẵn
+Tìm model `SalesOrderItem`, thêm:
 
-| Method | Path                                | Mô tả                            |
-| ------ | ----------------------------------- | -------------------------------- |
-| GET    | `/api/kdsx/raw-material-rates`      | Lấy danh sách, include item info |
-| POST   | `/api/kdsx/raw-material-rates`      | Tạo mới                          |
-| GET    | `/api/kdsx/raw-material-rates/[id]` | Chi tiết                         |
-| PUT    | `/api/kdsx/raw-material-rates/[id]` | Cập nhật                         |
-| DELETE | `/api/kdsx/raw-material-rates/[id]` | Xóa                              |
-| GET    | `/api/items?all=true`               | Lấy danh sách mặt hàng (đã có)   |
-
-**Payload POST/PUT** (dự kiến theo Prisma model):
-
-```json
-{
-  "itemId": 7,
-  "cottonRate": 1.12,
-  "peRate": null,
-  "wasteRecoveryRate": 0.07,
-  "sellingCostRate": 0.08,
-  "gcDoubleTwistRate": null,
-  "effectiveFrom": "2026-01-01",
-  "effectiveTo": null
+```diff
+model SalesOrderItem {
+  ...
+  plannedQty       Float
+  allocatedQty     Float     @default(0)
++ sellingCostRate  Float?    // Hệ số CP bán hàng (0.08 = 8%), nhập khi tạo/sửa HĐ
+  ...
 }
 ```
 
-**Response GET list** (dự kiến):
+**c) Chạy migration:**
 
-```json
-[
-  {
-    "id": 1,
-    "itemId": 7,
-    "cottonRate": 1.12,
-    "peRate": null,
-    "wasteRecoveryRate": 0.07,
-    "sellingCostRate": 0.08,
-    "gcDoubleTwistRate": null,
-    "effectiveFrom": "2026-01-01T00:00:00.000Z",
-    "effectiveTo": null,
-    "item": {
-      "id": 7,
-      "name": "40/1 COCD",
-      "yarnCategory": "COCD",
-      "yarnCount": "40",
-      "yarnPly": 1
-    }
-  }
-]
+```bash
+npx prisma migrate dev --name move_selling_cost_rate_to_sales_order_item
 ```
 
-> **LƯU Ý QUAN TRỌNG:** Trước khi code, hãy mở file `src/app/api/kdsx/raw-material-rates/route.ts` để xác nhận chính xác field names và response format. Nếu API GET chưa include `item` relation, cần thêm `include: { item: true }` vào Prisma query.
+---
 
-### 4. Dữ liệu tham khảo từ file Excel gốc (NM3 T4/2026)
+## Bước 2: Sửa trang Định mức NVL
 
-Bảng này dùng để hiển thị ở cuối trang như panel tham khảo (optional):
+File: `src/app/kdsx/raw-material-rates/page.tsx`
 
-| Nhóm            | Cotton (tp) | Cotton (đx) | Phế | Benma |
-| --------------- | ----------- | ----------- | --- | ----- |
-| 16, 20 COCD     | 1.111       | —           | 7%  | —     |
-| 26 COCD         | 1.12        | —           | 7%  | —     |
-| 30 COCD         | 1.12        | 1.13        | 7%  | —     |
-| 40 COCD         | 1.12        | 1.13        | 7%  | —     |
-| 20 COCM PVC     | 1.35        | —           | 28% | —     |
-| 30 COCM         | 1.33        | 1.34        | 28% | —     |
-| 40 COCM         | 1.33        | 1.34        | 28% | —     |
-| 30, 32, 40 CVCM | 1.33        | —           | 18% | 1.02  |
-| 32 CRC          | 1.35        | —           | —   | —     |
+**Chỉ cần bỏ những phần liên quan đến sellingCostRate:**
 
-CP Bán hàng (sellingCostRate) theo Excel:
+- Xóa cột "CP Bán hàng" trong bảng (Table columns)
+- Xóa field "Hệ số CP Bán hàng" trong Modal Form
+- Xóa sellingCostRate khỏi payload khi gọi POST/PUT API
+- Xóa sellingCostRate khỏi bảng tham khảo (nếu có hiển thị)
 
-- COCD chải kỹ: 0.08 ~ 0.10 (30CD=0.08~0.10, 40CD=0.08, 16CD=0.10, 20CD=0.10)
-- COCD xe đôi 20/2: 0.14 ~ 0.25
-- COCM chải thô: 0.08 ~ 0.16
-- CVCM: 0.14
-- Giá trị khác nhau theo từng HĐ, nhưng hệ số mặc định nên lấy từ bảng trên
+Tìm theo keyword `sellingCostRate` hoặc `CP Bán hàng` hoặc `bán hàng` để xóa hết.
 
-CP GC xe đôi (gcDoubleTwistRate) theo Excel:
+---
 
-- 20/2 COCD: 0.30 USD/kg
-- 30/2 COCD, 40/2 COCD: 0.45 USD/kg
-- 30/2 COCM: 0.35 USD/kg
-- 40/2 COCM: 0.45 USD/kg
+## Bước 3: Sửa API raw-material-rates
 
-### 5. Seed data (optional nhưng recommended)
+File: `src/app/api/kdsx/raw-material-rates/route.ts` và `[id]/route.ts`
 
-Nếu bảng `raw_material_rates` đang trống, sau khi build UI xong nên seed dữ liệu cơ bản. Có thể tạo script `prisma/seed-rates.ts` hoặc nhập thủ công qua UI mới.
+- Bỏ `sellingCostRate` khỏi phần parse body trong handler POST và PUT
+- Không cần sửa GET (Prisma tự bỏ field nếu schema đã xóa)
 
-## ⚠️ QUAN TRỌNG: Kiểm tra tích hợp backend TRƯỚC KHI build UI
+---
 
-Trước khi xây UI, phải xác nhận rằng `calculateLineItem()` thực sự đọc từ bảng `RawMaterialRate`. Nếu không thì dù nhập định mức qua UI vẫn vô nghĩa.
+## Bước 4: Sửa API tạo/sửa HĐ — thêm sellingCostRate
 
-### Bước kiểm tra (PHẢI LÀM TRƯỚC):
+**File: `src/app/api/kdsx/sales-orders/route.ts`**
 
-**Bước 1:** Mở `src/lib/kdsx/calculator.ts`, xem signature của `calculateLineItem()`:
-
-- Nếu hàm nhận tham số như `cottonRate`, `peRate`, `wasteRecoveryRate`, `sellingCostRate`, `gcDoubleTwistRate` trực tiếp → nghĩa là caller phải truyền vào, hàm KHÔNG tự query DB
-- Nếu hàm nhận `itemId` và bên trong có `prisma.rawMaterialRate.findFirst(...)` → OK, đã tích hợp
-
-**Bước 2:** Mở `src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts`, xem handler POST:
-
-- Tìm xem có đoạn nào gọi `prisma.rawMaterialRate.findFirst()` hoặc import `RawMaterialRate` không
-- Nếu KHÔNG CÓ → nghĩa là route đang nhận rates từ request body (frontend truyền thẳng) → bảng `RawMaterialRate` bị bỏ qua hoàn toàn
-
-### Nếu phát hiện chưa tích hợp — Cách fix:
-
-Sửa handler POST trong `line-items/route.ts` để **tự động tra định mức** từ `RawMaterialRate` thay vì nhận từ request body:
+Trong handler POST, khi tạo `SalesOrderItem`, nhận thêm `sellingCostRate` từ body:
 
 ```typescript
-// THÊM vào handler POST, SAU khi parse body lấy được itemId
-const planDate = plan.yearMonth + "-01"; // hoặc lấy effectiveFrom phù hợp
-
-const rate = await prisma.rawMaterialRate.findFirst({
-  where: {
-    itemId: body.itemId,
-    effectiveFrom: { lte: new Date(planDate) },
-    OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(planDate) } }],
+// Tìm chỗ tạo SalesOrderItem, thêm field:
+await prisma.salesOrderItem.create({
+  data: {
+    ...
+    sellingCostRate: item.sellingCostRate ?? null,  // THÊM DÒNG NÀY
   },
-  orderBy: { effectiveFrom: "desc" },
 });
+```
 
-if (!rate) {
-  return NextResponse.json(
-    {
-      error: `Chưa có định mức tiêu hao cho mặt hàng này. Vui lòng vào "Định mức NVL" để cấu hình.`,
-    },
-    { status: 400 },
+**File: `src/app/api/kdsx/sales-orders/[id]/route.ts`**
+
+Trong handler PUT, cho phép cập nhật `sellingCostRate` của từng item.
+
+---
+
+## Bước 5: Sửa UI tạo/sửa HĐ
+
+File: `src/app/kdsx/sales-orders/page.tsx`
+
+Trong form tạo/sửa hợp đồng, ở phần nhập mỗi dòng mặt hàng (items), **thêm 1 InputNumber**:
+
+```tsx
+<Form.Item
+  label="CP bán hàng (%)"
+  name={[field.name, "sellingCostRate"]}
+  rules={[{ required: true, message: "Nhập hệ số CP bán hàng" }]}
+>
+  <InputNumber
+    min={0}
+    max={100}
+    step={1}
+    placeholder="VD: 8"
+    addonAfter="%"
+    style={{ width: "100%" }}
+  />
+</Form.Item>
+```
+
+**Lưu ý chuyển đổi:** UI nhập dạng phần trăm (8, 10, 14...), khi gửi API chuyển sang thập phân:
+
+- Gửi API: `sellingCostRate: formValue / 100` (8 → 0.08)
+- Hiển thị: `value * 100` (0.08 → 8%)
+
+Trong bảng danh sách HĐ, thêm cột hiển thị CP BH cho mỗi item (optional).
+
+---
+
+## Bước 6: Sửa logic tính toán
+
+**File: `src/lib/kdsx/calculator.ts`**
+
+Hàm `calculateLineItem()` vẫn nhận `sellingCostRate` như tham số — KHÔNG cần sửa signature. Chỉ cần đảm bảo caller truyền đúng nguồn.
+
+**File: `src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts`**
+
+Trong handler POST (tạo dòng sợi trong kế hoạch), sửa chỗ lấy `sellingCostRate`:
+
+```typescript
+// CŨ (sai): lấy từ RawMaterialRate
+// const sellingCostRate = rate.sellingCostRate ?? 0;
+
+// MỚI (đúng): lấy từ SalesOrderItem
+let sellingCostRate = 0;
+if (body.salesOrderItemId) {
+  // Dòng gắn HĐ → lấy từ SalesOrderItem
+  const soi = await prisma.salesOrderItem.findUnique({
+    where: { id: body.salesOrderItemId },
+  });
+  sellingCostRate = soi?.sellingCostRate ?? 0;
+} else {
+  // Dòng Dự phòng (DP) → lấy từ body (user nhập tay)
+  sellingCostRate = body.sellingCostRate ?? 0;
+}
+```
+
+Tương tự cho handler PUT nếu có.
+
+---
+
+## Bước 7: Sửa UI tạo dòng sợi trong Kế hoạch tháng
+
+File: `src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx`
+
+Khi user tạo dòng sợi:
+
+- Nếu gắn HĐ → `sellingCostRate` tự động lấy từ SalesOrderItem, hiển thị read-only
+- Nếu dòng DP (checkbox Dự phòng) → hiện InputNumber cho user nhập `sellingCostRate` thủ công
+
+```tsx
+{
+  isDP && (
+    <Form.Item
+      label="CP bán hàng (%)"
+      name="sellingCostRate"
+      rules={[{ required: true }]}
+    >
+      <InputNumber
+        min={0}
+        max={100}
+        step={1}
+        placeholder="VD: 8"
+        addonAfter="%"
+      />
+    </Form.Item>
   );
 }
 
-// Truyền rates vào calculateLineItem
-const lineData = calculateLineItem({
-  qty: body.qty,
-  unitPriceUsd: body.unitPriceUsd,
-  cottonRate: rate.cottonRate ?? 0,
-  peRate: rate.peRate ?? 0,
-  wasteRecoveryRate: rate.wasteRecoveryRate ?? 0,
-  sellingCostRate: rate.sellingCostRate ?? 0,
-  gcDoubleTwistRate: rate.gcDoubleTwistRate ?? 0,
-  // ... các params khác từ MonthlyInputParam (tỷ giá, giá bông...)
-});
-```
-
-**Tương tự cho handler PUT** (sửa line item) — cũng phải tra lại `RawMaterialRate` nếu `itemId` thay đổi.
-
-**Tương tự cho `monthly-actuals/[id]/sync/route.ts`** — khi sync thực hiện tháng, cũng phải dùng rates từ DB.
-
-### Kiểm tra tương tự cho các fields mới
-
-Bảng `RawMaterialRate` trong Prisma schema hiện tại có thể CHƯA CÓ các fields:
-
-- `sellingCostRate` (hệ số CP bán hàng)
-- `gcDoubleTwistRate` (CP GC xe đôi)
-
-Mở `prisma/schema.prisma`, tìm model `RawMaterialRate` và xác nhận. Nếu chưa có, cần thêm migration:
-
-```prisma
-model RawMaterialRate {
-  id                  Int       @id @default(autoincrement())
-  itemId              Int
-  cottonRate          Float?    // Định mức tiêu hao cotton (kg NL / kg TP)
-  peRate              Float?    // Định mức tiêu hao PE/Benma (chỉ CVCM)
-  wasteRecoveryRate   Float?    // Hệ số phế thu hồi (0.07 = 7%)
-  sellingCostRate     Float?    // Hệ số CP bán hàng (0.08 = 8%)     ← KIỂM TRA CÓ CHƯA
-  gcDoubleTwistRate   Float?    // CP GC xe đôi USD/kg (chỉ sợi /2)  ← KIỂM TRA CÓ CHƯA
-  effectiveFrom       DateTime
-  effectiveTo         DateTime?
-
-  item                Item      @relation(fields: [itemId], references: [id])
-
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  @@map("raw_material_rates")
+{
+  !isDP && selectedSalesOrderItem && (
+    <Descriptions.Item label="CP bán hàng">
+      {(selectedSalesOrderItem.sellingCostRate * 100).toFixed(0)}%
+      <Text type="secondary"> (theo HĐ)</Text>
+    </Descriptions.Item>
+  );
 }
 ```
 
-Nếu thiếu fields → chạy: `npx prisma migrate dev --name add_selling_gc_rates_to_raw_material_rate`
+---
 
-## Lưu ý kỹ thuật
+## Tóm tắt files cần sửa
 
-1. **Strictly additive** — không sửa model/field cũ, chỉ thêm trang UI mới
-2. **Phân quyền**: Trang này chỉ dành cho ADMIN + department ACCOUNTING/SALES/MANAGEMENT (hoặc có extraModules chứa 'kdsx'). Dùng `canAccessKdsx(session)` từ `src/lib/permissions.ts`
-3. **Pattern code**: Tham khảo `src/app/kdsx/customers/page.tsx` — cùng pattern CRUD với Ant Design Table + Modal Form
-4. **effectiveFrom/effectiveTo**: Lưu dạng Date (ISO string), UI dùng DatePicker của Ant Design + dayjs
-5. **Unique constraint**: Mỗi itemId chỉ nên có 1 bản ghi active (effectiveTo = null). Khi tạo mới cho item đã có → cảnh báo "Mặt hàng này đã có định mức. Bạn có muốn tạo phiên bản mới không?"
+| File                                                      | Thay đổi                                                          |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| `prisma/schema.prisma`                                    | Xóa sellingCostRate khỏi RawMaterialRate, thêm vào SalesOrderItem |
+| `src/app/kdsx/raw-material-rates/page.tsx`                | Xóa cột + field sellingCostRate                                   |
+| `src/app/api/kdsx/raw-material-rates/route.ts`            | Bỏ sellingCostRate khỏi POST/PUT body                             |
+| `src/app/api/kdsx/raw-material-rates/[id]/route.ts`       | Bỏ sellingCostRate khỏi PUT body                                  |
+| `src/app/api/kdsx/sales-orders/route.ts`                  | Thêm sellingCostRate khi tạo SalesOrderItem                       |
+| `src/app/api/kdsx/sales-orders/[id]/route.ts`             | Thêm sellingCostRate khi sửa SalesOrderItem                       |
+| `src/app/kdsx/sales-orders/page.tsx`                      | Thêm InputNumber CP bán hàng trong form item                      |
+| `src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts` | Lấy sellingCostRate từ SalesOrderItem thay vì RawMaterialRate     |
+| `src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx`     | Hiện sellingCostRate theo HĐ hoặc cho nhập tay nếu DP             |
+
+## KHÔNG sửa
+
+- `src/lib/kdsx/calculator.ts` — hàm `calculateLineItem()` giữ nguyên signature
+- Các trang khác (dashboard, actuals, customers...) — không liên quan

@@ -806,11 +806,12 @@ model SalesOrderItem {
   itemId Int
   item   Item @relation(fields: [itemId], references: [id])
 
-  plannedQty   Float    // Số lượng HĐ (kg)
-  unitPrice    Float    // Đơn giá (USD/kg)
-  deliveryDate DateTime? @db.Date  // deadline riêng nếu khác HĐ
-  allocatedQty Float    @default(0) // cached, cập nhật tự động
-  note         String?
+  plannedQty      Float    // Số lượng HĐ (kg)
+  unitPrice       Float    // Đơn giá (USD/kg)
+  sellingCostRate Float?   // Hệ số CP bán hàng (VD: 0.08 = 8%)
+  deliveryDate    DateTime? @db.Date  // deadline riêng nếu khác HĐ
+  allocatedQty    Float    @default(0) // cached, cập nhật tự động
+  note            String?
 
   planLineItems   PlanLineItem[]
   actualLineItems ActualLineItem[]
@@ -882,9 +883,6 @@ model RawMaterialRate {
 
   // Tỷ lệ phế (0.0–1.0)
   wasteRate Float?
-
-  // Tỷ lệ chi phí bán hàng (USD/kg)
-  sellingCostRate Float?
 
   // Đơn giá gia công sợi xe đôi (USD/kg) — chỉ cho sợi /2
   doubleTwistGcRate Float?

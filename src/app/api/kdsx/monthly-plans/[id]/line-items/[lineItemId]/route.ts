@@ -36,6 +36,17 @@ export async function PUT(
     orderBy: { effectiveFrom: "desc" },
   });
 
+  // Lấy sellingCostRate từ SalesOrderItem (không phải RawMaterialRate)
+  let sellingCostRate = 0;
+  if (salesOrderItemId) {
+    const soi = await prisma.salesOrderItem.findUnique({
+      where: { id: Number(salesOrderItemId) },
+    });
+    sellingCostRate = soi?.sellingCostRate ?? 0;
+  } else {
+    sellingCostRate = body.sellingCostRate ?? 0;
+  }
+
   const calcResult = calculateLineItem({
     qty: Number(qty),
     unitPriceUsd: Number(unitPriceUsd),
@@ -43,7 +54,7 @@ export async function PUT(
       cottonRate: rate?.cottonRate ?? 0,
       peRate: rate?.peRate ?? 0,
       wasteRate: rate?.wasteRate ?? 0,
-      sellingCostRate: rate?.sellingCostRate ?? 0,
+      sellingCostRate,
       doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
     },
     params: {

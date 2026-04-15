@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
           itemId: Number(it.itemId),
           plannedQty: Number(it.plannedQty),
           unitPrice: Number(it.unitPrice),
+          sellingCostRate: it.sellingCostRate ?? null,
           note: it.note || null,
         })),
       },

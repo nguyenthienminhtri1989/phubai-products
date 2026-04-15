@@ -53,7 +53,6 @@ interface RawMaterialRate {
   cottonRate: number | null;
   peRate: number | null;
   wasteRate: number | null;
-  sellingCostRate: number | null;
   doubleTwistGcRate: number | null;
   effectiveFrom: string;
   effectiveTo: string | null;
@@ -217,7 +216,6 @@ export default function RawMaterialRatesPage() {
       cottonRate: r.cottonRate,
       peRate: r.peRate,
       wasteRate: r.wasteRate,
-      sellingCostRate: r.sellingCostRate,
       doubleTwistGcRate: r.doubleTwistGcRate,
       effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
       effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
@@ -239,7 +237,6 @@ export default function RawMaterialRatesPage() {
         cottonRate: values.cottonRate ?? null,
         peRate: values.peRate ?? null,
         wasteRate: values.wasteRate ?? null,
-        sellingCostRate: values.sellingCostRate ?? null,
         doubleTwistGcRate: values.doubleTwistGcRate ?? null,
         effectiveFrom: values.effectiveFrom
           ? values.effectiveFrom.format("YYYY-MM-DD")
@@ -346,13 +343,6 @@ export default function RawMaterialRatesPage() {
       width: 100,
       align: "right" as const,
       render: (_: unknown, r: RawMaterialRate) => fmtPct(r.wasteRate),
-    },
-    {
-      title: "CP Bán hàng",
-      key: "sellingCostRate",
-      width: 100,
-      align: "right" as const,
-      render: (_: unknown, r: RawMaterialRate) => fmtPct(r.sellingCostRate),
     },
     {
       title: (
@@ -656,31 +646,6 @@ export default function RawMaterialRatesPage() {
                   min={0}
                   max={1}
                   placeholder="VD: 0.07"
-                  formatter={(v) =>
-                    v != null ? `${(Number(v) * 100).toFixed(0)}%` : ""
-                  }
-                  parser={(v) => {
-                    if (!v) return 0 as unknown as 0;
-                    return (parseFloat(v.replace("%", "")) / 100) as unknown as 0;
-                  }}
-                />
-              </Form.Item>
-            </Col>
-
-            {/* Selling Cost Rate */}
-            <Col span={12}>
-              <Form.Item
-                name="sellingCostRate"
-                label="Hệ số CP Bán hàng (0.08 = 8%)"
-                rules={[{ required: true, message: "Nhập hệ số CP bán hàng" }]}
-              >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  step={0.01}
-                  precision={2}
-                  min={0}
-                  max={1}
-                  placeholder="VD: 0.08"
                   formatter={(v) =>
                     v != null ? `${(Number(v) * 100).toFixed(0)}%` : ""
                   }

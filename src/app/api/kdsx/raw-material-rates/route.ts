@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { itemId, cottonRate, peRate, wasteRate, sellingCostRate, doubleTwistGcRate, effectiveFrom, effectiveTo, note } = body;
+  const { itemId, cottonRate, peRate, wasteRate, doubleTwistGcRate, effectiveFrom, effectiveTo, note } = body;
   if (!itemId || !effectiveFrom) {
     return NextResponse.json({ error: "Thiếu itemId hoặc effectiveFrom" }, { status: 400 });
   }
@@ -40,7 +40,6 @@ export async function POST(req: NextRequest) {
       cottonRate: cottonRate ?? null,
       peRate: peRate ?? null,
       wasteRate: wasteRate ?? null,
-      sellingCostRate: sellingCostRate ?? null,
       doubleTwistGcRate: doubleTwistGcRate ?? null,
       effectiveFrom: new Date(effectiveFrom),
       effectiveTo: effectiveTo ? new Date(effectiveTo) : null,
