@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
         recordDate: true,
         shift: true,
         finalOutput: true,
+        efficiency: true,
         machineId: true,
         itemId: true,
         machine: {
@@ -75,18 +76,26 @@ export async function GET(request: NextRequest) {
       orderBy: { recordDate: "asc" },
     });
 
-    // --- BY DATE ---
-    const dateMap = new Map<string, { total: number; shift1: number; shift2: number; shift3: number }>();
+    // --- BY DATE --- (kèm hiệu suất TB có trọng số theo ngày)
+    const dateMap = new Map<string, {
+      total: number; shift1: number; shift2: number; shift3: number;
+      wEffSum: number; wEffBase: number;
+    }>();
     for (const log of logs) {
       const dateStr = log.recordDate.toISOString().slice(0, 10);
       if (!dateMap.has(dateStr)) {
-        dateMap.set(dateStr, { total: 0, shift1: 0, shift2: 0, shift3: 0 });
+        dateMap.set(dateStr, { total: 0, shift1: 0, shift2: 0, shift3: 0, wEffSum: 0, wEffBase: 0 });
       }
       const entry = dateMap.get(dateStr)!;
       entry.total += log.finalOutput;
       if (log.shift === 1) entry.shift1 += log.finalOutput;
       else if (log.shift === 2) entry.shift2 += log.finalOutput;
       else if (log.shift === 3) entry.shift3 += log.finalOutput;
+      // Hiệu suất: chỉ tính ca nào có nhập và sản lượng > 0
+      if (log.efficiency != null && log.finalOutput > 0) {
+        entry.wEffSum += log.finalOutput * log.efficiency;
+        entry.wEffBase += log.finalOutput;
+      }
     }
     const byDate = Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -96,6 +105,10 @@ export async function GET(request: NextRequest) {
         shift1: Math.round(data.shift1 * 100) / 100,
         shift2: Math.round(data.shift2 * 100) / 100,
         shift3: Math.round(data.shift3 * 100) / 100,
+        // avgEfficiency: null nếu ngày đó chưa có ca nào nhập hiệu suất
+        avgEfficiency: data.wEffBase > 0
+          ? Math.round((data.wEffSum / data.wEffBase) * 10) / 10
+          : null,
       }));
 
     // --- BY MACHINE ---
@@ -150,6 +163,18 @@ export async function GET(request: NextRequest) {
     const daysWithData = dateMap.size;
     const avgPerDay = daysWithData > 0 ? grandTotal / daysWithData : 0;
 
+    // Hiệu suất TB toàn kỳ (trọng số sản lượng, chỉ tính ca có nhập)
+    let allWEffSum = 0, allWEffBase = 0;
+    for (const log of logs) {
+      if (log.efficiency != null && log.finalOutput > 0) {
+        allWEffSum += log.finalOutput * log.efficiency;
+        allWEffBase += log.finalOutput;
+      }
+    }
+    const avgEfficiency = allWEffBase > 0
+      ? Math.round((allWEffSum / allWEffBase) * 10) / 10
+      : null;
+
     return NextResponse.json({
       byDate,
       byMachine,
@@ -159,6 +184,7 @@ export async function GET(request: NextRequest) {
         todayTotal: Math.round(todayTotal * 100) / 100,
         avgPerDay: Math.round(avgPerDay * 100) / 100,
         daysWithData,
+        avgEfficiency, // % TB toàn kỳ, null nếu chưa có dữ liệu
       },
     });
   } catch (error) {

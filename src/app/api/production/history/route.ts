@@ -47,14 +47,14 @@ export async function POST(request: Request) {
     // 2. CHẠY SONG SONG 3 TRUY VẤN (TRANSACTION)
     // - Query 1: Lấy danh sách phân trang (Data)
     // - Query 2: Đếm tổng số bản ghi (Total Count - để chia trang)
-    // - Query 3: Tính tổng sản lượng toàn bộ (Grand Total - cho Dashboard)
+    // - Query 3: Tính tổng sản lượng + hiệu suất TB có trọng số
 
-    const [logs, totalCount, aggregate] = await prisma.$transaction([
+    const [logs, totalCount, allLogsForEff] = await prisma.$transaction([
       // Query 1: Data Pagination
       prisma.productionLog.findMany({
         where,
-        skip: (page - 1) * pageSize, // Bỏ qua các dòng của trang trước
-        take: pageSize, // Chỉ lấy số dòng của trang hiện tại
+        skip: (page - 1) * pageSize,
+        take: pageSize,
         include: {
           machine: { include: { process: { include: { factory: true } } } },
           item: true,
@@ -86,12 +86,28 @@ export async function POST(request: Request) {
       // Query 2: Count
       prisma.productionLog.count({ where }),
 
-      // Query 3: Sum Output
-      prisma.productionLog.aggregate({
+      // Query 3: Lấy sản lượng + hiệu suất toàn bộ (để tính TB có trọng số)
+      prisma.productionLog.findMany({
         where,
-        _sum: { finalOutput: true },
+        select: { finalOutput: true, efficiency: true },
       }),
     ]);
+
+    // Tính tổng sản lượng và hiệu suất trung bình có trọng số
+    // Công thức: Σ(output_i × eff_i) / Σ(output_i) — chỉ tính các ca có nhập hiệu suất
+    let totalOutput = 0;
+    let weightedEffSum = 0;
+    let weightedEffBase = 0;
+    for (const log of allLogsForEff) {
+      totalOutput += log.finalOutput;
+      if (log.efficiency != null && log.finalOutput > 0) {
+        weightedEffSum += log.finalOutput * log.efficiency;
+        weightedEffBase += log.finalOutput;
+      }
+    }
+    const avgEfficiency = weightedEffBase > 0
+      ? Math.round((weightedEffSum / weightedEffBase) * 10) / 10
+      : null;
 
     return NextResponse.json({
       data: logs,
@@ -101,7 +117,8 @@ export async function POST(request: Request) {
         pageSize: pageSize,
       },
       stats: {
-        totalOutput: aggregate._sum.finalOutput || 0,
+        totalOutput,
+        avgEfficiency, // % TB có trọng số theo sản lượng, null nếu chưa có dữ liệu
       },
     });
   } catch (error) {

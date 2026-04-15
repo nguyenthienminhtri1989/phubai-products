@@ -1471,3 +1471,55 @@ Migrate toàn bộ ~35 API route còn sót từ hệ thống phân quyền cũ (
 ### Known limitations
 
 - Frontend pages (`.tsx`) chưa được scan — một số trang vẫn dùng `session?.user?.role === "ADMIN"` để ẩn/hiện UI button. Đây là acceptable vì chỉ ảnh hưởng hiển thị, không ảnh hưởng bảo mật (backend đã chuẩn)
+
+---
+
+## PRODUCTION — Trường Hiệu suất máy (efficiency) trong production_logs
+
+**Status:** ✅ Completed 2026-04-15
+
+### What was built
+
+Bổ sung trường `efficiency` (hiệu suất máy, %, không bắt buộc) vào bảng `production_logs`. Tích hợp nhập liệu, hiển thị trong lịch sử, và báo cáo biểu đồ sản lượng. Hiệu suất TB được tính theo công thức trọng số sản lượng: `Σ(output_i × eff_i) / Σ(output_i)` — chỉ tính các ca có nhập hiệu suất.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                          — Thêm field `efficiency Float?` vào model ProductionLog
+prisma/migrations/20260415082959_add_efficiency.../           — ALTER TABLE production_logs ADD COLUMN efficiency DOUBLE PRECISION
+src/app/api/production/daily-input/route.ts                  — POST nhận/lưu efficiency; GET trả efficiency
+src/app/production/daily-input/page.tsx                      — Thêm InputNumber nhập hiệu suất (0–100%, optional) trong modal
+src/app/api/production/history/route.ts                      — Tính avgEfficiency có trọng số, trả về trong stats
+src/app/production/history/page.tsx                          — Cột Hiệu suất (màu: xanh ≥95%, cam ≥85%, đỏ <85%), card avgEfficiency
+src/app/api/reports/production/route.ts                      — byDate thêm avgEfficiency/ngày; summary thêm avgEfficiency cả kỳ
+src/app/reports/production/page.tsx                          — Truyền avgEfficiency xuống KpiCards
+src/components/reports/KpiCards.tsx                          — Card KPI thứ 5: Hiệu suất TB (màu theo ngưỡng)
+src/components/reports/OutputByDate.tsx                      — Chuyển LineChart → ComposedChart: Bar sản lượng + Line hiệu suất (trục Y phải)
+```
+
+### Key business logic implemented
+
+- Công thức trọng số: `avgEff = Σ(finalOutput_i × efficiency_i) / Σ(finalOutput_i)` — chỉ tính ca có `efficiency != null && finalOutput > 0`
+- `avgEfficiency` trả về `null` khi chưa có ca nào nhập hiệu suất (không giả định = 0)
+- Ngưỡng màu hiệu suất: xanh ≥95%, cam ≥85%, đỏ <85%
+- Biểu đồ OutputByDate: Line hiệu suất chỉ hiện khi có ít nhất 1 ngày có dữ liệu (`connectNulls=false`)
+- Trục Y phải hiệu suất domain [70, 100] để tránh lệch tỷ lệ
+
+### API endpoints
+
+| Method | Path                        | Description                                                           |
+| ------ | --------------------------- | --------------------------------------------------------------------- |
+| GET    | /api/production/daily-input | Trả về log theo (machineId, date, shift), bao gồm efficiency          |
+| POST   | /api/production/daily-input | Lưu/cập nhật log, bao gồm efficiency (optional)                       |
+| POST   | /api/production/history     | Trả data + stats.avgEfficiency (trọng số theo toàn bộ filter)         |
+| GET    | /api/reports/production     | byDate[].avgEfficiency + summary.avgEfficiency cả kỳ                  |
+
+### Known limitations / not yet implemented
+
+- Chưa có validation ngưỡng tối thiểu/tối đa nghiệp vụ cho efficiency (0–100 là giới hạn UI, không enforce ở backend)
+- Biểu đồ OutputByDate không có tooltip riêng khi hover trên Line hiệu suất ở vùng null
+
+### Data notes
+
+- `efficiency` lưu dạng số thực (VD: 97.5 nghĩa là 97.5%), không phải tỷ lệ 0–1
+- Migration: file SQL tạo thủ công do Prisma CLI bị block network; cần chạy `npx prisma migrate deploy` + `npx prisma generate` từ Windows terminal

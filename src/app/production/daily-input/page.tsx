@@ -25,6 +25,7 @@ interface Machine {
         startIndex?: number;
         endIndex?: number;
         inputNE?: number;
+        efficiency?: number | null;
         note?: string
     };
 }
@@ -258,6 +259,7 @@ export default function DailyInputPage() {
             initValues.startIndex = log.startIndex ?? 0;
             initValues.endIndex = log.endIndex ?? null;
             initValues.inputNE = log.inputNE ?? machine.currentNE ?? 30;
+            initValues.efficiency = log.efficiency ?? null;
             initValues.isStopped = log.note === "Máy dừng";
             initValues.isReset = log.note === "Sửa chỉ số trước" || log.note === "Reset đồng hồ";
             message.info("Đang sửa dữ liệu đã nhập. Lưu lại để cập nhật.");
@@ -392,6 +394,7 @@ export default function DailyInputPage() {
                 endIndex: values.endIndex,
                 inputNE: values.inputNE,
                 finalOutput: calculatedOutput,
+                efficiency: values.efficiency ?? null,
                 note: values.isStopped ? "Máy dừng" : (values.isReset ? "Sửa chỉ số trước" : "")
             };
             const res = await fetch('/api/production/daily-input', {
@@ -412,6 +415,7 @@ export default function DailyInputPage() {
                     startIndex: payload.startIndex,
                     endIndex: payload.endIndex,
                     inputNE: payload.inputNE,
+                    efficiency: payload.efficiency,
                     note: payload.note,
                 }
             } : m));
@@ -780,6 +784,29 @@ export default function DailyInputPage() {
                             />
                         </Form.Item>
                     )}
+
+                    {/* Hiệu suất máy (không bắt buộc) */}
+                    <Form.Item
+                        name="efficiency"
+                        label={
+                            <span>
+                                Hiệu suất máy{' '}
+                                <span style={{ fontSize: 11, color: '#8c8c8c', fontWeight: 400 }}>
+                                    (không bắt buộc)
+                                </span>
+                            </span>
+                        }
+                    >
+                        <InputNumber
+                            style={{ width: '100%' }}
+                            min={0}
+                            max={100}
+                            step={1}
+                            addonAfter="%"
+                            placeholder="VD: 95"
+                            controls={false}
+                        />
+                    </Form.Item>
 
                     {/* Kết quả tính toán */}
                     <div style={{

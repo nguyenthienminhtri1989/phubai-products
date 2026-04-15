@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       endIndex,
       inputNE,
       finalOutput,
+      efficiency,
     } = body;
 
     // 1. Ép kiểu dữ liệu an toàn
@@ -60,6 +61,8 @@ export async function POST(request: Request) {
     endIndex = endIndex != null ? parseFloat(endIndex) : null;
     inputNE = inputNE != null ? parseFloat(inputNE) : null;
     finalOutput = finalOutput != null ? Math.round(parseFloat(finalOutput)) : 0;
+    // efficiency: optional, lưu dạng % (0–100), null nếu không nhập
+    const efficiencyVal = efficiency != null && efficiency !== "" ? parseFloat(efficiency) : null;
 
     if (isNaN(machineId) || isNaN(shift) || isNaN(itemId)) {
       return NextResponse.json(
@@ -83,6 +86,7 @@ export async function POST(request: Request) {
       endIndex,
       inputNE,
       finalOutput,
+      efficiency: efficiencyVal,
       note,
       createdById: parseInt(session.user.id),
     };

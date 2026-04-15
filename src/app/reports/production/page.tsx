@@ -16,7 +16,7 @@ import OutputByItem from "@/components/reports/OutputByItem";
 const { Title } = Typography;
 
 interface ReportData {
-  byDate: Array<{ date: string; total: number; shift1: number; shift2: number; shift3: number }>;
+  byDate: Array<{ date: string; total: number; shift1: number; shift2: number; shift3: number; avgEfficiency: number | null }>;
   byMachine: Array<{ machineId: number; machineName: string; processName: string; total: number }>;
   byItem: Array<{ itemId: number; itemName: string; itemCode: string | null; total: number }>;
   summary: {
@@ -24,6 +24,7 @@ interface ReportData {
     todayTotal: number;
     avgPerDay: number;
     daysWithData: number;
+    avgEfficiency: number | null;
   };
 }
 
@@ -31,7 +32,7 @@ const EMPTY_DATA: ReportData = {
   byDate: [],
   byMachine: [],
   byItem: [],
-  summary: { grandTotal: 0, todayTotal: 0, avgPerDay: 0, daysWithData: 0 },
+  summary: { grandTotal: 0, todayTotal: 0, avgPerDay: 0, daysWithData: 0, avgEfficiency: null },
 };
 
 export default function ProductionReportPage() {
@@ -129,6 +130,7 @@ export default function ProductionReportPage() {
           todayTotal={data.summary.todayTotal}
           avgPerDay={data.summary.avgPerDay}
           daysWithData={data.summary.daysWithData}
+          avgEfficiency={data.summary.avgEfficiency}
           loading={loading}
         />
 

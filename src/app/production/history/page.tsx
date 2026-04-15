@@ -18,7 +18,7 @@ export default function ProductionHistoryPage() {
 
     // State Phân trang & Thống kê Server trả về
     const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
-    const [serverStats, setServerStats] = useState({ totalOutput: 0 });
+    const [serverStats, setServerStats] = useState<{ totalOutput: number; avgEfficiency: number | null }>({ totalOutput: 0, avgEfficiency: null });
     const [sortConfig, setSortConfig] = useState<{ field: any, order: string } | null>(null);
 
     // --- 2. STATE DANH MỤC (Để đổ vào ô lọc) ---
@@ -89,7 +89,10 @@ export default function ProductionHistoryPage() {
                 pageSize: responseData.pagination.pageSize,
                 total: responseData.pagination.total
             });
-            setServerStats({ totalOutput: responseData.stats.totalOutput });
+            setServerStats({
+                totalOutput: responseData.stats.totalOutput,
+                avgEfficiency: responseData.stats.avgEfficiency ?? null,
+            });
 
         } catch (error) {
             message.error("Lỗi tải dữ liệu");
@@ -157,6 +160,16 @@ export default function ProductionHistoryPage() {
             align: 'right' as const,
             sorter: true,
             render: (n: number) => <b style={{ color: '#389e0d' }}>{n?.toLocaleString()} kg</b>
+        },
+        {
+            title: "Hiệu suất",
+            dataIndex: "efficiency",
+            align: 'center' as const,
+            width: 100,
+            sorter: true,
+            render: (n: number | null) => n != null
+                ? <Tag color={n >= 95 ? 'green' : n >= 85 ? 'orange' : 'red'}>{n.toFixed(1)}%</Tag>
+                : <span style={{ color: '#ccc' }}>—</span>,
         },
         { title: "Đầu", dataIndex: "startIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
         { title: "Cuối", dataIndex: "endIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
@@ -255,6 +268,18 @@ export default function ProductionHistoryPage() {
                         />
                         <Divider style={{ margin: '12px 0' }} />
                         <Statistic title="Số dòng dữ liệu tìm thấy" value={pagination.total} />
+                        {serverStats.avgEfficiency != null && (
+                            <>
+                                <Divider style={{ margin: '12px 0' }} />
+                                <Statistic
+                                    title="Hiệu suất TB (trọng số sản lượng)"
+                                    value={serverStats.avgEfficiency}
+                                    precision={1}
+                                    suffix="%"
+                                    styles={{ content: { color: serverStats.avgEfficiency >= 95 ? '#389e0d' : serverStats.avgEfficiency >= 85 ? '#d48806' : '#cf1322', fontWeight: 'bold' } }}
+                                />
+                            </>
+                        )}
                     </Card>
                 </Col>
 

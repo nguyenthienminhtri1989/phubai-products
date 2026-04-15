@@ -182,6 +182,7 @@ model ProductionLog {
   endIndex    Float?
   inputNE     Float?
   finalOutput Float
+  efficiency  Float? // Hiệu suất máy (0–100%), nullable — không bắt buộc
 
   note String?
 
