@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateLineItem, refreshSummarySnapshot } from "@/lib/kdsx/calculator";
+import {
+  calculateLineItem,
+  refreshSummarySnapshot,
+} from "@/lib/kdsx/calculator";
 import { SnapshotType } from "@prisma/client";
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
@@ -18,7 +25,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     where: { id: Number(id) },
     include: { lineItems: true },
   });
-  if (!actual) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!actual)
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { factoryId, yearMonth } = actual;
   const [year, month] = yearMonth.split("-").map(Number);
@@ -63,8 +71,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     });
 
     let calcResult = {
-      revenueVnd: 0, cottonCostVnd: 0, peCostVnd: 0,
-      sellingCostVnd: 0, gcDoubleTwistVnd: 0, wasteRecoveryVnd: 0, grossProfitVnd: 0,
+      revenueVnd: 0,
+      cottonCostVnd: 0,
+      peCostVnd: 0,
+      sellingCostVnd: 0,
+      gcDoubleTwistVnd: 0,
+      wasteRecoveryVnd: 0,
+      grossProfitVnd: 0,
     };
 
     if (inputParam && unitPriceUsd > 0) {
@@ -75,7 +88,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           cottonRate: rate?.cottonRate ?? 0,
           peRate: rate?.peRate ?? 0,
           wasteRate: rate?.wasteRate ?? 0,
-          sellingCostRate: rate?.sellingCostRate ?? 0,
+          sellingCostRate: soItem?.sellingCostRate ?? 0, // ← sửa ở đây
           doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
         },
         params: {
