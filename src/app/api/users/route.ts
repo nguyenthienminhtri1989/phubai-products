@@ -133,3 +133,44 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Lỗi cập nhật user" }, { status: 500 });
   }
 }
+
+// 4. DELETE: Xóa user
+export async function DELETE(req: Request) {
+  try {
+    const session = await auth();
+    if ((session?.user as any)?.userRole !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Không có quyền truy cập" },
+        { status: 403 },
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "Thiếu ID người dùng" }, { status: 400 });
+    }
+
+    const userId = parseInt(id);
+    const currentUserId = (session?.user as any)?.id;
+
+    // Không cho phép tự xóa chính mình
+    if (currentUserId && userId === parseInt(currentUserId)) {
+      return NextResponse.json(
+        { error: "Bạn không thể xóa tài khoản đang đăng nhập!" },
+        { status: 400 },
+      );
+    }
+
+    // Xóa các bản ghi liên quan trước
+    await prisma.userProcess.deleteMany({ where: { userId } });
+    await prisma.pagePermission.deleteMany({ where: { userId } });
+
+    await prisma.user.delete({ where: { id: userId } });
+
+    return NextResponse.json({ success: true, message: "Đã xóa người dùng" });
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    return NextResponse.json({ error: "Lỗi xóa người dùng" }, { status: 500 });
+  }
+}

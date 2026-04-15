@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Switch, Tag, message, Card, Space, Popconfirm } from 'antd';
 import {
   EditOutlined,
   ReloadOutlined,
@@ -9,6 +9,7 @@ import {
   CloseCircleOutlined,
   UserAddOutlined,
   LockOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useSession } from 'next-auth/react';
 import {
@@ -126,6 +127,19 @@ export default function UserManagementPage() {
     }
   };
 
+  // --- XÓA USER ---
+  const handleDelete = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/users?id=${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra');
+      message.success('Đã xóa người dùng thành công!');
+      fetchData();
+    } catch (error: any) {
+      message.error(error.message);
+    }
+  };
+
   // --- Mở Modal Tạo Mới ---
   const openCreateModal = () => {
     setEditingUser(null);
@@ -199,16 +213,33 @@ export default function UserManagementPage() {
     {
       title: 'Hành động',
       key: 'action',
-      render: (_: any, r: UserType) => (
-        <Space>
-          <Button type="primary" ghost size="small" icon={<EditOutlined />} onClick={() => openEditModal(r)}>
-            Sửa
-          </Button>
-          <Button size="small" icon={<LockOutlined />} onClick={() => router.push(`/admin/permissions`)}>
-            Quyền
-          </Button>
-        </Space>
-      )
+      render: (_: any, r: UserType) => {
+        const isCurrentUser = (session?.user as any)?.id === String(r.id);
+        return (
+          <Space>
+            <Button type="primary" ghost size="small" icon={<EditOutlined />} onClick={() => openEditModal(r)}>
+              Sửa
+            </Button>
+            <Button size="small" icon={<LockOutlined />} onClick={() => router.push(`/admin/permissions`)}>
+              Quyền
+            </Button>
+            {!isCurrentUser && (
+              <Popconfirm
+                title="Xóa người dùng"
+                description={`Bạn có chắc chắn muốn xóa tài khoản "${r.fullName}"?`}
+                onConfirm={() => handleDelete(r.id)}
+                okText="Xóa"
+                cancelText="Hủy"
+                okButtonProps={{ danger: true }}
+              >
+                <Button danger size="small" icon={<DeleteOutlined />}>
+                  Xóa
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      }
     }
   ];
 
