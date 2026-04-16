@@ -761,7 +761,7 @@ export default function DailyInputGridPage() {
           }}
           onChange={val => setRows(prev => {
             const next = [...prev];
-            next[i] = { ...next[i], efficiency: val ?? null, isDirty: true };
+            next[i] = { ...next[i], efficiency: val != null ? Number(val) : null, isDirty: true };
             return next;
           })}
         />
