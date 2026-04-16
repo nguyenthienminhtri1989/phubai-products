@@ -41,6 +41,7 @@ import {
   EditOutlined,
   LockOutlined,
   ExperimentOutlined,
+  TableOutlined,
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -73,7 +74,8 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "dashboard.overview", pageGroup: "TỔNG QUAN", path: "/", label: "Tổng quan", icon: <DashboardOutlined /> },
   // SẢN XUẤT
   { pageKey: "sx.machines", pageGroup: "SẢN XUẤT", path: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
-  { pageKey: "sx.daily-input", pageGroup: "SẢN XUẤT", path: "/production/daily-input", label: "Nhập sản lượng", icon: <ProductOutlined /> },
+  { pageKey: "sx.daily-input", pageGroup: "SẢN XUẤT", path: "/production/daily-input", label: "Nhập sản lượng (Thẻ)", icon: <ProductOutlined /> },
+  { pageKey: "sx.daily-input-grid", pageGroup: "SẢN XUẤT", path: "/production/daily-input-grid", label: "Nhập sản lượng (Bảng)", icon: <TableOutlined /> },
   { pageKey: "sx.iot-import", pageGroup: "SẢN XUẤT", path: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> },
   { pageKey: "sx.line-setup", pageGroup: "SẢN XUẤT", path: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
   { pageKey: "sx.line-diagram", pageGroup: "SẢN XUẤT", path: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
@@ -151,7 +153,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         key: "sub-sx",
         label: "Quản lý sản xuất",
         icon: <AppstoreOutlined />,
-        pageKeys: ["sx.machines", "sx.daily-input", "sx.iot-import", "sx.line-setup", "sx.line-diagram", "sx.qr-machines"],
+        pageKeys: ["sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.iot-import", "sx.line-setup", "sx.line-diagram", "sx.qr-machines"],
       },
       {
         key: "sub-stops",

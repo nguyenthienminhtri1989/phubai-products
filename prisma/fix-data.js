@@ -16,8 +16,9 @@ async function main() {
   const pages = [
     { pageKey: "dashboard.overview", pageName: "Tổng quan", pageGroup: "TỔNG QUAN", path: "/", sortOrder: 0 },
     { pageKey: "sx.machines", pageName: "Máy móc & Điều phối", pageGroup: "SẢN XUẤT", path: "/machines", sortOrder: 100 },
-    { pageKey: "sx.daily-input", pageName: "Nhập sản lượng", pageGroup: "SẢN XUẤT", path: "/production/daily-input", sortOrder: 101 },
-    { pageKey: "sx.line-setup", pageName: "Thiết lập line SX", pageGroup: "SẢN XUẤT", path: "/production/line-setup", sortOrder: 102 },
+    { pageKey: "sx.daily-input", pageName: "Nhập sản lượng (Thẻ)", pageGroup: "SẢN XUẤT", path: "/production/daily-input", sortOrder: 101 },
+    { pageKey: "sx.daily-input-grid", pageName: "Nhập sản lượng (Bảng)", pageGroup: "SẢN XUẤT", path: "/production/daily-input-grid", sortOrder: 102 },
+    { pageKey: "sx.line-setup", pageName: "Thiết lập line SX", pageGroup: "SẢN XUẤT", path: "/production/line-setup", sortOrder: 103 },
     { pageKey: "sx.line-diagram", pageName: "Sơ đồ line SX", pageGroup: "SẢN XUẤT", path: "/production/line-diagram", sortOrder: 103 },
     { pageKey: "sx.qr-machines", pageName: "QR Code máy", pageGroup: "SẢN XUẤT", path: "/machines/qr-machines", sortOrder: 104 },
     { pageKey: "sx.iot-import", pageName: "Import IoT", pageGroup: "SẢN XUẤT", path: "/iot-import", sortOrder: 105 },

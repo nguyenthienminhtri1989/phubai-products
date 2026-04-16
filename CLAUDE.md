@@ -97,6 +97,7 @@ Sau đó đọc `BUSINESS_LOGIC_CONTEXT.md` để hiểu nghiệp vụ chi tiế
 - `ADMIN` — toàn quyền, không bị giới hạn dữ liệu
 - `USER` (Manager/Operator) — chỉ truy cập data trong `processId` của mình
 - Mọi API route phải kiểm tra session và role trước khi xử lý
+- Luôn bổ sung thêm trang vừa được tạo mới vào trang phân quyền src\app\admin\permissions\page.tsx
 
 ## 4.1 Phân quyền theo Department (bổ sung)
 

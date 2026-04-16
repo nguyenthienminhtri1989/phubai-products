@@ -1523,3 +1523,45 @@ src/components/reports/OutputByDate.tsx                      — Chuyển LineCh
 
 - `efficiency` lưu dạng số thực (VD: 97.5 nghĩa là 97.5%), không phải tỷ lệ 0–1
 - Migration: file SQL tạo thủ công do Prisma CLI bị block network; cần chạy `npx prisma migrate deploy` + `npx prisma generate` từ Windows terminal
+
+---
+
+## SẢN XUẤT — Nhập sản lượng dạng bảng (Grid)
+
+**Status:** ✅ Completed 2026-04-16
+
+### What was built
+
+Giao diện nhập sản lượng dạng bảng dành cho nhân viên thống kê, hoạt động song song với giao diện thẻ (card) cũ. Cho phép paste dữ liệu từ Excel (Ctrl+V) vào cột "Chỉ số SAU", hỗ trợ tất cả formulaType, tự động tải chỉ số đầu ca từ ca trước và lưu vào cùng bảng `production_logs` qua cùng API.
+
+### Files created/modified
+
+```
+src/app/production/daily-input-grid/page.tsx  — Trang nhập liệu dạng bảng mới
+src/components/AdminLayout.tsx                 — Thêm menu "Nhập sản lượng (Bảng)", icon TableOutlined
+```
+
+### Key business logic implemented
+
+- Dùng chung `/api/production/daily-input` POST + `/api/production/daily-status` + `/api/production/last-log` — không tạo API mới
+- Auto-load `startIndex` từ last-log của ca trước (Promise.all song song cho tất cả máy)
+- Paste Excel: lấy cột đầu tiên của mỗi dòng (split by `\t`), dán từ row được click xuống dưới
+- Công thức tính `finalOutput` phía client giống hệt trang card cũ (formulaType 1/2/3/4)
+- Switch "Dừng" per row thay cho modal riêng — khi Dừng: finalOutput=0, note="Máy dừng"
+- Chỉ số TRƯỚC hiển thị read-only, có nút edit nhỏ khi cần sửa (tương đương isReset của card cũ)
+- Xóa log: chỉ user có role ADMIN/DIRECTOR/FACTORY_MANAGER/STATISTICIAN mới thấy nút xóa
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/production/daily-status | Tải machines + todayLog theo processId/date/shift |
+| GET    | /api/production/last-log | Lấy endIndex ca trước cho startIndex |
+| POST   | /api/production/daily-input | Lưu từng row (upsert theo machineId+date+shift+itemId) |
+| DELETE | /api/production/daily-input?id= | Xóa log (role-restricted) |
+
+### Known limitations
+
+- Chưa hỗ trợ "Đổi hàng giữa ca" (tính năng phức tạp của giao diện thẻ); người dùng cần dùng giao diện thẻ nếu cần đổi hàng giữa ca
+- Không có cảnh báo ca thiếu (missing shifts warning) như giao diện thẻ
+- Cột NE hiển thị "—" cho formulaType 1 và 2
