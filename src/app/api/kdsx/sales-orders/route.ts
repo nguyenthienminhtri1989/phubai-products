@@ -66,34 +66,43 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { orderNo, customerId, factoryId, signedDate, deliveryDate, note, items } = body;
+  const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, items } = body;
   if (!orderNo || !customerId || !factoryId || !deliveryDate) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, customerId, factoryId, deliveryDate)" }, { status: 400 });
   }
 
-  const order = await prisma.salesOrder.create({
-    data: {
-      orderNo,
-      customerId: Number(customerId),
-      factoryId: Number(factoryId),
-      signedDate: signedDate ? new Date(signedDate) : null,
-      deliveryDate: new Date(deliveryDate),
-      note: note || null,
-      items: {
-        create: (items || []).map((it: any) => ({
-          itemId: Number(it.itemId),
-          plannedQty: Number(it.plannedQty),
-          unitPrice: Number(it.unitPrice),
-          sellingCostRate: it.sellingCostRate ?? null,
-          note: it.note || null,
-        })),
+  try {
+    const order = await prisma.salesOrder.create({
+      data: {
+        orderNo,
+        customerId: Number(customerId),
+        factoryId: Number(factoryId),
+        signedDate: signedDate ? new Date(signedDate) : null,
+        deliveryDate: new Date(deliveryDate),
+        startDate: startDate ? new Date(startDate) : null,
+        note: note || null,
+        items: {
+          create: (items || []).map((it: any) => ({
+            itemId: Number(it.itemId),
+            plannedQty: Number(it.plannedQty),
+            unitPrice: Number(it.unitPrice),
+            sellingCostRate: it.sellingCostRate ?? null,
+            note: it.note || null,
+          })),
+        },
       },
-    },
-    include: {
-      customer: true,
-      factory: { select: { id: true, name: true } },
-      items: { include: { item: true } },
-    },
-  });
-  return NextResponse.json(order, { status: 201 });
+      include: {
+        customer: true,
+        factory: { select: { id: true, name: true } },
+        items: { include: { item: true } },
+      },
+    });
+    return NextResponse.json(order, { status: 201 });
+  } catch (error: any) {
+    console.error("SalesOrder POST error:", error);
+    if (error.code === "P2002") {
+      return NextResponse.json({ error: "Số hợp đồng đã tồn tại, vui lòng dùng số khác" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Lỗi tạo hợp đồng: " + error.message }, { status: 500 });
+  }
 }

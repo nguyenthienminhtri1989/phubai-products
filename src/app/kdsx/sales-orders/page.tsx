@@ -121,13 +121,21 @@ export default function SalesOrdersPage() {
   }
 
   async function handleSave() {
+    // Tách validateFields ra riêng để bắt lỗi validation đúng cách
+    let values: any;
     try {
-      const values = await form.validateFields();
-      setSaving(true);
+      values = await form.validateFields();
+    } catch {
+      // Ant Design tự hiển thị lỗi inline trên từng field — không cần làm gì thêm
+      return;
+    }
+
+    setSaving(true);
+    try {
       const payload = {
         ...values,
         signedDate: values.signedDate ? values.signedDate.format("YYYY-MM-DD") : null,
-        deliveryDate: values.deliveryDate ? values.deliveryDate.format("YYYY-MM-DD") : undefined,
+        deliveryDate: values.deliveryDate ? values.deliveryDate.format("YYYY-MM-DD") : null,
         startDate: values.startDate ? values.startDate.format("YYYY-MM-DD") : null,
       };
       const url = editing ? `/api/kdsx/sales-orders/${editing.id}` : "/api/kdsx/sales-orders";
@@ -138,13 +146,15 @@ export default function SalesOrdersPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         message.error(err.error || "Lỗi lưu dữ liệu");
         return;
       }
       message.success(editing ? "Đã cập nhật" : "Đã tạo hợp đồng");
       setModalOpen(false);
       fetchAll();
+    } catch (e: any) {
+      message.error("Lỗi không xác định: " + (e?.message || e));
     } finally {
       setSaving(false);
     }
