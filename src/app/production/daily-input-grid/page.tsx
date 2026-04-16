@@ -47,29 +47,54 @@ interface RowData {
   machineName: string;
   formulaType: number;
   spindleCount: number;
-  // Item
   itemId: number;
   itemName: string;
   originalItemId: number;
-  // Input fields
   startIndex: number;
   endIndex: number | null;
   inputNE: number;
-  // Status
   isStopped: boolean;
   efficiency: number | null;
   note: string;
-  // Meta
   isDirty: boolean;
   existingLogId?: number;
   startIndexEditing?: boolean;
-  rowKey: string;        // stable unique key cho Table
-  isSubRow?: boolean;    // true = dòng phụ (đổi mặt hàng giữa ca)
+  rowKey: string;
+  isSubRow?: boolean;
 }
 
 interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
 interface ItemOption { id: number; name: string; }
+
+interface ProductionLogEntry {
+  id: number;
+  itemId: number;
+  startIndex: number;
+  endIndex: number | null;
+  inputNE: number;
+  efficiency: number | null;
+  note: string;
+  item?: { id: number; name: string } | null;
+}
+
+interface MachineStatus {
+  id: number;
+  name: string;
+  formulaType: number;
+  spindleCount: number;
+  currentNE?: number;
+  currentItem?: { id: number; name: string } | null;
+  todayLog: ProductionLogEntry | null;
+  todayLogs: ProductionLogEntry[];
+}
+
+interface SessionUser {
+  role?: string;
+  userRole?: string;
+  accessLevel?: string;
+  processIds?: unknown[];
+}
 
 // ============================================================
 // Tính sản lượng theo formulaType
@@ -84,7 +109,7 @@ function calcOutput(row: RowData): number {
   const type = row.formulaType;
   let result = 0;
 
-  if (type === 1) result = Number(end); // nhập thẳng kg
+  if (type === 1) result = Number(end);
   else if (type === 2) result = delta;
   else if (type === 3) {
     const ne = row.inputNE || 1;
@@ -121,9 +146,10 @@ export default function DailyInputGridPage() {
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
 
   // Phân quyền
-  const isAdmin = session?.user?.role === "ADMIN";
-  const userRole = (session?.user as any)?.userRole as string | undefined;
-  const isReadOnly = !isAdmin && (session?.user as any)?.accessLevel === "READ_ONLY";
+  const su = session?.user as SessionUser | undefined;
+  const isAdmin = su?.role === "ADMIN";
+  const userRole = su?.userRole;
+  const isReadOnly = !isAdmin && su?.accessLevel === "READ_ONLY";
   const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
   const canDelete = isAdmin || (userRole ? ALLOWED_DELETE_ROLES.includes(userRole) : false);
 
@@ -142,7 +168,7 @@ export default function DailyInputGridPage() {
       fetch("/api/factories").then(r => r.json()),
       fetch("/api/processes").then(r => r.json()),
       fetch("/api/items").then(r => r.json()),
-    ]).then(([facs, procs, its]) => {
+    ]).then(([facs, procs, its]: [Factory[], Process[], ItemOption[]]) => {
       setFactories(Array.isArray(facs) ? facs : []);
       setProcesses(Array.isArray(procs) ? procs : []);
       setItems(Array.isArray(its) ? its : []);
@@ -152,16 +178,16 @@ export default function DailyInputGridPage() {
   // Tự động chọn công đoạn nếu user chỉ quản lý 1 công đoạn
   useEffect(() => {
     if (isAdmin || processes.length === 0) return;
-    const rawProcessIds = (session?.user as any)?.processIds || [];
-    const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
+    const rawIds = su?.processIds ?? [];
+    const userProcessIds: number[] = Array.isArray(rawIds) ? rawIds.map(Number) : [];
     if (userProcessIds.length === 1) {
-      const targetProcess = processes.find(p => p.id === userProcessIds[0]);
-      if (targetProcess) {
-        setFactoryId(targetProcess.factoryId);
-        setProcessId(targetProcess.id);
+      const target = processes.find(p => p.id === userProcessIds[0]);
+      if (target) {
+        setFactoryId(target.factoryId);
+        setProcessId(target.id);
       }
     }
-  }, [processes, session, isAdmin]);
+  }, [processes, su, isAdmin]);
 
   // ============================================================
   // Tải danh sách máy + dữ liệu ca đã nhập
@@ -176,19 +202,18 @@ export default function DailyInputGridPage() {
     try {
       const dateStr = date.format("YYYY-MM-DD");
 
-      // 1. Tải machines + tất cả log ca hiện tại qua daily-status
       const statusRes = await fetch(
         `/api/production/daily-status?processId=${processId}&date=${dateStr}&shift=${shift}`
       );
       if (!statusRes.ok) throw new Error("Lỗi tải danh sách máy");
-      const machines: any[] = await statusRes.json();
+      const machines: MachineStatus[] = await statusRes.json();
 
-      // 2. Với mỗi máy chưa có log → tải last-log để lấy startIndex
+      // Với mỗi máy chưa có log → tải last-log để lấy startIndex
       const machinesNeedingLastLog = machines.filter(m => !m.todayLog);
       const lastLogResults = await Promise.all(
         machinesNeedingLastLog.map(m =>
           fetch(`/api/production/last-log?machineId=${m.id}&date=${dateStr}&shift=${shift}`)
-            .then(r => r.ok ? r.json() : null)
+            .then(r => r.ok ? (r.json() as Promise<{ endIndex?: number | null }>) : null)
             .catch(() => null)
         )
       );
@@ -198,13 +223,12 @@ export default function DailyInputGridPage() {
         if (log?.endIndex != null) lastLogMap.set(m.id, log.endIndex);
       });
 
-      // 3. Build rows — hỗ trợ nhiều mặt hàng/máy/ca (sub-rows)
+      // Build rows — hỗ trợ nhiều mặt hàng/máy/ca (sub-rows)
       const newRows: RowData[] = [];
       machines.forEach(m => {
-        const logs: any[] = m.todayLogs ?? (m.todayLog ? [m.todayLog] : []);
+        const logs: ProductionLogEntry[] = m.todayLogs ?? (m.todayLog ? [m.todayLog] : []);
 
         if (logs.length === 0) {
-          // Chưa có log → 1 primary row trống
           newRows.push({
             machineId: m.id,
             machineName: m.name,
@@ -224,7 +248,6 @@ export default function DailyInputGridPage() {
             isSubRow: false,
           });
         } else {
-          // Có log(s) — log đầu = primary row, log sau = sub-row
           logs.forEach((log, idx) => {
             newRows.push({
               machineId: m.id,
@@ -253,8 +276,8 @@ export default function DailyInputGridPage() {
       const primaryCount = newRows.filter(r => !r.isSubRow).length;
       const entered = newRows.filter(r => r.endIndex !== null || r.isStopped).length;
       message.success(`Đã tải ${primaryCount} máy. Đã nhập: ${entered}/${newRows.length} bản ghi`);
-    } catch (err: any) {
-      message.error(err.message || "Lỗi tải dữ liệu");
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Lỗi tải dữ liệu");
     } finally {
       setFetching(false);
     }
@@ -266,7 +289,6 @@ export default function DailyInputGridPage() {
   const handleAddSubRow = useCallback((rowIdx: number) => {
     const parentRow = rows[rowIdx];
 
-    // Tìm vị trí cuối cùng của nhóm máy này
     let insertAfterIdx = rowIdx;
     for (let i = rowIdx + 1; i < rows.length; i++) {
       if (rows[i].machineId === parentRow.machineId) {
@@ -276,7 +298,7 @@ export default function DailyInputGridPage() {
       }
     }
 
-    // Smart startIndex: với máy cộng dồn (type 2/3/4), lấy endIndex của dòng trước đó làm startIndex
+    // Smart startIndex: máy cộng dồn (type 2/3/4) lấy endIndex dòng trước làm startIndex
     const prevRow = rows[insertAfterIdx];
     const smartStartIndex =
       prevRow.formulaType !== 1 && prevRow.endIndex !== null
@@ -315,23 +337,21 @@ export default function DailyInputGridPage() {
   const handleRemoveSubRow = useCallback(async (rowIdx: number) => {
     const r = rows[rowIdx];
     if (!r.existingLogId) {
-      // Chưa lưu → xóa trực tiếp khỏi array
       setRows(prev => prev.filter((_, i) => i !== rowIdx));
       return;
     }
-    // Đã lưu → gọi DELETE API
     try {
       const res = await fetch(`/api/production/daily-input?id=${r.existingLogId}`, { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Lỗi xóa"); }
+      if (!res.ok) { const d: { error?: string } = await res.json(); throw new Error(d.error || "Lỗi xóa"); }
       message.success(`Đã xóa bản ghi ${r.machineName} — ${r.itemName}`);
       setRows(prev => prev.filter((_, i) => i !== rowIdx));
-    } catch (err: any) {
-      message.error(err.message || "Lỗi xóa bản ghi");
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Lỗi xóa bản ghi");
     }
   }, [rows]);
 
   // ============================================================
-  // Paste từ Excel (Ctrl+V) — dán vào cột chỉ số SAU
+  // Paste từ Excel (Ctrl+V)
   // ============================================================
   const handlePaste = useCallback((e: React.ClipboardEvent, startRowIndex: number) => {
     const text = e.clipboardData.getData("text");
@@ -353,7 +373,6 @@ export default function DailyInputGridPage() {
 
     setRows(prev => {
       const next = [...prev];
-      // Chỉ dán vào primary rows (bỏ qua sub-rows)
       let pasteIdx = 0;
       for (let i = startRowIndex; i < next.length && pasteIdx < values.length; i++) {
         if (next[i].isSubRow) continue;
@@ -373,7 +392,7 @@ export default function DailyInputGridPage() {
   }, []);
 
   // ============================================================
-  // Điền "Máy dừng" cho máy chưa nhập
+  // Điền "Máy dừng" cho bản ghi chưa nhập
   // ============================================================
   const handleFillStopped = useCallback(() => {
     const count = rows.filter(r => r.endIndex === null && !r.isStopped && r.itemId !== 0).length;
@@ -396,10 +415,9 @@ export default function DailyInputGridPage() {
       return;
     }
 
-    // Kiểm tra sản lượng âm
     const negativeRows = dirty.filter(r => !r.isStopped && calcOutput(r) < 0);
     if (negativeRows.length > 0) {
-      message.error(`${negativeRows.length} bản ghi có sản lượng âm (chỉ số SAU < TRƯỚC). Vui lòng kiểm tra lại.`);
+      message.error(`${negativeRows.length} bản ghi có sản lượng âm. Vui lòng kiểm tra lại.`);
       return;
     }
 
@@ -407,7 +425,7 @@ export default function DailyInputGridPage() {
     try {
       const dateStr = date.format("YYYY-MM-DD");
 
-      // 1. Cập nhật điều phối nếu mặt hàng thay đổi (chỉ với primary rows)
+      // Cập nhật điều phối nếu mặt hàng thay đổi (chỉ primary rows)
       const itemChangedRows = dirty.filter(r => !r.isSubRow && r.itemId !== r.originalItemId && r.itemId !== 0);
       for (const r of itemChangedRows) {
         const res = await fetch("/api/machines/batch", {
@@ -416,7 +434,7 @@ export default function DailyInputGridPage() {
           body: JSON.stringify({ machineIds: [r.machineId], itemId: r.itemId }),
         });
         if (!res.ok) {
-          const data = await res.json();
+          const data: { error?: string } = await res.json();
           throw new Error(`Không thể cập nhật điều phối máy ${r.machineName}: ${data.error ?? ""}`);
         }
       }
@@ -424,7 +442,6 @@ export default function DailyInputGridPage() {
         message.info(`Đã cập nhật điều phối cho ${itemChangedRows.length} máy đổi mặt hàng`);
       }
 
-      // 2. Lưu từng row qua API production/daily-input
       const results = await Promise.allSettled(
         dirty.map(r => {
           const finalOutput = r.isStopped ? 0 : calcOutput(r);
@@ -446,7 +463,7 @@ export default function DailyInputGridPage() {
             }),
           }).then(res => {
             if (!res.ok) throw new Error(`Lỗi lưu ${r.machineName}${r.isSubRow ? ` (${r.itemName})` : ""}`);
-            return res.json();
+            return res.json() as Promise<{ id?: number }>;
           });
         })
       );
@@ -461,11 +478,10 @@ export default function DailyInputGridPage() {
       }
       if (succeeded > 0) message.success(`Đã lưu ${succeeded}/${dirty.length} bản ghi thành công`);
 
-      // 3. Reset isDirty + cập nhật existingLogId từ response (dùng rowKey để map chính xác)
       const rowKeyToLogId = new Map<string, number>();
       dirty.forEach((r, idx) => {
         if (results[idx].status === "fulfilled") {
-          const id = (results[idx] as PromiseFulfilledResult<any>).value?.id;
+          const id = (results[idx] as PromiseFulfilledResult<{ id?: number }>).value?.id;
           if (id) rowKeyToLogId.set(r.rowKey, id);
         }
       });
@@ -475,8 +491,8 @@ export default function DailyInputGridPage() {
         const newId = rowKeyToLogId.get(r.rowKey);
         return { ...r, isDirty: false, originalItemId: r.itemId, existingLogId: newId ?? r.existingLogId };
       }));
-    } catch (err: any) {
-      message.error(err.message ?? "Lỗi lưu dữ liệu");
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Lỗi lưu dữ liệu");
     } finally {
       setLoading(false);
     }
@@ -490,14 +506,14 @@ export default function DailyInputGridPage() {
     if (!r.existingLogId) return;
     try {
       const res = await fetch(`/api/production/daily-input?id=${r.existingLogId}`, { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Lỗi xóa"); }
+      if (!res.ok) { const d: { error?: string } = await res.json(); throw new Error(d.error || "Lỗi xóa"); }
       message.success(`Đã xóa bản ghi ${r.machineName}`);
       setRows(prev => prev.map((row, i) => i === rowIdx
         ? { ...row, endIndex: null, isStopped: false, note: "", efficiency: null, isDirty: false, existingLogId: undefined }
         : row
       ));
-    } catch (err: any) {
-      message.error(err.message || "Lỗi xóa bản ghi");
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Lỗi xóa bản ghi");
     }
   }, [rows]);
 
@@ -512,7 +528,6 @@ export default function DailyInputGridPage() {
     [rows]
   );
 
-  // Số thứ tự cho primary rows
   const machineNumbers = useMemo(() => {
     const map = new Map<string, number>();
     let count = 0;
@@ -529,7 +544,7 @@ export default function DailyInputGridPage() {
     {
       title: "#",
       width: 42,
-      render: (_: any, r: RowData) => r.isSubRow
+      render: (_: unknown, r: RowData) => r.isSubRow
         ? <span style={{ color: "#bbb", fontSize: 13 }}>↳</span>
         : <span style={{ fontSize: 12, color: "#999" }}>{machineNumbers.get(r.rowKey)}</span>,
     },
@@ -544,7 +559,7 @@ export default function DailyInputGridPage() {
     {
       title: "Mặt hàng",
       width: 180,
-      render: (_: any, r: RowData, i: number) => {
+      render: (_: unknown, r: RowData, i: number) => {
         const isEditing = editingItemKey === r.rowKey;
         const changed = r.itemId !== r.originalItemId && r.itemId !== 0;
 
@@ -554,7 +569,7 @@ export default function DailyInputGridPage() {
               autoFocus={isEditing}
               showSearch
               filterOption={(input, opt) =>
-                (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())
               }
               style={{ width: 160 }}
               placeholder="Chọn mặt hàng..."
@@ -597,7 +612,7 @@ export default function DailyInputGridPage() {
     {
       title: () => <span>Chỉ số <span style={{ color: "#999", fontWeight: 400 }}>TRƯỚC</span></span>,
       width: 105,
-      render: (_: any, r: RowData, i: number) => {
+      render: (_: unknown, r: RowData, i: number) => {
         if (r.formulaType === 1) return <span style={{ color: "#ccc", fontSize: 12 }}>—</span>;
         return r.startIndexEditing ? (
           <InputNumber
@@ -646,7 +661,7 @@ export default function DailyInputGridPage() {
         </span>
       ),
       width: 140,
-      render: (_: any, r: RowData, i: number) => (
+      render: (_: unknown, r: RowData, i: number) => (
         <InputNumber
           size="small"
           style={{
@@ -673,7 +688,7 @@ export default function DailyInputGridPage() {
     {
       title: "NE",
       width: 72,
-      render: (_: any, r: RowData, i: number) => {
+      render: (_: unknown, r: RowData, i: number) => {
         if (r.formulaType !== 3 && r.formulaType !== 4) {
           return <span style={{ color: "#ddd", fontSize: 12 }}>—</span>;
         }
@@ -696,7 +711,7 @@ export default function DailyInputGridPage() {
     {
       title: "SL (kg)",
       width: 90,
-      render: (_: any, r: RowData) => {
+      render: (_: unknown, r: RowData) => {
         if (r.isStopped) return <Tag color="warning" style={{ fontSize: 12 }}>Dừng</Tag>;
         const output = calcOutput(r);
         if (r.endIndex === null) return <span style={{ color: "#ccc" }}>—</span>;
@@ -710,7 +725,7 @@ export default function DailyInputGridPage() {
     {
       title: "Dừng",
       width: 62,
-      render: (_: any, r: RowData, i: number) => (
+      render: (_: unknown, r: RowData, i: number) => (
         <Switch
           size="small"
           checked={r.isStopped}
@@ -726,7 +741,7 @@ export default function DailyInputGridPage() {
     {
       title: "Hiệu suất",
       width: 90,
-      render: (_: any, r: RowData, i: number) => (
+      render: (_: unknown, r: RowData, i: number) => (
         <InputNumber
           size="small"
           style={{ width: 72 }}
@@ -736,11 +751,13 @@ export default function DailyInputGridPage() {
           controls={false}
           placeholder="%"
           disabled={r.itemId === 0 || r.isStopped || isReadOnly}
-          formatter={v => (v !== undefined && v !== null && v !== "") ? `${v}%` : ""}
-          parser={v => {
-            if (!v) return undefined as any;
-            const n = parseFloat(String(v).replace("%", "").replace(",", "."));
-            return isNaN(n) ? undefined as any : n;
+          formatter={(v: number | string | undefined) =>
+            v !== undefined && v !== null ? `${v}%` : ""
+          }
+          parser={(v: string | undefined) => {
+            if (!v) return 0;
+            const n = parseFloat(v.replace("%", "").replace(",", "."));
+            return isNaN(n) ? 0 : n;
           }}
           onChange={val => setRows(prev => {
             const next = [...prev];
@@ -752,7 +769,7 @@ export default function DailyInputGridPage() {
     },
     {
       title: "Ghi chú",
-      render: (_: any, r: RowData, i: number) => (
+      render: (_: unknown, r: RowData, i: number) => (
         <Input
           size="small"
           value={r.isStopped ? "" : r.note}
@@ -770,7 +787,7 @@ export default function DailyInputGridPage() {
     {
       title: "Trạng thái",
       width: 100,
-      render: (_: any, r: RowData) => {
+      render: (_: unknown, r: RowData) => {
         if (r.itemId === 0) return <Tag color="warning">Chọn MH</Tag>;
         if (r.isStopped) return <Tag color="orange">Máy dừng</Tag>;
         if (r.isDirty) return <Tag color="processing">Chưa lưu</Tag>;
@@ -781,11 +798,10 @@ export default function DailyInputGridPage() {
     {
       title: "",
       width: 60,
-      render: (_: any, r: RowData, i: number) => {
+      render: (_: unknown, r: RowData, i: number) => {
         if (isReadOnly) return null;
 
         if (!r.isSubRow) {
-          // Primary row: nút "+" để thêm dòng đổi MH, và nút xóa nếu có quyền
           return (
             <Space size={2}>
               <Tooltip title="Thêm dòng đổi mặt hàng">
@@ -812,7 +828,6 @@ export default function DailyInputGridPage() {
             </Space>
           );
         } else {
-          // Sub-row: nút × (chưa lưu) hoặc nút xóa (đã lưu + có quyền)
           if (!r.existingLogId) {
             return (
               <Tooltip title="Xóa dòng này">
@@ -848,8 +863,8 @@ export default function DailyInputGridPage() {
   // ============================================================
   // Danh sách factories / processes lọc theo quyền
   // ============================================================
-  const rawProcessIds = (session?.user as any)?.processIds || [];
-  const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
+  const rawIds = su?.processIds ?? [];
+  const userProcessIds: number[] = Array.isArray(rawIds) ? rawIds.map(Number) : [];
   const isLocked = !isAdmin && userProcessIds.length === 1;
   const visibleProcesses = isAdmin ? processes : processes.filter(p => userProcessIds.includes(p.id));
   const allowedFactoryIds = isAdmin ? null : [...new Set(visibleProcesses.map(p => p.factoryId))];
@@ -888,7 +903,6 @@ export default function DailyInputGridPage() {
           options={visibleProcesses.filter(p => p.factoryId === factoryId).map(p => ({ label: p.name, value: p.id }))}
         />
 
-        {/* Chọn ngày với nút ◀ ▶ */}
         <Space.Compact>
           <Button icon={<LeftOutlined />} onClick={() => { setDate(d => d.subtract(1, "day")); setRows([]); }} />
           <DatePicker
@@ -901,7 +915,6 @@ export default function DailyInputGridPage() {
           <Button icon={<RightOutlined />} onClick={() => { setDate(d => d.add(1, "day")); setRows([]); }} />
         </Space.Compact>
 
-        {/* Chọn ca */}
         {[1, 2, 3].map(s => (
           <Button
             key={s}
@@ -935,14 +948,12 @@ export default function DailyInputGridPage() {
               title="Đã nhập"
               value={enteredCount}
               suffix={`/ ${rows.length} bản ghi (${primaryCount} máy)`}
-              valueStyle={{ fontSize: 18, color: "#52c41a" }}
             />
             <Divider type="vertical" style={{ height: 36 }} />
             <Statistic
               title={`Tổng SL Ca ${shift}`}
               value={totalKg.toLocaleString("vi-VN")}
               suffix="kg"
-              valueStyle={{ fontSize: 18 }}
             />
           </Space>
 
@@ -963,14 +974,14 @@ export default function DailyInputGridPage() {
         </div>
       )}
 
-      {/* Gợi ý paste */}
+      {/* Gợi ý */}
       {rows.length > 0 && (
         <div style={{ fontSize: 12, color: "#8c8c8c", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
           <KeyOutlined style={{ fontSize: 13 }} />
-          Mẹo: Bôi đen cột <b>SẢN LƯỢNG CA</b> trong Excel → Ctrl+C → Click vào ô đầu tiên → <b>Ctrl+V</b> để dán nhanh
+          Mẹo: Bôi đen cột <b>SẢN LƯỢNG CA</b> trong Excel → Ctrl+C → Click ô đầu → <b>Ctrl+V</b>
           <span style={{ marginLeft: 8, color: "#b0b0b0" }}>|</span>
           <PlusOutlined style={{ fontSize: 11, color: "#1677ff" }} />
-          <span>Bấm nút <b style={{ color: "#1677ff" }}>+</b> để thêm dòng đổi mặt hàng giữa ca</span>
+          <span>Bấm <b style={{ color: "#1677ff" }}>+</b> để thêm dòng đổi mặt hàng giữa ca</span>
         </div>
       )}
 
