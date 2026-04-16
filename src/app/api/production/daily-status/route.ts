@@ -28,8 +28,7 @@ export async function GET(request: Request) {
           include: {
             item: { select: { id: true, name: true } }, // Lấy tên mặt hàng thực tế của log
           },
-          orderBy: { id: "desc" },
-          take: 1,
+          orderBy: { id: "asc" },
         },
       },
       orderBy: { id: "asc" },
@@ -39,7 +38,8 @@ export async function GET(request: Request) {
     const formattedData = machines.map((m) => ({
       ...m,
       todayLog: m.productionLogs.length > 0 ? m.productionLogs[0] : null,
-      productionLogs: undefined, // Xóa mảng gốc cho nhẹ
+      todayLogs: m.productionLogs,   // Mảng đầy đủ cho grid page (nhiều MH/ca)
+      productionLogs: undefined,     // Xóa mảng gốc cho nhẹ
     }));
 
     return NextResponse.json(formattedData);
