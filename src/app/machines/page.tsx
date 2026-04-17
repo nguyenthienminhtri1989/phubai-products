@@ -43,11 +43,23 @@ export default function MachinesPage() {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [dispatchForm] = Form.useForm();
 
-    const isAdmin = session?.user?.role === "ADMIN";
-    const isManager = (session?.user as any)?.accessLevel === "MANAGER";
+    const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const pagePermissions: { pageKey: string; canView: boolean; canEdit: boolean }[] =
+        (session?.user as any)?.pagePermissions || [];
 
-    const canEdit = (m: MachineData) => isAdmin || (isManager && userProcessIds.includes(m.processId));
+    const isAdmin = userRole === "ADMIN";
+    // Quyền xem trang: ADMIN, hoặc có page-permission canView, hoặc role mặc định có quyền
+    const pagePerm = pagePermissions.find((p) => p.pageKey === "machines");
+    const hasViewByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
+    const canViewPage = isAdmin || (pagePerm?.canView ?? hasViewByRole);
+    // Quyền sửa: ADMIN, hoặc có page-permission canEdit, hoặc role mặc định có quyền và đúng công đoạn
+    const hasEditByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
+    const canEditPage = isAdmin || (pagePerm?.canEdit ?? hasEditByRole);
+
+    const canEdit = (m: MachineData) =>
+        isAdmin ||
+        (canEditPage && (userRole === "FACTORY_MANAGER" || userProcessIds.includes(m.processId)));
 
     // 1. Load Data
     const fetchData = async () => {
@@ -61,7 +73,8 @@ export default function MachinesPage() {
             setProcesses(await pRes.json());
             setItems(await iRes.json());
 
-            // Admin và Manager dùng filter controls; non-admin lấy tất cả rồi lọc client-side
+            // Admin/FACTORY_MANAGER dùng filter controls; các role khác lọc client-side theo processIds
+            const isManager = userRole === "FACTORY_MANAGER";
             let query = "?";
             if (isAdmin || isManager) {
                 if (filterFactory) query += `factoryId=${filterFactory}&`;
@@ -71,8 +84,8 @@ export default function MachinesPage() {
             const mRes = await fetch(`/api/machines${query}`);
             let mData: MachineData[] = await mRes.json();
 
-            // Non-admin: chỉ giữ máy thuộc công đoạn của mình
-            if (!isAdmin) {
+            // Non-admin, non-manager: chỉ giữ máy thuộc công đoạn của mình
+            if (!isAdmin && !isManager && userProcessIds.length > 0) {
                 mData = mData.filter(m => userProcessIds.includes(m.processId));
             }
 
@@ -181,15 +194,15 @@ export default function MachinesPage() {
         }
     ];
 
-    // Chỉ Admin và Manager mới được vào
-    if (!isAdmin && !isManager) return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
+    // Kiểm tra quyền xem trang theo RBAC
+    if (!canViewPage) return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
 
     return (
         <div style={{ padding: 20 }}>
             <Card title={<span><RobotOutlined /> Quản lý & Điều phối Máy</span>} extra={isAdmin ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingMachine(null); form.resetFields(); setIsModalOpen(true); }}>Thêm máy mới</Button> : null}>
                 {/* TOOLBAR */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
-                    {(isAdmin || isManager) && (
+                    {(isAdmin || userRole === "FACTORY_MANAGER") && (
                         <>
                             <Col span={6}>
                                 <Select
@@ -209,7 +222,7 @@ export default function MachinesPage() {
                             </Col>
                         </>
                     )}
-                    <Col span={(isAdmin || isManager) ? 6 : 18}>
+                    <Col span={(isAdmin || userRole === "FACTORY_MANAGER") ? 6 : 18}>
                         <Input placeholder="Tìm tên máy..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} />
                     </Col>
                     <Col span={6} style={{ textAlign: 'right' }}>
