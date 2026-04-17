@@ -1,0 +1,34 @@
+0000000000000000000000000000000000000000 55d4790f8c24c665eb1414b3502dc1dd36a0c10f Tri Nguyen <nguyenthienminhtri@gmail.com> 1775288392 +0700	clone: from D:\DU-AN-PHAN-MEM\PHUBAI-PRODUCTS\phubai-products
+55d4790f8c24c665eb1414b3502dc1dd36a0c10f 65a3b1d42321ec4649d4803136e9203649c7f523 Tri Nguyen <nguyenthienminhtri@gmail.com> 1775290338 +0700	commit: chore: optimize gitignore and cleanup workspace
+65a3b1d42321ec4649d4803136e9203649c7f523 16a62cae47133d629f02725be54fed1fdc8356f5 Tri Nguyen <nguyenthienminhtri@gmail.com> 1775632694 +0700	commit: cập nhật module
+16a62cae47133d629f02725be54fed1fdc8356f5 18eabd8be110d0babee6f39dd5a8b0e57e6c677c Tri Nguyen <nguyenthienminhtri@gmail.com> 1775697742 +0700	commit: cập nhật giao diện
+18eabd8be110d0babee6f39dd5a8b0e57e6c677c abb327179a2a55f3d9e82b4617105cb00f2de98c Tri Nguyen <nguyenthienminhtri@gmail.com> 1775798585 +0700	commit: cập nhật giao diện
+abb327179a2a55f3d9e82b4617105cb00f2de98c 9cd0a1cf32bf70df2f5866e4d0c5f71a4d534057 Tri Nguyen <nguyenthienminhtri@gmail.com> 1775872177 +0700	commit: cập nhật định mức năng suất
+9cd0a1cf32bf70df2f5866e4d0c5f71a4d534057 da6de44fe624d99890ed3ba0b16874b04a9747cd Tri Nguyen <nguyenthienminhtri@gmail.com> 1775893240 +0700	commit: tìm theo tên sợi
+da6de44fe624d99890ed3ba0b16874b04a9747cd 68c94438d0dd907760ac84e41f6530da85ba8229 Tri Nguyen <nguyenthienminhtri@gmail.com> 1775894269 +0700	commit: sửa ô lọc tìm kiếm mặt hàng
+68c94438d0dd907760ac84e41f6530da85ba8229 fb1382931d0973edea3c325ee2a835f8b1101005 Tri Nguyen <nguyenthienminhtri@gmail.com> 1775895703 +0700	commit: sửa lỗi load
+fb1382931d0973edea3c325ee2a835f8b1101005 f57b02644eef2436a6cecd017e7d7f2a95d6361a Tri Nguyen <nguyenthienminhtri@gmail.com> 1775980061 +0700	commit: thêm nguồn import
+f57b02644eef2436a6cecd017e7d7f2a95d6361a 0fe8aa9017734f8298b145284920c9c34a60312a Tri Nguyen <nguyenthienminhtri@gmail.com> 1775981687 +0700	commit: iot import
+0fe8aa9017734f8298b145284920c9c34a60312a c6a17a365ef4e864014040cc87da8cbbdb00e1bc Tri Nguyen <nguyenthienminhtri@gmail.com> 1775983513 +0700	commit: sửa lỗi build
+c6a17a365ef4e864014040cc87da8cbbdb00e1bc 83645cf433ee2955bc2353a2178a603c4994272d Tri Nguyen <nguyenthienminhtri@gmail.com> 1776006400 +0700	commit: nhập liệu cho kd
+83645cf433ee2955bc2353a2178a603c4994272d 21cf548f1e9168567227ab8027eaa6408be69767 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776061662 +0700	commit: cập nhật giao diện nhập sản lượng
+21cf548f1e9168567227ab8027eaa6408be69767 6eaa244426f90423b6f5327d43f58f38ae4b48f3 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776063018 +0700	commit: màu sắc sản phẩm
+6eaa244426f90423b6f5327d43f58f38ae4b48f3 97e3f8a1ce3f9d9a69fd21dacc69db04417b4c5c Tri Nguyen <nguyenthienminhtri@gmail.com> 1776063523 +0700	commit: liên kết màu sắc giữa các trang
+97e3f8a1ce3f9d9a69fd21dacc69db04417b4c5c 65e8326ef7a027f71a2604ae69246b01b1e219e6 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776131728 +0700	commit: xây dựng lại role phân quyền
+65e8326ef7a027f71a2604ae69246b01b1e219e6 1812280c64f3d75e5e60727f68df216aa545cdb1 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776132545 +0700	commit: sửa lỗi admin
+1812280c64f3d75e5e60727f68df216aa545cdb1 6d3127e926a40038833edb7b036f027ce475fb74 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776138690 +0700	commit: bổ sung phân quyền mobile
+6d3127e926a40038833edb7b036f027ce475fb74 624bcda041cf596481e1cf27a9462131b81c6031 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776149293 +0700	commit: sửa chỗ chi phí cố định
+624bcda041cf596481e1cf27a9462131b81c6031 443a2de82d36459a0c1983b8dbbfadeba02caf62 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776150131 +0700	commit: sửa lại phân quyền của sxkd
+443a2de82d36459a0c1983b8dbbfadeba02caf62 0fcfde57b076da975446774668cd6bb8e11c73a6 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776155952 +0700	commit: bổ sung định mức tiêu hao
+0fcfde57b076da975446774668cd6bb8e11c73a6 16e8871b97c4e0a877f4e3efc069b7ee9d5e4935 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776176382 +0700	commit: thêm chức năng xóa bản ghi
+16e8871b97c4e0a877f4e3efc069b7ee9d5e4935 8c23372fb30439da688e1cf5818e8e77acbfc218 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776177042 +0700	commit: cập nhật role
+8c23372fb30439da688e1cf5818e8e77acbfc218 3204c2f3adefcd443795b5f740c798cdc5265dc6 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776178286 +0700	commit: feat: implement granular page-level RBAC for API routes and system management
+3204c2f3adefcd443795b5f740c798cdc5265dc6 6eaccdbdd7e134704c1fc762dfba9a76a30aaefb Tri Nguyen <nguyenthienminhtri@gmail.com> 1776214180 +0700	commit: xóa user
+6eaccdbdd7e134704c1fc762dfba9a76a30aaefb 734fb371838c1c4d63ba2eeb4d1c92719012afb9 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776217118 +0700	commit: bổ sung hiệu suất
+734fb371838c1c4d63ba2eeb4d1c92719012afb9 9620c2997c608b43081a86c69465d212ef84d1f7 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776291101 +0700	commit: chỉnh lại chi phí bán hàng
+9620c2997c608b43081a86c69465d212ef84d1f7 1028a72ab5396bb99d1b913ae365797a552dbdfe Tri Nguyen <nguyenthienminhtri@gmail.com> 1776294736 +0700	commit: fix: lấy sellingCostRate từ soItem thay vì rate
+1028a72ab5396bb99d1b913ae365797a552dbdfe 4c02326d98a15c9fbe0f4fae7f2cf7c6aba79bc4 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776331062 +0700	commit: sửa lỗi nút lưu
+4c02326d98a15c9fbe0f4fae7f2cf7c6aba79bc4 0fe55572c459a881238b84f897d8cb9cab886756 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776351836 +0700	commit: thêm giao diện nhập sản lượng dạng bảng
+0fe55572c459a881238b84f897d8cb9cab886756 c1ce3a64261b451ada6c1a48cb3bfa77cd78bb87 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776380877 +0700	commit: thêm ô nhập hiệu suất và đổi hàng giữa ca
+c1ce3a64261b451ada6c1a48cb3bfa77cd78bb87 d0ad791ad0c1c70f6efaacbb376277c4c92fc626 Tri Nguyen <nguyenthienminhtri@gmail.com> 1776381287 +0700	commit: sửa lỗi typescript
+d0ad791ad0c1c70f6efaacbb376277c4c92fc626 d3f632abf99a8bdce34915afdd35b97a5cb3c2ec Tri Nguyen <nguyenthienminhtri@gmail.com> 1776381679 +0700	commit: sửa tất cả lỗi typesript
