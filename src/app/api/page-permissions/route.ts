@@ -73,21 +73,18 @@ export async function PUT(req: Request) {
 
     const userIdInt = parseInt(userId);
 
-    // Xóa toàn bộ quyền cũ rồi tạo lại (upsert batch)
+    // Xóa toàn bộ quyền cũ rồi tạo lại toàn bộ (bao gồm cả explicit false)
     await prisma.$transaction(async (tx) => {
       // Xóa tất cả permissions hiện tại
       await tx.pagePermission.deleteMany({
         where: { userId: userIdInt },
       });
 
-      // Chỉ tạo lại các permissions đã được check (canView hoặc canEdit = true)
-      const toCreate = permissions.filter(
-        (p: any) => p.canView || p.canEdit
-      );
-
-      if (toCreate.length > 0) {
+      // Lưu TẤT CẢ permissions — kể cả canView=false, canEdit=false
+      // Điều này đảm bảo "explicit deny" được ghi nhận, tránh fallback về role default
+      if (permissions.length > 0) {
         await tx.pagePermission.createMany({
-          data: toCreate.map((p: any) => ({
+          data: permissions.map((p: any) => ({
             userId: userIdInt,
             pageId: p.pageId,
             canView: !!p.canView,

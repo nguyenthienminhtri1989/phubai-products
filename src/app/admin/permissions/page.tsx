@@ -122,19 +122,28 @@ export default function PermissionsPage() {
     try {
       const res = await fetch(`/api/page-permissions?userId=${userId}`);
       if (res.ok) {
-        const perms = await res.json();
-        const state: PermState = {};
-        // Initialize all pages with role defaults
+        const perms = await res.json(); // Array of { pageId, canView, canEdit, ... }
         const user = users.find((u) => u.id === userId);
         const role = (user?.userRole || "VIEWER") as UserRole;
-        for (const page of pages) {
-          const def = getRoleDefaultPerm(role, page.pageGroup);
-          state[page.id] = { canView: def.canView, canEdit: def.canEdit };
-        }
-        // Override with saved permissions
+
+        // Tạo map pageId -> perm từ DB để tra nhanh
+        const permMap = new Map<number, { canView: boolean; canEdit: boolean }>();
         for (const p of perms) {
-          state[p.pageId] = { canView: p.canView, canEdit: p.canEdit };
+          permMap.set(p.pageId, { canView: p.canView, canEdit: p.canEdit });
         }
+
+        const state: PermState = {};
+        for (const page of pages) {
+          if (permMap.has(page.id)) {
+            // Có record trong DB (kể cả explicit false) → dùng giá trị DB
+            state[page.id] = permMap.get(page.id)!;
+          } else {
+            // Chưa có record nào → fallback về role default
+            const def = getRoleDefaultPerm(role, page.pageGroup);
+            state[page.id] = { canView: def.canView, canEdit: def.canEdit };
+          }
+        }
+
         setPermState(state);
         setSavedPermState(JSON.parse(JSON.stringify(state)));
       }
