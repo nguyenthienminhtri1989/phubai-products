@@ -50,10 +50,10 @@ export default function MachinesPage() {
 
     const isAdmin = userRole === "ADMIN";
     // Quyền xem trang: ADMIN, hoặc có page-permission canView, hoặc role mặc định có quyền
-    const pagePerm = pagePermissions.find((p) => p.pageKey === "machines");
+    const pagePerm = pagePermissions.find((p) => p.pageKey === "sx.machines"); // pageKey theo AdminLayout
     const hasViewByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
     const canViewPage = isAdmin || (pagePerm?.canView ?? hasViewByRole);
-    // Quyền sửa: ADMIN, hoặc có page-permission canEdit, hoặc role mặc định có quyền và đúng công đoạn
+    // Quyền sửa: ADMIN, hoặc có page-permission canEdit, hoặc role mặc định có quyền
     const hasEditByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
     const canEditPage = isAdmin || (pagePerm?.canEdit ?? hasEditByRole);
 
