@@ -61,6 +61,17 @@ export async function POST(
         order: { factoryId, isActive: true },
       },
       orderBy: { id: "desc" },
+      select: {
+        id: true,
+        orderId: true,
+        itemId: true,
+        plannedQty: true,
+        unitPrice: true,
+        allocatedQty: true,
+        deliveryDate: true,
+        note: true,
+        sellingCostRate: true, // Hệ số CP bán hàng — dùng để tính sellingCostVnd
+      },
     });
     const unitPriceUsd = soItem?.unitPrice ?? 0;
 
