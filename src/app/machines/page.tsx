@@ -15,6 +15,7 @@ interface MachineData {
     formulaType: number;
     spindleCount?: number;
     currentNE?: number;
+    model?: string;
     isActive: boolean;
 }
 
@@ -170,6 +171,12 @@ export default function MachinesPage() {
             render: (_: any, r: MachineData) => r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
         },
         {
+            title: "Loại máy", dataIndex: "model", key: "model", width: 140,
+            render: (v: string) => v
+                ? <Tag color="geekblue">{v}</Tag>
+                : <span style={{ color: '#bbb', fontSize: 12 }}>Chưa cấu hình</span>
+        },
+        {
             title: "Cấu hình", key: "config", responsive: ['lg'] as any,
             render: (_: any, r: MachineData) => (
                 <div style={{ fontSize: 12, color: '#666' }}>
@@ -298,6 +305,11 @@ export default function MachinesPage() {
                         <Col span={12}>
                             <Form.Item name="currentNE" label="Chi số hiện tại (NE)" tooltip="Dùng cho công thức Loại 3 và 4. Giá trị này sẽ được dùng mặc định khi nhập liệu sản lượng.">
                                 <InputNumber style={{ width: '100%' }} min={0} placeholder="Ví dụ: 30" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="model" label="Loại máy" tooltip="Dùng để tra định mức năng suất tự động. VD: G32, Murata Qpro-EX, Rieter RSB-D50">
+                                <Input placeholder="VD: G32" />
                             </Form.Item>
                         </Col>
                     </Row>

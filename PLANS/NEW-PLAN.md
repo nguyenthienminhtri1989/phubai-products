@@ -1,106 +1,140 @@
-Plan: Hỗ trợ chuyển đổi mặt hàng trong ca (Sub-row cho máy đổi mặt hàng)
-Context
-Trong thực tế sản xuất, một máy có thể sản xuất hai mặt hàng khác nhau trong cùng một ca (ví dụ: đổi sợi giữa ca). Khi đó cần ghi 2 bản ghi production_logs cho cùng máy+ngày+ca nhưng khác itemId. Trang daily-input-grid hiện chỉ cho phép 1 bản ghi/máy. Cần hỗ trợ thêm "dòng phụ" cho máy đổi mặt hàng.
-Ràng buộc kỹ thuật:
-Unique constraint: (machineId, recordDate, shift, itemId) — cho phép nhiều log/máy nếu khác itemId
-daily-status API hiện trả về todayLog là 1 object duy nhất (dùng take: 1)
-daily-input POST UPSERT hỗ trợ đúng constraint trên — không cần thay đổi
+# TASK: Thêm field `model` vào bảng Machine
 
-Approach
-Bước 1: Sửa API daily-status — trả về todayLogs (mảng)
-File: src/app/api/production/daily-status/route.ts
-Xóa take: 1 trong query productionLogs
-Thêm field todayLogs: m.productionLogs (array) vào response bên cạnh todayLog hiện tại (để backward-compatible với card page và các page khác đang dùng todayLog)
-// Thay đổi trong include:
-productionLogs: {
-where: { recordDate: dateObj, shift },
-include: { item: { select: { id: true, name: true } } },
-// Bỏ take: 1
-},
+## Bối cảnh
 
-// Trong return map:
-todayLog: m.productionLogs[0] ?? null, // giữ lại cho backward compat
-todayLogs: m.productionLogs, // thêm mới — mảng đầy đủ
+Trang Kế hoạch SX tháng (`/kdsx/production-schedule/[id]`) có tính năng
+auto-fill kg/ngày từ `ProductivityBenchmark.empiricalOutputPerDay`.
+Logic tra cứu cần biết máy thuộc loại máy nào (machineModel như "G32",
+"Murata Qpro-EX"...) để khớp với bảng `productivity_benchmarks`.
+Hiện tại `Machine` chưa có field này nên auto-fill luôn thất bại.
 
-Bước 2: Sửa RowData interface
-File: src/app/production/daily-input-grid/page.tsx
-Thêm 2 trường:
-interface RowData {
-// ... existing fields ...
-rowKey: string; // unique stable key (UUID-like) để làm rowKey của Table
-isSubRow?: boolean; // true = dòng phụ (máy đổi mặt hàng)
+## Thay đổi cần làm
+
+### 1. Schema — thêm field vào model Machine
+
+File: `prisma/schema.prisma`
+
+Tìm model `Machine`, thêm 1 dòng (đặt sau field `currentNE`):
+
+```prisma
+model Machine {
+  // ... các field hiện có ...
+  currentNE Float?
+  model     String?  // THÊM DÒNG NÀY — Loại máy VD: "G32", "Murata Qpro-EX", "Rieter RSB-D50"
+  // ... relations ...
 }
+```
 
-Bước 3: Sửa handleLoad — build sub-rows từ todayLogs
-Thay vì dùng m.todayLog (1 log), dùng m.todayLogs (mảng):
-Với mỗi machine m:
+Chạy migration:
 
-- Log đầu tiên (index 0): primary row — logic giữ nguyên như cũ
-- Log thứ 2 trở đi (index 1+): tạo sub-row với isSubRow=true
+```bash
+npx prisma migrate dev --name add_model_to_machine
+npx prisma generate
+```
 
-Với máy chưa có log:
+---
 
-- 1 primary row với itemId từ currentItem (logic giữ nguyên)
+### 2. API GET machines — trả thêm field `model`
 
-rowKey được sinh bằng crypto.randomUUID() hoặc Date.now() + Math.random().
-Bước 4: Thêm handleAddSubRow(rowIdx) và handleRemoveSubRow(rowIdx)
-handleAddSubRow:
-Tìm vị trí insert: sau dòng cuối cùng có cùng machineId
-Insert sub-row mới với isSubRow=true, itemId=0, existingLogId=undefined, isDirty=false, copy machineId/machineName/formulaType/spindleCount từ row gốc
-startIndex=0, endIndex=null
-handleRemoveSubRow:
-Nếu sub-row chưa lưu (!existingLogId): xóa khỏi rows array trực tiếp (không cần API)
-Nếu đã lưu (existingLogId có giá trị): gọi DELETE API rồi xóa khỏi rows
-Bước 5: Sửa các cột trong Table
-Cột "#" (số thứ tự):
-Primary row: đánh số theo thứ tự máy (không đếm sub-rows)
-Sub-row: hiển thị ↳ thay vì số
-Cột "Máy":
-Primary row: giữ nguyên <b>tên máy</b>
-Sub-row: hiển thị <span style={{ color: "#bbb", fontSize: 12 }}>↳ {machineName}</span>
-Cột action cuối (thêm nút "+"):
-Với primary row (không phải sub-row) và không phải isReadOnly: hiển thị nút <PlusOutlined /> có tooltip "Thêm dòng mặt hàng khác"
-Với sub-row chưa lưu: hiển thị nút <CloseOutlined /> (xóa sub-row mới thêm, không cần popconfirm)
-Với sub-row đã lưu + canDelete: hiển thị <DeleteOutlined /> như hiện tại
-Cột "Chỉ số TRƯỚC":
-Sub-row cũng cho phép sửa (vì start index của mặt hàng thứ 2 có thể khác 0)
-Bước 6: Sửa rowKey của Table
-Thay rowKey={(r, i) => \${r.machineId}-${i}`} thành rowKey={r => r.rowKey} (dùng stable key thêm vào RowData).
-Bước 7: Sửa handleSave — không cần đổi logic
-Logic save đã đúng: mỗi row (kể cả sub-row) gọi POST độc lập với itemId riêng → UPSERT constraint (machineId, recordDate, shift, itemId) tự xử lý.
-Chỉ cần đảm bảo reset isDirty và originalItemId đúng sau khi save.
+Kiểm tra tất cả các route GET machines, đảm bảo `model` được include
+trong response. Tìm file:
 
-Files cần sửa
-File
-Thay đổi
-src/app/api/production/daily-status/route.ts
-Bỏ take: 1, thêm todayLogs array vào response
-src/app/production/daily-input-grid/page.tsx
-Sửa RowData, handleLoad, handleAddSubRow, handleRemoveSubRow, columns, rowKey
+```powershell
+Get-ChildItem -Recurse "src\app\api\machines" -Filter "route.ts" | Select-Object FullName
+```
 
-Verification
-Tải danh sách máy cho một ca → kiểm tra primary rows hiển thị đúng
-Bấm "+" trên một máy → kiểm tra sub-row xuất hiện bên dưới với tên máy mờ, ô "Chỉ số SAU" bị khóa (vì itemId=0)
-Chọn mặt hàng cho sub-row → kiểm tra ô nhập liệu mở khóa
-Nhập chỉ số SAU cho sub-row → kiểm tra SL(kg) tính đúng
-Bấm "Lưu tất cả" → kiểm tra DB có 2 bản ghi production_logs cho cùng máy+ngày+ca nhưng khác itemId
-Tải lại trang → kiểm tra cả 2 dòng (primary + sub-row) hiển thị đúng
-Xóa sub-row chưa lưu (nút ×) → sub-row biến mất, không gọi API
-Xóa sub-row đã lưu (nút 🗑) → gọi DELETE, sub-row biến mất
-Câu hỏi rất quan trọng — plan hiện tại chưa xử lý đầy đủ cho trường hợp này. Để tôi phân tích:
-Hai loại máy & vấn đề sub-row
-Máy type 1 (sản lượng trực tiếp kg):
-Primary row: nhập thẳng kg → OK
-Sub-row (đổi MH): cũng nhập thẳng kg → OK, không vấn đề gì
-Máy type 2/3/4 (cộng dồn: output = chỉ số SAU − TRƯỚC):
-Primary row: startIndex = endIndex ca trước, nhập endIndex mới → OK
-Sub-row (đổi MH giữa ca): Gap trong plan hiện tại
-Mặt hàng thứ 1: startIndex = cuối ca trước → endIndex = thời điểm chuyển MH
-Mặt hàng thứ 2: startIndex phải bằng endIndex của MH thứ 1 (thời điểm chuyển)
-Nhưng plan hiện tại mặc định startIndex = 0 cho sub-row → sai với máy cộng dồn
-Đề xuất cải thiện
-Khi bấm "+" để thêm sub-row trên máy type 2/3/4:
-Tự động lấy startIndex = endIndex của primary row (nếu đã nhập), thay vì để 0
-Nếu primary row chưa có endIndex → để 0 và user tự điền
-Điều này đảm bảo: SL_MH1 = endIndex_1 - startIndex_1 và SL_MH2 = endIndex_2 - endIndex_1, tổng 2 mặt hàng khớp với số đếm thực tế của máy.
-Bạn muốn tôi cập nhật plan và triển khai theo hướng này không?
+Trong mỗi query `prisma.machine.findMany()` hoặc `findUnique()`:
+
+- Nếu dùng `select` → thêm `model: true`
+- Nếu không dùng `select` (lấy all fields) → không cần sửa, Prisma tự trả
+
+---
+
+### 3. API PUT machine — nhận và lưu field `model`
+
+File: `src/app/api/machines/[id]/route.ts` (hoặc tương đương)
+
+Trong handler PUT, thêm `model` vào phần update:
+
+```typescript
+const {
+  name,
+  processId,
+  formulaType,
+  spindleCount,
+  currentItemId,
+  currentNE,
+  model,
+  isActive,
+} = body;
+
+await prisma.machine.update({
+  where: { id },
+  data: {
+    // ... các field hiện có ...
+    ...(model !== undefined && { model }),
+  },
+});
+```
+
+---
+
+### 4. UI trang quản lý máy — thêm field nhập `model`
+
+Tìm trang quản lý máy móc (thường là `/machines` hoặc `/dashboard/machines`).
+
+Thêm field "Loại máy" vào form tạo/sửa máy:
+
+```tsx
+<Form.Item
+  label="Loại máy"
+  name="model"
+  tooltip="Dùng để tra định mức năng suất. VD: G32, Murata Qpro-EX, Rieter RSB-D50"
+>
+  <Input placeholder="VD: G32" />
+</Form.Item>
+```
+
+Thêm cột "Loại máy" vào bảng danh sách máy (optional, nhưng nên có để
+admin biết máy nào đã được cấu hình):
+
+```tsx
+{
+  title: "Loại máy",
+  dataIndex: "model",
+  key: "model",
+  render: (v: string) => v
+    ? <Tag>{v}</Tag>
+    : <Text type="secondary">Chưa cấu hình</Text>,
+}
+```
+
+---
+
+### 5. Kiểm tra sau khi xong
+
+```powershell
+# Schema có field model chưa
+Select-String -Pattern "model.*String" -LiteralPath "prisma\schema.prisma"
+
+# Migration đã chạy
+npx prisma migrate status
+
+# API trả model không
+Select-String -Pattern "model" -LiteralPath "src\app\api\machines\route.ts"
+```
+
+**Kết quả đúng:**
+
+- Schema có dòng `model  String?` trong model Machine
+- Migration status: "Database schema is up to date"
+- API có xử lý field `model`
+
+---
+
+## Lưu ý
+
+- Field `model` là `String?` (nullable) — máy cũ không bị ảnh hưởng
+- Sau khi thêm field, admin cần vào trang quản lý máy để điền `model`
+  cho từng máy → sau đó auto-fill trong Kế hoạch SX mới hoạt động
+- KHÔNG sửa bất kỳ logic nào khác — strictly additive

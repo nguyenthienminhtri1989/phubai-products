@@ -34,6 +34,7 @@ export async function POST(req: Request) {
         spindleCount: body.spindleCount ? parseInt(body.spindleCount) : undefined,
         isActive: body.isActive !== false,
         currentNE: body.currentNE !== undefined && body.currentNE !== null && body.currentNE !== '' ? parseFloat(body.currentNE) : undefined,
+        ...(body.model !== undefined && { model: body.model || null }),
       },
     });
     return NextResponse.json(newMachine);

@@ -47,6 +47,9 @@ model Factory {
   // Định mức năng suất
   benchmarkVersions BenchmarkVersion[]
 
+  // Module Kế hoạch SX tháng
+  productionSchedules ProductionSchedule[]
+
   // Users assigned to this factory
   users User[]
 
@@ -112,6 +115,9 @@ model Item {
   // KD Daily Input
   kdDailyInputs KdDailyInput[]
 
+  // Module Kế hoạch SX tháng
+  scheduleSegments ScheduleSegment[]
+
   @@map("items")
 }
 
@@ -123,6 +129,9 @@ model Machine {
   id       Int     @id @default(autoincrement())
   name     String  @unique // Tên máy (Máy 01, Máy 02...)
   isActive Boolean @default(true) // True: Đang dùng, False: Đã thanh lý (Thay máy mới)
+
+  // Loại máy (VD: "G32", "Murata Qpro-EX") — dùng để map tới ProductivityBenchmark
+  model String?
 
   // --- Phân cấp ---
   processId Int
@@ -157,6 +166,9 @@ model Machine {
 
   // KD Daily Input
   kdDailyInputs KdDailyInput[]
+
+  // Module Kế hoạch SX tháng
+  scheduleSegments ScheduleSegment[]
 
   @@map("machines")
 }
@@ -1201,4 +1213,63 @@ model PagePermission {
   @@unique([userId, pageId])
   @@index([userId])
   @@map("page_permissions")
+}
+
+// ==========================================
+// MODULE KẾ HOẠCH SẢN XUẤT THÁNG
+// ==========================================
+
+// Bảng chính: 1 kế hoạch = 1 nhà máy × 1 tháng
+model ProductionSchedule {
+  id        Int     @id @default(autoincrement())
+  factoryId Int
+  factory   Factory @relation(fields: [factoryId], references: [id])
+  yearMonth String  // "2026-04"
+  status    PlanStatus @default(DRAFT) // tái dùng enum PlanStatus sẵn có
+  note      String?
+
+  // Các ngày nghỉ trong tháng: lưu JSON array các số ngày
+  // VD: [30] = ngày 30 nghỉ; [1, 2, 30] = ngày 1, 2, 30 nghỉ
+  holidays Json @default("[]")
+
+  segments ScheduleSegment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, yearMonth])
+  @@index([factoryId])
+  @@map("production_schedules")
+}
+
+// Chi tiết: mỗi segment = 1 máy chạy 1 mặt hàng trong 1 khoảng ngày
+// 1 máy đổi mặt hàng giữa tháng → nhiều segments (cùng machineId, itemId khác nhau)
+model ScheduleSegment {
+  id         Int                @id @default(autoincrement())
+  scheduleId Int
+  schedule   ProductionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  machineId Int
+  machine   Machine @relation(fields: [machineId], references: [id])
+
+  itemId Int
+  item   Item @relation(fields: [itemId], references: [id])
+
+  fromDay  Int   // 1–31: ngày bắt đầu trong tháng
+  toDay    Int   // 1–31: ngày kết thúc (bao gồm)
+  kgPerDay Float // Sản lượng kg/ngày (auto-fill từ empiricalOutputPerDay hoặc user sửa)
+
+  // Lưu metadata để biết auto-fill từ đâu (optional, cho audit)
+  benchmarkId   Int?    // ProductivityBenchmark.id được dùng để auto-fill
+  isManualKg    Boolean @default(false) // true nếu user sửa kg/ngày khác với định mức
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scheduleId])
+  @@index([machineId])
+  @@index([itemId])
+  @@map("schedule_segments")
 }

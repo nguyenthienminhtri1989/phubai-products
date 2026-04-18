@@ -607,29 +607,29 @@ prisma/migrations/20260401000001_update_fixed_cost_type_enum/ — Rename enum Fi
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET/POST | /api/kdsx/customers | Danh sách / tạo khách hàng |
-| GET/PUT/DELETE | /api/kdsx/customers/[id] | Sửa / xóa khách hàng |
-| GET/POST | /api/kdsx/sales-orders | Danh sách / tạo đơn hàng |
-| GET/PUT/DELETE | /api/kdsx/sales-orders/[id] | Sửa / xóa đơn hàng |
-| GET/POST | /api/kdsx/input-params | Thông số tháng (giá NVL, tỷ giá) |
-| GET/POST | /api/kdsx/raw-material-rates | Định mức tiêu hao NVL |
-| GET/PUT/DELETE | /api/kdsx/raw-material-rates/[id] | Sửa / xóa định mức |
-| GET/POST | /api/kdsx/monthly-plans | Danh sách / tạo kế hoạch tháng |
-| GET/PUT/DELETE | /api/kdsx/monthly-plans/[id] | Chi tiết / sửa / xóa kế hoạch |
-| GET/POST | /api/kdsx/monthly-plans/[id]/line-items | Dòng sợi trong kế hoạch |
-| PUT/DELETE | /api/kdsx/monthly-plans/[id]/line-items/[lineItemId] | Sửa / xóa dòng sợi |
-| GET/POST | /api/kdsx/monthly-plans/[id]/fixed-costs | Chi phí cố định kế hoạch |
-| POST | /api/kdsx/monthly-plans/[id]/submit | DRAFT → SUBMITTED |
-| POST | /api/kdsx/monthly-plans/[id]/approve | SUBMITTED → APPROVED |
-| POST | /api/kdsx/monthly-plans/[id]/revert | SUBMITTED → DRAFT |
-| POST | /api/kdsx/monthly-plans/[id]/unapprove | APPROVED → SUBMITTED |
-| GET/POST | /api/kdsx/monthly-actuals | Danh sách / tạo thực hiện tháng |
-| GET/PUT/DELETE | /api/kdsx/monthly-actuals/[id] | Chi tiết / sửa / xóa thực hiện |
-| GET/POST | /api/kdsx/monthly-actuals/[id]/fixed-costs | Chi phí cố định thực hiện |
-| POST | /api/kdsx/monthly-actuals/[id]/sync | Sync sản lượng từ ProductionLog |
-| GET | /api/kdsx/summary | Dashboard tổng hợp 3 nhà máy |
+| Method         | Path                                                 | Description                      |
+| -------------- | ---------------------------------------------------- | -------------------------------- |
+| GET/POST       | /api/kdsx/customers                                  | Danh sách / tạo khách hàng       |
+| GET/PUT/DELETE | /api/kdsx/customers/[id]                             | Sửa / xóa khách hàng             |
+| GET/POST       | /api/kdsx/sales-orders                               | Danh sách / tạo đơn hàng         |
+| GET/PUT/DELETE | /api/kdsx/sales-orders/[id]                          | Sửa / xóa đơn hàng               |
+| GET/POST       | /api/kdsx/input-params                               | Thông số tháng (giá NVL, tỷ giá) |
+| GET/POST       | /api/kdsx/raw-material-rates                         | Định mức tiêu hao NVL            |
+| GET/PUT/DELETE | /api/kdsx/raw-material-rates/[id]                    | Sửa / xóa định mức               |
+| GET/POST       | /api/kdsx/monthly-plans                              | Danh sách / tạo kế hoạch tháng   |
+| GET/PUT/DELETE | /api/kdsx/monthly-plans/[id]                         | Chi tiết / sửa / xóa kế hoạch    |
+| GET/POST       | /api/kdsx/monthly-plans/[id]/line-items              | Dòng sợi trong kế hoạch          |
+| PUT/DELETE     | /api/kdsx/monthly-plans/[id]/line-items/[lineItemId] | Sửa / xóa dòng sợi               |
+| GET/POST       | /api/kdsx/monthly-plans/[id]/fixed-costs             | Chi phí cố định kế hoạch         |
+| POST           | /api/kdsx/monthly-plans/[id]/submit                  | DRAFT → SUBMITTED                |
+| POST           | /api/kdsx/monthly-plans/[id]/approve                 | SUBMITTED → APPROVED             |
+| POST           | /api/kdsx/monthly-plans/[id]/revert                  | SUBMITTED → DRAFT                |
+| POST           | /api/kdsx/monthly-plans/[id]/unapprove               | APPROVED → SUBMITTED             |
+| GET/POST       | /api/kdsx/monthly-actuals                            | Danh sách / tạo thực hiện tháng  |
+| GET/PUT/DELETE | /api/kdsx/monthly-actuals/[id]                       | Chi tiết / sửa / xóa thực hiện   |
+| GET/POST       | /api/kdsx/monthly-actuals/[id]/fixed-costs           | Chi phí cố định thực hiện        |
+| POST           | /api/kdsx/monthly-actuals/[id]/sync                  | Sync sản lượng từ ProductionLog  |
+| GET            | /api/kdsx/summary                                    | Dashboard tổng hợp 3 nhà máy     |
 
 ### Known limitations / not yet implemented
 
@@ -684,17 +684,17 @@ prisma/migrations/20260401000000_add_productivity_benchmark/   — 2 bảng: ben
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET/POST | /api/productivity-benchmark/versions | Danh sách / tạo phiên bản |
-| GET/PUT/DELETE | /api/productivity-benchmark/versions/[id] | Chi tiết / sửa / xóa phiên bản |
-| POST | /api/productivity-benchmark/versions/[id]/activate | Kích hoạt phiên bản |
-| POST | /api/productivity-benchmark/versions/[id]/clone | Nhân bản phiên bản |
-| GET/POST | /api/productivity-benchmark/benchmarks | Danh sách / tạo định mức |
-| PUT/DELETE | /api/productivity-benchmark/benchmarks/[id] | Sửa / xóa định mức |
-| POST | /api/productivity-benchmark/benchmarks/bulk | Nhập nhiều định mức cùng lúc |
-| GET | /api/productivity-benchmark/capacity | Công suất thiết kế tổng hợp |
-| GET | /api/productivity-benchmark/comparison | So sánh NS thực tế vs lý thuyết |
+| Method         | Path                                               | Description                     |
+| -------------- | -------------------------------------------------- | ------------------------------- |
+| GET/POST       | /api/productivity-benchmark/versions               | Danh sách / tạo phiên bản       |
+| GET/PUT/DELETE | /api/productivity-benchmark/versions/[id]          | Chi tiết / sửa / xóa phiên bản  |
+| POST           | /api/productivity-benchmark/versions/[id]/activate | Kích hoạt phiên bản             |
+| POST           | /api/productivity-benchmark/versions/[id]/clone    | Nhân bản phiên bản              |
+| GET/POST       | /api/productivity-benchmark/benchmarks             | Danh sách / tạo định mức        |
+| PUT/DELETE     | /api/productivity-benchmark/benchmarks/[id]        | Sửa / xóa định mức              |
+| POST           | /api/productivity-benchmark/benchmarks/bulk        | Nhập nhiều định mức cùng lúc    |
+| GET            | /api/productivity-benchmark/capacity               | Công suất thiết kế tổng hợp     |
+| GET            | /api/productivity-benchmark/comparison             | So sánh NS thực tế vs lý thuyết |
 
 ### Known limitations / not yet implemented
 
@@ -744,9 +744,9 @@ src/app/api/kdsx/sales-orders/route.ts                     — thêm deliveryDat
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)` — tự gọi sau mỗi POST daily-input |
+| Method     | Path                           | Description                                                                      |
+| ---------- | ------------------------------ | -------------------------------------------------------------------------------- |
+| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)` — tự gọi sau mỗi POST daily-input               |
 | (internal) | `src/lib/allocation-engine.ts` | `recalculateAllocation(factoryId, from, to)` — dùng khi sửa lại ProductionLog cũ |
 
 ### Known limitations / not yet implemented
@@ -795,17 +795,17 @@ src/app/api/sales-orders/progress/route.ts         — GET: tiến độ tổng 
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/sales-orders | Danh sách HĐ (filter: factoryId, status, month, customerId) |
-| POST | /api/sales-orders | Tạo HĐ mới |
-| GET | /api/sales-orders/[id] | Chi tiết HĐ + remainingQty/progressPct/estimatedDoneDate per item |
-| PUT | /api/sales-orders/[id] | Sửa deliveryDate/startDate/note (chỉ ACTIVE/OVERDUE) |
-| DELETE | /api/sales-orders/[id] | Xóa HĐ (chỉ Admin, chỉ ACTIVE) |
-| POST | /api/sales-orders/[id]/complete | Đánh dấu DONE thủ công |
-| POST | /api/sales-orders/[id]/cancel | Hủy HĐ (body: { reason }) |
-| POST | /api/sales-orders/recalculate | Tính lại toàn bộ phân bổ (Admin only) |
-| GET | /api/sales-orders/progress | Tiến độ tổng hợp + isAtRisk (filter: factoryId, status, month) |
+| Method | Path                            | Description                                                       |
+| ------ | ------------------------------- | ----------------------------------------------------------------- |
+| GET    | /api/sales-orders               | Danh sách HĐ (filter: factoryId, status, month, customerId)       |
+| POST   | /api/sales-orders               | Tạo HĐ mới                                                        |
+| GET    | /api/sales-orders/[id]          | Chi tiết HĐ + remainingQty/progressPct/estimatedDoneDate per item |
+| PUT    | /api/sales-orders/[id]          | Sửa deliveryDate/startDate/note (chỉ ACTIVE/OVERDUE)              |
+| DELETE | /api/sales-orders/[id]          | Xóa HĐ (chỉ Admin, chỉ ACTIVE)                                    |
+| POST   | /api/sales-orders/[id]/complete | Đánh dấu DONE thủ công                                            |
+| POST   | /api/sales-orders/[id]/cancel   | Hủy HĐ (body: { reason })                                         |
+| POST   | /api/sales-orders/recalculate   | Tính lại toàn bộ phân bổ (Admin only)                             |
+| GET    | /api/sales-orders/progress      | Tiến độ tổng hợp + isAtRisk (filter: factoryId, status, month)    |
 
 ### Known limitations / not yet implemented
 
@@ -882,9 +882,9 @@ src/app/api/kdsx/sales-orders/route.ts                     — thêm deliveryDat
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)` |
+| Method     | Path                           | Description                                  |
+| ---------- | ------------------------------ | -------------------------------------------- |
+| (internal) | `src/lib/allocation-engine.ts` | `runAllocation(factoryId, date)`             |
 | (internal) | `src/lib/allocation-engine.ts` | `recalculateAllocation(factoryId, from, to)` |
 
 ### Known limitations
@@ -926,13 +926,13 @@ src/app/sales-orders/[id]/page.tsx                      — Updated: fetch from 
 
 ### API endpoints
 
-| Method | Path                                          | Description                              |
-| ------ | --------------------------------------------- | ---------------------------------------- |
-| GET    | /api/kdsx/sales-orders                        | List with status filter + progress fields |
-| GET    | /api/kdsx/sales-orders/[id]                   | Detail with allocations + per-item progress |
-| PATCH  | /api/kdsx/sales-orders/[id]/status            | Update status (ACTIVE/DONE/CANCELLED)    |
-| POST   | /api/kdsx/sales-orders/recalculate            | Recalculate allocation (Admin only)      |
-| GET    | /api/kdsx/sales-orders/progress               | Progress summary list with isAtRisk      |
+| Method | Path                               | Description                                 |
+| ------ | ---------------------------------- | ------------------------------------------- |
+| GET    | /api/kdsx/sales-orders             | List with status filter + progress fields   |
+| GET    | /api/kdsx/sales-orders/[id]        | Detail with allocations + per-item progress |
+| PATCH  | /api/kdsx/sales-orders/[id]/status | Update status (ACTIVE/DONE/CANCELLED)       |
+| POST   | /api/kdsx/sales-orders/recalculate | Recalculate allocation (Admin only)         |
+| GET    | /api/kdsx/sales-orders/progress    | Progress summary list with isAtRisk         |
 
 ### Known limitations
 
@@ -971,14 +971,14 @@ src/components/AdminLayout.tsx                      — Added /kdsx/order-progre
 
 ### API endpoints used (all existing from Parts 1 & 2)
 
-| Method | Path                                          | Used by                      |
-| ------ | --------------------------------------------- | ---------------------------- |
-| GET    | /api/kdsx/sales-orders                        | List page                    |
-| GET    | /api/kdsx/sales-orders/[id]                   | Detail page + OrderProgressTab |
-| PUT    | /api/kdsx/sales-orders/[id]                   | Edit form (now + deliveryDate) |
-| PATCH  | /api/kdsx/sales-orders/[id]/status            | Complete/Cancel buttons      |
-| POST   | /api/kdsx/sales-orders/recalculate            | Recalculate button           |
-| GET    | /api/kdsx/sales-orders/progress               | Dashboard card grid          |
+| Method | Path                               | Used by                        |
+| ------ | ---------------------------------- | ------------------------------ |
+| GET    | /api/kdsx/sales-orders             | List page                      |
+| GET    | /api/kdsx/sales-orders/[id]        | Detail page + OrderProgressTab |
+| PUT    | /api/kdsx/sales-orders/[id]        | Edit form (now + deliveryDate) |
+| PATCH  | /api/kdsx/sales-orders/[id]/status | Complete/Cancel buttons        |
+| POST   | /api/kdsx/sales-orders/recalculate | Recalculate button             |
+| GET    | /api/kdsx/sales-orders/progress    | Dashboard card grid            |
 
 ### Known limitations
 
@@ -1010,7 +1010,6 @@ src/app/sales-orders/page.tsx    — Removed "Tạo hợp đồng" Button and su
 
 - The create modal code and `createOpen` state remain in the file (dead code); can be cleaned up later if page is confirmed read-only permanently
 
-
 ---
 
 ## THEO DÕI TIẾN ĐỘ — Surplus UI (phần dư sản lượng)
@@ -1020,6 +1019,7 @@ src/app/sales-orders/page.tsx    — Removed "Tạo hợp đồng" Button and su
 ### What was built
 
 Finished the surplus UI layer that was previously skeleton-only. Two UI locations updated:
+
 1. `/kdsx/order-progress` dashboard — surplus table below the order cards grid (green +X kg, filtered to rows > 0)
 2. `OrderProgressTab` — per-item surplus indicator beneath the progress bar when `allocatedQty > plannedQty`
 
@@ -1039,8 +1039,8 @@ src/components/kdsx/OrderProgressTab.tsx       — Added surplus indicator (+X k
 
 ### API endpoints
 
-| Method | Path                                      | Description                          |
-| ------ | ----------------------------------------- | ------------------------------------ |
+| Method | Path                                      | Description                             |
+| ------ | ----------------------------------------- | --------------------------------------- |
 | GET    | /api/kdsx/sales-orders/surplus?factoryId= | Returns surplus qty per item (existing) |
 
 ### Known limitations
@@ -1119,10 +1119,10 @@ src/app/api/productivity-benchmark/versions/route.ts — thêm canAccessBenchmar
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| PUT | /api/users | Thêm department/extraModules vào payload |
-| POST | /api/users | Thêm department/extraModules vào payload |
+| Method | Path       | Description                              |
+| ------ | ---------- | ---------------------------------------- |
+| PUT    | /api/users | Thêm department/extraModules vào payload |
+| POST   | /api/users | Thêm department/extraModules vào payload |
 
 ### Data notes
 
@@ -1160,12 +1160,12 @@ src/app/kdsx/customers/page.tsx                      — UI: bảng hiển thị
 
 ### API endpoints
 
-| Method | Path                       | Description                     |
-| ------ | -------------------------- | ------------------------------- |
-| GET    | /api/kdsx/customers        | Lấy danh sách kèm _count orders |
-| POST   | /api/kdsx/customers        | Tạo khách hàng mới (8 trường)   |
-| PUT    | /api/kdsx/customers/[id]   | Cập nhật khách hàng (8 trường)  |
-| DELETE | /api/kdsx/customers/[id]   | Xóa (chỉ ADMIN)                 |
+| Method | Path                     | Description                      |
+| ------ | ------------------------ | -------------------------------- |
+| GET    | /api/kdsx/customers      | Lấy danh sách kèm \_count orders |
+| POST   | /api/kdsx/customers      | Tạo khách hàng mới (8 trường)    |
+| PUT    | /api/kdsx/customers/[id] | Cập nhật khách hàng (8 trường)   |
+| DELETE | /api/kdsx/customers/[id] | Xóa (chỉ ADMIN)                  |
 
 ### Known limitations / not yet implemented
 
@@ -1179,65 +1179,66 @@ src/app/kdsx/customers/page.tsx                      — UI: bảng hiển thị
 
 ---
 
-## MODULE �?NH M?C N�NG SU?T � C?P NH?T 2026-04-11
+## MODULE �?NH M?C N�NG SU?T � C?P NH?T 2026-04-11
 
-### T�nh n�ng m?i: �?nh m?c Th?c nghi?m (EMPIRICAL)
+### T�nh n�ng m?i: �?nh m?c Th?c nghi?m (EMPIRICAL)
 
-**Ng�y c?p nh?t:** 2026-04-11
-**Files thay �?i:**
-- prisma/schema.prisma � th�m enum BenchmarkType, 3 fields m?i
-- src/app/api/productivity-benchmark/benchmarks/route.ts � POST h? tr? EMPIRICAL
-- src/app/api/productivity-benchmark/benchmarks/[id]/route.ts � PUT h? tr? EMPIRICAL
-- src/app/api/productivity-benchmark/capacity/route.ts � th�m param enchmarkType
-- src/app/api/productivity-benchmark/comparison/route.ts � th�m param enchmarkType
-- src/app/dashboard/productivity-benchmark/page.tsx � UI Radio ch?n lo?i + c?t m?i
-- src/app/dashboard/productivity-benchmark/capacity/page.tsx � Segmented ch?n lo?i
-- src/app/dashboard/productivity-benchmark/comparison/page.tsx � Segmented + c?t m?i
+**Ng�y c?p nh?t:** 2026-04-11
+**Files thay �?i:**
 
-### 2 lo?i �?nh m?c song song
+- prisma/schema.prisma � th�m enum BenchmarkType, 3 fields m?i
+- src/app/api/productivity-benchmark/benchmarks/route.ts � POST h? tr? EMPIRICAL
+- src/app/api/productivity-benchmark/benchmarks/[id]/route.ts � PUT h? tr? EMPIRICAL
+- src/app/api/productivity-benchmark/capacity/route.ts � th�m param enchmarkType
+- src/app/api/productivity-benchmark/comparison/route.ts � th�m param enchmarkType
+- src/app/dashboard/productivity-benchmark/page.tsx � UI Radio ch?n lo?i + c?t m?i
+- src/app/dashboard/productivity-benchmark/capacity/page.tsx � Segmented ch?n lo?i
+- src/app/dashboard/productivity-benchmark/comparison/page.tsx � Segmented + c?t m?i
 
-| | L? thuy?t (THEORY) | Th?c nghi?m (EMPIRICAL) |
-|---|---|---|
-| Ngu?n g?c | T�nh t? c�ng th?c v?t l? | Ng�?i d�ng t? nh?p t? kinh nghi?m |
-| ��n v? l�u | kg/ca/m�y (stdOutputPerShift) | kg/ng�y/lo?i m�y (empiricalOutputPerDay) |
-| Th�ng s? c?n nh?p | Nm, Ne, twist, speed, hi?u su?t, s? c?c | Ch? c?n: lo?i m�y + m?t h�ng + kg/ng�y |
-| D�ng �? | ��nh gi� m�y c� ��ng thi?t k? kh�ng | L?p k? ho?ch v� ��m ph�n v?i kh�ch |
+### 2 lo?i �?nh m?c song song
 
-### Schema thay �?i
+|                   | L? thuy?t (THEORY)                      | Th?c nghi?m (EMPIRICAL)                  |
+| ----------------- | --------------------------------------- | ---------------------------------------- |
+| Ngu?n g?c         | T�nh t? c�ng th?c v?t l?                | Ng�?i d�ng t? nh?p t? kinh nghi?m        |
+| ��n v? l�u        | kg/ca/m�y (stdOutputPerShift)           | kg/ng�y/lo?i m�y (empiricalOutputPerDay) |
+| Th�ng s? c?n nh?p | Nm, Ne, twist, speed, hi?u su?t, s? c?c | Ch? c?n: lo?i m�y + m?t h�ng + kg/ng�y   |
+| D�ng �?           | ��nh gi� m�y c� ��ng thi?t k? kh�ng     | L?p k? ho?ch v� ��m ph�n v?i kh�ch       |
+
+### Schema thay �?i
 
 `prisma
 enum BenchmarkType {
-  THEORY    // �?nh m?c l? thuy?t
-  EMPIRICAL // �?nh m?c th?c nghi?m
+THEORY // �?nh m?c l? thuy?t
+EMPIRICAL // �?nh m?c th?c nghi?m
 }
 
 model ProductivityBenchmark {
-  // ... fields c? gi? nguy�n ...
-  benchmarkType         BenchmarkType @default(THEORY)
-  empiricalOutputPerDay Float?        // kg/ng�y � ch? d�ng khi EMPIRICAL
-  empiricalNote         String?       // ngu?n s? li?u
+// ... fields c? gi? nguy�n ...
+benchmarkType BenchmarkType @default(THEORY)
+empiricalOutputPerDay Float? // kg/ng�y � ch? d�ng khi EMPIRICAL
+empiricalNote String? // ngu?n s? li?u
 }
 `
 
-Migration: prisma db push (dev) �? ch?y th�nh c�ng. DB �? sync.
+Migration: prisma db push (dev) �? ch?y th�nh c�ng. DB �? sync.
 
 ### Business rules
 
-- **Unique constraint** (versionId, itemId, processId, machineModel) v?n �p d?ng � 1 t? h?p ch? c� 1 d?ng d� l� THEORY hay EMPIRICAL
-- **calcTheoreticalOutput()** trong src/utils/benchmark.ts KH�NG thay �?i g?
-- **API capacity** EMPIRICAL: dailyOutputPerMachine = empiricalOutputPerDay (�? l� kg/ng�y, kh�ng nh�n 3)
-- **API capacity** THEORY: dailyOutputPerMachine = stdOutputPerShift � 3 (nh� c?)
-- **API comparison**: enchmarkValue = kg/ng�y � THEORY d�ng stdOutputPerShift�3, EMPIRICAL d�ng empiricalOutputPerDay
+- **Unique constraint** (versionId, itemId, processId, machineModel) v?n �p d?ng � 1 t? h?p ch? c� 1 d?ng d� l� THEORY hay EMPIRICAL
+- **calcTheoreticalOutput()** trong src/utils/benchmark.ts KH�NG thay �?i g?
+- **API capacity** EMPIRICAL: dailyOutputPerMachine = empiricalOutputPerDay (�? l� kg/ng�y, kh�ng nh�n 3)
+- **API capacity** THEORY: dailyOutputPerMachine = stdOutputPerShift � 3 (nh� c?)
+- **API comparison**: enchmarkValue = kg/ng�y � THEORY d�ng stdOutputPerShift�3, EMPIRICAL d�ng empiricalOutputPerDay
 
 ### API params m?i
 
-| API | Param m?i | Gi� tr? |
-|---|---|---|
-| GET /capacity | enchmarkType | THEORY (default) ho?c EMPIRICAL |
-| GET /comparison | enchmarkType | THEORY (default) ho?c EMPIRICAL |
-| POST /benchmarks | enchmarkType | THEORY (default) ho?c EMPIRICAL |
-| POST /benchmarks | empiricalOutputPerDay | Float (kg/ng�y, b?t bu?c n?u EMPIRICAL) |
-| POST /benchmarks | empiricalNote | String (optional) |
+| API              | Param m?i             | Gi� tr?                                 |
+| ---------------- | --------------------- | --------------------------------------- |
+| GET /capacity    | enchmarkType          | THEORY (default) ho?c EMPIRICAL         |
+| GET /comparison  | enchmarkType          | THEORY (default) ho?c EMPIRICAL         |
+| POST /benchmarks | enchmarkType          | THEORY (default) ho?c EMPIRICAL         |
+| POST /benchmarks | empiricalOutputPerDay | Float (kg/ng�y, b?t bu?c n?u EMPIRICAL) |
+| POST /benchmarks | empiricalNote         | String (optional)                       |
 
 ---
 
@@ -1274,11 +1275,11 @@ src/app/iot-import/sources/page.tsx                    — thêm cột + dropdow
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/iot/parse-excel | Dispatcher: đọc fileFormat của source, gọi sub-parser |
-| POST | /api/iot/sources | Nhận thêm fileFormat |
-| PUT | /api/iot/sources/:id | Nhận thêm fileFormat |
+| Method | Path                 | Description                                           |
+| ------ | -------------------- | ----------------------------------------------------- |
+| POST   | /api/iot/parse-excel | Dispatcher: đọc fileFormat của source, gọi sub-parser |
+| POST   | /api/iot/sources     | Nhận thêm fileFormat                                  |
+| PUT    | /api/iot/sources/:id | Nhận thêm fileFormat                                  |
 
 ### Known limitations
 
@@ -1289,7 +1290,6 @@ src/app/iot-import/sources/page.tsx                    — thêm cột + dropdow
 
 - Tất cả IotSource hiện có mặc định fileFormat = STANDARD sau khi migrate
 - Cần chạy: `npx prisma migrate deploy && npx prisma generate`
-
 
 ---
 
@@ -1321,10 +1321,10 @@ src/app/kd-daily-input/page.tsx   — thêm inline item selection + cập nhật
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/machines/batch | Cập nhật điều phối 1 máy (machineIds.length=1, operator được phép) |
-| GET | /api/items?all=true | Tải danh sách mặt hàng cho dropdown |
+| Method | Path                | Description                                                        |
+| ------ | ------------------- | ------------------------------------------------------------------ |
+| POST   | /api/machines/batch | Cập nhật điều phối 1 máy (machineIds.length=1, operator được phép) |
+| GET    | /api/items?all=true | Tải danh sách mặt hàng cho dropdown                                |
 
 ### Known limitations
 
@@ -1335,7 +1335,6 @@ src/app/kd-daily-input/page.tsx   — thêm inline item selection + cập nhật
 
 - Sau khi đổi mặt hàng và lưu: `machine.currentItemId` được cập nhật trong DB; lần tải sau sẽ hiện mặt hàng mới
 - Lịch sử sản xuất (production_logs / kd_daily_outputs) không bị ảnh hưởng khi đổi currentItemId
-
 
 ---
 
@@ -1365,8 +1364,8 @@ src/app/production/daily-input/page.tsx      — Thêm nút "Xóa bản ghi ca n
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
+| Method | Path                             | Description               |
+| ------ | -------------------------------- | ------------------------- |
 | DELETE | /api/production/daily-input?id=X | Xóa ProductionLog theo id |
 
 ### Known limitations
@@ -1410,16 +1409,16 @@ src/app/api/productivity-benchmark/benchmarks/[id]/route.ts       — PUT + DELE
 
 ### API endpoints
 
-| Method | Path | Permission |
-|--------|------|------------|
-| POST | /api/productivity-benchmark/versions | ALLOWED_ROLES |
-| PUT | /api/productivity-benchmark/versions/[id] | ALLOWED_ROLES |
-| DELETE | /api/productivity-benchmark/versions/[id] | ADMIN only |
-| POST | /api/productivity-benchmark/versions/[id]/activate | ADMIN only |
-| POST | /api/productivity-benchmark/versions/[id]/clone | ALLOWED_ROLES |
-| POST | /api/productivity-benchmark/benchmarks | ALLOWED_ROLES |
-| PUT | /api/productivity-benchmark/benchmarks/[id] | ALLOWED_ROLES |
-| DELETE | /api/productivity-benchmark/benchmarks/[id] | ADMIN only |
+| Method | Path                                               | Permission    |
+| ------ | -------------------------------------------------- | ------------- |
+| POST   | /api/productivity-benchmark/versions               | ALLOWED_ROLES |
+| PUT    | /api/productivity-benchmark/versions/[id]          | ALLOWED_ROLES |
+| DELETE | /api/productivity-benchmark/versions/[id]          | ADMIN only    |
+| POST   | /api/productivity-benchmark/versions/[id]/activate | ADMIN only    |
+| POST   | /api/productivity-benchmark/versions/[id]/clone    | ALLOWED_ROLES |
+| POST   | /api/productivity-benchmark/benchmarks             | ALLOWED_ROLES |
+| PUT    | /api/productivity-benchmark/benchmarks/[id]        | ALLOWED_ROLES |
+| DELETE | /api/productivity-benchmark/benchmarks/[id]        | ADMIN only    |
 
 ### Known limitations
 
@@ -1439,6 +1438,7 @@ Migrate toàn bộ ~35 API route còn sót từ hệ thống phân quyền cũ (
 ### Files modified (theo nhóm)
 
 **ADMIN-only routes** — thay `?.role !== "ADMIN"` → `?.userRole !== "ADMIN"`:
+
 - `factories/route.ts`, `factories/[id]/route.ts`
 - `processes/route.ts`, `processes/[id]/route.ts`
 - `production/stop-categories/route.ts`, `production/stop-categories/[id]/route.ts`
@@ -1450,12 +1450,14 @@ Migrate toàn bộ ~35 API route còn sót từ hệ thống phân quyền cũ (
 - `kdsx/monthly-plans/[id]/unapprove/route.ts`
 
 **ALLOWED_ROLES routes** (`["ADMIN","DIRECTOR","FACTORY_MANAGER"]`) — thay `role !== "ADMIN" && accessLevel !== "MANAGER"`:
+
 - `iot/import/route.ts`, `iot/import-logs/route.ts`, `iot/mapping/route.ts`
 - `iot/parse-excel/route.ts`, `iot/sources/route.ts`, `iot/sources/[id]/route.ts`
 - `productivity-benchmark/benchmarks/bulk/route.ts`
 - `production/lines/route.ts`, `production/lines/[id]/route.ts`
 
 **Special cases**:
+
 - `kd-daily-input/route.ts`, `production/daily-input/route.ts` POST — bỏ check READ_ONLY, cho phép mọi user đã login ghi nhập liệu
 - `production/daily-input/route.ts` DELETE — dọn fallback `role` cũ
 - `machines/batch/route.ts` — `isAdmin`/`isManager` dùng `userRole` mới
@@ -1507,12 +1509,12 @@ src/components/reports/OutputByDate.tsx                      — Chuyển LineCh
 
 ### API endpoints
 
-| Method | Path                        | Description                                                           |
-| ------ | --------------------------- | --------------------------------------------------------------------- |
-| GET    | /api/production/daily-input | Trả về log theo (machineId, date, shift), bao gồm efficiency          |
-| POST   | /api/production/daily-input | Lưu/cập nhật log, bao gồm efficiency (optional)                       |
-| POST   | /api/production/history     | Trả data + stats.avgEfficiency (trọng số theo toàn bộ filter)         |
-| GET    | /api/reports/production     | byDate[].avgEfficiency + summary.avgEfficiency cả kỳ                  |
+| Method | Path                        | Description                                                   |
+| ------ | --------------------------- | ------------------------------------------------------------- |
+| GET    | /api/production/daily-input | Trả về log theo (machineId, date, shift), bao gồm efficiency  |
+| POST   | /api/production/daily-input | Lưu/cập nhật log, bao gồm efficiency (optional)               |
+| POST   | /api/production/history     | Trả data + stats.avgEfficiency (trọng số theo toàn bộ filter) |
+| GET    | /api/reports/production     | byDate[].avgEfficiency + summary.avgEfficiency cả kỳ          |
 
 ### Known limitations / not yet implemented
 
@@ -1553,15 +1555,172 @@ src/components/AdminLayout.tsx                 — Thêm menu "Nhập sản lư�
 
 ### API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET    | /api/production/daily-status | Tải machines + todayLog theo processId/date/shift |
-| GET    | /api/production/last-log | Lấy endIndex ca trước cho startIndex |
-| POST   | /api/production/daily-input | Lưu từng row (upsert theo machineId+date+shift+itemId) |
-| DELETE | /api/production/daily-input?id= | Xóa log (role-restricted) |
+| Method | Path                            | Description                                            |
+| ------ | ------------------------------- | ------------------------------------------------------ |
+| GET    | /api/production/daily-status    | Tải machines + todayLog theo processId/date/shift      |
+| GET    | /api/production/last-log        | Lấy endIndex ca trước cho startIndex                   |
+| POST   | /api/production/daily-input     | Lưu từng row (upsert theo machineId+date+shift+itemId) |
+| DELETE | /api/production/daily-input?id= | Xóa log (role-restricted)                              |
 
 ### Known limitations
 
 - Chưa hỗ trợ "Đổi hàng giữa ca" (tính năng phức tạp của giao diện thẻ); người dùng cần dùng giao diện thẻ nếu cần đổi hàng giữa ca
 - Không có cảnh báo ca thiếu (missing shifts warning) như giao diện thẻ
 - Cột NE hiển thị "—" cho formulaType 1 và 2
+
+---
+
+## KD-SX — Module Kế hoạch Sản xuất tháng (Production Schedule)
+
+**Status:** ✅ Completed 2026-04-17
+
+### Mô tả nghiệp vụ
+
+Module lập kế hoạch sản xuất chi tiết cho tháng — phân bổ mặt hàng trên từng máy theo từng ngày. Đây là **tiền đề** để tính doanh thu/lợi nhuận kế hoạch theo số lý thuyết (thay cho việc nhập tay `PlanLineItem.qty`).
+
+**Luồng dữ liệu:**
+
+```
+ProductivityBenchmark.empiricalOutputPerDay (định mức kg/ngày)
+    ↓ (auto-fill)
+ProductionSchedule + ScheduleSegment (kế hoạch SX)
+    ↓ (tổng hợp, trừ ngày nghỉ)
+PlanLineItem.qty (số lượng kế hoạch cho DT)
+    ↓
+Tính doanh thu / chi phí / lợi nhuận KH
+```
+
+### Schema thay đổi
+
+**Additive-only — không phá vỡ data cũ:**
+
+- `Machine.model String?` — thêm field nullable để map tới `ProductivityBenchmark.machineModel`
+- `ProductionSchedule` — model mới: 1 nhà máy × 1 tháng (`@@unique([factoryId, yearMonth])`)
+  - `holidays Json @default("[]")` — mảng số ngày nghỉ trong tháng (VD: `[1, 30]`)
+  - `status PlanStatus` — tái dùng enum DRAFT/SUBMITTED/APPROVED
+- `ScheduleSegment` — model mới: 1 máy × 1 mặt hàng × khoảng ngày
+  - `fromDay Int`, `toDay Int` — ngày trong tháng (1–31)
+  - `kgPerDay Float` — sản lượng kg/ngày (auto-fill hoặc nhập tay)
+  - `benchmarkId Int?` — audit trail: fill từ benchmark nào
+  - `isManualKg Boolean @default(false)` — cờ phân biệt auto vs thủ công
+- Relations thêm vào model cũ: `Factory.productionSchedules`, `Machine.scheduleSegments`, `Item.scheduleSegments`
+- Migration: `20260417230626_add_production_schedule_module`
+
+### Logic nghiệp vụ quan trọng
+
+**1. Auto-fill kgPerDay từ EMPIRICAL benchmark:**
+
+- Khi thêm segment: tra `ProductivityBenchmark` theo `(versionId, itemId, processId, machineModel, benchmarkType=EMPIRICAL)`
+- `BenchmarkVersion` được chọn: `effectiveFrom <= planDate` + `(effectiveTo IS NULL OR effectiveTo >= planDate)` + `isActive=true` → order by `effectiveFrom DESC` → take first
+- Machine phải có field `model` (nullable), nếu không có → không auto-fill được
+- Nếu không tìm thấy benchmark EMPIRICAL → trả lỗi 400 `NO_BENCHMARK`, gợi ý cấu hình
+
+**2. Overlap check (server-side):**
+
+- Trước khi tạo/sửa segment, kiểm tra máy đó không có segment khác trùng khoảng ngày
+- 3 điều kiện overlap: `fromDay trong range cũ` OR `toDay trong range cũ` OR `range mới bao trùm range cũ`
+- Khi sửa: exclude chính segmentId đang edit
+
+**3. Tính tổng kg có trừ ngày nghỉ:**
+
+```
+days = toDay - fromDay + 1
+holidaysInRange = holidays.filter(h => h >= fromDay && h <= toDay).length
+effectiveDays = max(0, days - holidaysInRange)
+totalKg = effectiveDays × kgPerDay
+```
+
+**4. Workflow trạng thái:**
+
+- **DRAFT**: cho sửa tự do (thêm/sửa/xóa segments, toggle holiday)
+- **SUBMITTED**: khóa sửa segments, chỉ xem. Có thể revert về DRAFT
+- **APPROVED**: khóa hoàn toàn. Phải unapprove → SUBMITTED mới sửa được
+- **Chỉ khi APPROVED** mới được gọi `sync-to-plan` → tránh số kế hoạch DT thay đổi liên tục
+- Chỉ DRAFT mới xóa được schedule (onDelete: Cascade xóa toàn bộ segments)
+
+**5. Sync to Plan (`sync-to-plan`):**
+
+- Tính summary `{itemId → totalKg}` từ tất cả segments (có trừ holidays)
+- Tìm hoặc tạo `MonthlyPlan` cho `(factoryId, yearMonth)`
+- Với mỗi item: upsert `PlanLineItem` (`salesOrderItemId=null` = direct plan không gắn HĐ)
+- Kết quả trả về danh sách items đã sync với action CREATED/UPDATED
+
+**6. Màu mặt hàng (hash stable):**
+
+```typescript
+function itemColor(itemId: number): string {
+  const hue = (itemId * 137.5) % 360; // golden angle
+  return `hsla(${hue}, 65%, 60%, 1)`;
+}
+```
+
+### API Endpoints
+
+| Method | Path                                                      | Mô tả                                                           |
+| ------ | --------------------------------------------------------- | --------------------------------------------------------------- |
+| GET    | `/api/kdsx/production-schedule`                           | List schedules (filter: factoryId, yearMonth) + tổng kg         |
+| POST   | `/api/kdsx/production-schedule`                           | Tạo schedule trống cho (factoryId, yearMonth)                   |
+| GET    | `/api/kdsx/production-schedule/[id]`                      | Chi tiết schedule + tất cả segments + machine/item info         |
+| PUT    | `/api/kdsx/production-schedule/[id]`                      | Update note, holidays, status                                   |
+| DELETE | `/api/kdsx/production-schedule/[id]`                      | Xóa (chỉ DRAFT, cascade segments)                               |
+| POST   | `/api/kdsx/production-schedule/[id]/segments`             | Thêm segment + auto-fill kgPerDay từ EMPIRICAL                  |
+| PUT    | `/api/kdsx/production-schedule/[id]/segments/[segmentId]` | Sửa segment (re-auto-fill nếu đổi item)                         |
+| DELETE | `/api/kdsx/production-schedule/[id]/segments/[segmentId]` | Xóa 1 segment                                                   |
+| GET    | `/api/kdsx/production-schedule/[id]/summary`              | Tổng hợp kg theo mặt hàng (trừ holidays)                        |
+| POST   | `/api/kdsx/production-schedule/[id]/sync-to-plan`         | Đồng bộ sang MonthlyPlan (chỉ APPROVED)                         |
+| GET    | `/api/kdsx/production-schedule/benchmark-lookup`          | Tra cứu EMPIRICAL cho (machineId, itemId, yearMonth, factoryId) |
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                                      ← Machine.model, ProductionSchedule, ScheduleSegment
+prisma/migrations/20260417230626_add_production_schedule_module/          ← Migration SQL
+prisma/seed-page-registry.js                                              ← Seed PageRegistry entry (id=45)
+
+src/app/api/kdsx/production-schedule/route.ts                            ← GET list / POST create
+src/app/api/kdsx/production-schedule/[id]/route.ts                       ← GET/PUT/DELETE
+src/app/api/kdsx/production-schedule/[id]/segments/route.ts              ← POST add segment + auto-fill
+src/app/api/kdsx/production-schedule/[id]/segments/[segmentId]/route.ts  ← PUT/DELETE segment
+src/app/api/kdsx/production-schedule/[id]/summary/route.ts               ← GET summary by item
+src/app/api/kdsx/production-schedule/[id]/sync-to-plan/route.ts          ← POST sync to MonthlyPlan
+src/app/api/kdsx/production-schedule/benchmark-lookup/route.ts           ← GET benchmark lookup
+
+src/app/kdsx/production-schedule/page.tsx                                ← Trang danh sách
+src/app/kdsx/production-schedule/[id]/page.tsx                           ← Trang chi tiết (grid Excel-like)
+src/components/kdsx/ScheduleSegmentModal.tsx                             ← Modal thêm/sửa segment
+
+src/components/AdminLayout.tsx                                            ← Thêm kdsx.production-schedule vào sidebar
+```
+
+### PageRegistry
+
+```json
+{
+  "pageKey": "kdsx.production-schedule",
+  "pageName": "Ke hoach SX thang",
+  "pageGroup": "KINH DOANH",
+  "path": "/kdsx/production-schedule",
+  "sortOrder": 50
+}
+```
+
+→ `page_registry.id = 45`
+
+### UI Features
+
+- **Trang danh sách** (`/kdsx/production-schedule`): stats cards (tổng KH, đã duyệt, tổng tấn), filter nhà máy, table + modal tạo mới
+- **Trang chi tiết** (`/kdsx/production-schedule/[id]`):
+  - Summary cards màu theo mặt hàng (click để highlight máy liên quan trong grid)
+  - Grid Excel-like: sticky 2 cột đầu (Mã máy + Mặt hàng), N cột ngày (header click = toggle holiday), cột TỔNG
+  - Màu ô theo itemId (golden angle hashing), ô trống = có thể thêm
+  - Ngày nghỉ lễ: header đỏ, ô xám "—", tổng cuối tự trừ
+  - Click ô có segment → mở modal sửa; click ô trống → mở modal thêm với machine/day pre-filled
+  - Workflow buttons: Trình duyệt / Phê duyệt / Đồng bộ sang KH DT / Unapprove
+- **ScheduleSegmentModal**: auto-fetch benchmark khi chọn máy+mặt hàng, preview `X ngày × Y kg/ngày = Z kg`, warning nếu thiếu benchmark
+
+### Known limitations / Next steps
+
+- Grid chưa có "Export Excel" (button hiển thị nhưng chưa implement logic export)
+- Khi `sync-to-plan`, `PlanLineItem.unitPriceUsd` được set = 0 với dòng tạo mới tự động — user cần cập nhật đơn giá sau
+- `sync-to-plan` chỉ upsert dòng `salesOrderItemId = null`; các dòng gắn HĐ cụ thể phải tự map
+- Chưa có seed data mẫu 21 máy × 30 ngày (phase 2 nếu cần)
