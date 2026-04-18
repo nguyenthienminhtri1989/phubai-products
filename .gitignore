@@ -21,6 +21,8 @@ next-env.d.ts
 *.sqlite
 *.sqlite-journal
 *.sql
+# Ngoại lệ: Cho phép file migration.sql trong Prisma migrations
+!prisma/migrations/**/*.sql
 *.db
 
 # --- ENV & SECRETS (Bảo mật - QUAN TRỌNG) ---
