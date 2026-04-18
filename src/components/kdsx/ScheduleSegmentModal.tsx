@@ -6,7 +6,6 @@ import {
   Form,
   Select,
   InputNumber,
-  Checkbox,
   Alert,
   Typography,
   Divider,
@@ -14,7 +13,7 @@ import {
   Tag,
   Spin,
 } from "antd";
-import { InfoCircleOutlined, WarningOutlined, LinkOutlined } from "@ant-design/icons";
+import { WarningOutlined, LinkOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -92,19 +91,20 @@ export default function ScheduleSegmentModal({
 }: ScheduleSegmentModalProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [autoFill, setAutoFill] = useState(true);
+  const [isManualKg, setIsManualKg] = useState(false);
   const [benchmarkInfo, setBenchmarkInfo] = useState<BenchmarkInfo | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([]);
+  const [multiMachineWarning, setMultiMachineWarning] = useState<string | null>(null);
 
   const isEdit = !!editSegment;
 
   // Reset form khi modal mở
   useEffect(() => {
     if (open) {
-      const initialAutoFill = editSegment ? !editSegment.isManualKg : true;
-      setAutoFill(initialAutoFill);
+      setIsManualKg(editSegment ? editSegment.isManualKg : false);
       setBenchmarkInfo(null);
+      setMultiMachineWarning(null);
 
       if (isEdit) {
         // Edit: dùng machineId đơn
@@ -118,7 +118,8 @@ export default function ScheduleSegmentModal({
           kgPerDay: editSegment?.kgPerDay ?? undefined,
           note: editSegment?.note ?? undefined,
         });
-        lookupBenchmark(editSegment!.machineId, editSegment!.itemId);
+        // Lookup để hiển thị info, nhưng không overwrite kgPerDay khi edit
+        lookupBenchmark(editSegment!.machineId, editSegment!.itemId, /* overwrite */ false);
       } else {
         // Tạo mới: dùng machineIds array
         const initIds = defaultMachineId ? [defaultMachineId] : [];
@@ -137,7 +138,7 @@ export default function ScheduleSegmentModal({
   }, [open, editSegment, defaultMachineId, defaultDay, daysInMonth, isEdit]);
 
   const lookupBenchmark = useCallback(
-    async (machineId?: number, itemId?: number) => {
+    async (machineId?: number, itemId?: number, overwriteKg = true) => {
       if (!machineId || !itemId || !yearMonth || !factoryId) {
         setBenchmarkInfo(null);
         return;
@@ -150,8 +151,8 @@ export default function ScheduleSegmentModal({
         const data = await res.json();
         setBenchmarkInfo(data);
 
-        // Auto-fill kgPerDay nếu đang ở chế độ auto
-        if (!data.notFound && autoFill) {
+        // Auto-fill kgPerDay nếu tìm thấy benchmark và không phải nhập tay
+        if (!data.notFound && overwriteKg && !isManualKg) {
           form.setFieldValue("kgPerDay", data.kgPerDay);
         }
       } catch {
@@ -160,30 +161,47 @@ export default function ScheduleSegmentModal({
         setLookupLoading(false);
       }
     },
-    [yearMonth, factoryId, autoFill, form]
+    [yearMonth, factoryId, isManualKg, form]
   );
 
   const handleMachineOrItemChange = () => {
-    // Khi edit: dùng machineId đơn. Khi tạo mới: nếu chỉ chọn 1 máy thì lookup.
+    // Khi edit: chỉ hiển thị info, không overwrite. Khi tạo mới: 1 máy → lookup và fill.
     const machineId = isEdit
       ? form.getFieldValue("machineId")
       : selectedMachineIds.length === 1 ? selectedMachineIds[0] : undefined;
     const itemId = form.getFieldValue("itemId");
-    lookupBenchmark(machineId, itemId);
+    lookupBenchmark(machineId, itemId, !isEdit);
   };
 
   const handleMachineIdsChange = (ids: number[]) => {
     setSelectedMachineIds(ids);
-    const itemId = form.getFieldValue("itemId");
-    // Lookup benchmark nếu chỉ có 1 máy được chọn
-    const machineId = ids.length === 1 ? ids[0] : undefined;
-    lookupBenchmark(machineId, itemId);
-  };
+    setMultiMachineWarning(null);
+    setBenchmarkInfo(null);
+    form.setFieldValue("kgPerDay", undefined);
+    setIsManualKg(false);
 
-  const handleAutoFillChange = (checked: boolean) => {
-    setAutoFill(checked);
-    if (checked && benchmarkInfo && !benchmarkInfo.notFound) {
-      form.setFieldValue("kgPerDay", benchmarkInfo.kgPerDay);
+    const itemId = form.getFieldValue("itemId");
+
+    if (ids.length === 0) return;
+
+    if (ids.length === 1) {
+      // 1 máy: lookup bình thường
+      lookupBenchmark(ids[0], itemId, true);
+      return;
+    }
+
+    // Nhiều máy: kiểm tra xem có cùng model không
+    const selectedMachines = ids.map(id => machines.find(m => m.id === id)).filter(Boolean) as Machine[];
+    const models = [...new Set(selectedMachines.map(m => m.model ?? ""))];
+
+    if (models.length === 1 && models[0] !== "") {
+      // Tất cả cùng model → lookup với máy đầu tiên, fill chung
+      lookupBenchmark(ids[0], itemId, true);
+    } else {
+      // Khác model → để trống, hiện warning
+      setMultiMachineWarning(
+        "Các máy có loại máy (model) khác nhau. Nhập kg/ngày chung bên dưới hoặc tạo từng segment riêng."
+      );
     }
   };
 
@@ -191,7 +209,15 @@ export default function ScheduleSegmentModal({
     try {
       await form.validateFields();
       const values = form.getFieldsValue();
+
+      // Kiểm tra kgPerDay phải có
+      if (!values.kgPerDay || values.kgPerDay <= 0) {
+        form.setFields([{ name: "kgPerDay", errors: ["Vui lòng nhập kg/ngày (hoặc chờ tự động điền từ định mức)"] }]);
+        return;
+      }
+
       setLoading(true);
+      const autoFillFlag = !isManualKg && !!benchmarkInfo && !benchmarkInfo.notFound;
 
       if (isEdit) {
         // Edit: save 1 segment duy nhất
@@ -201,20 +227,19 @@ export default function ScheduleSegmentModal({
           fromDay: values.fromDay,
           toDay: values.toDay,
           kgPerDay: values.kgPerDay,
-          autoFill,
+          autoFill: autoFillFlag,
           note: values.note,
         });
       } else {
         // Tạo mới: save tuần tự từng máy
-        const machineIds: number[] = selectedMachineIds;
-        for (const machineId of machineIds) {
+        for (const machineId of selectedMachineIds) {
           await onSave({
             machineId,
             itemId: values.itemId,
             fromDay: values.fromDay,
             toDay: values.toDay,
             kgPerDay: values.kgPerDay,
-            autoFill,
+            autoFill: autoFillFlag,
             note: values.note,
           });
         }
@@ -224,7 +249,9 @@ export default function ScheduleSegmentModal({
 
       form.resetFields();
       setBenchmarkInfo(null);
+      setMultiMachineWarning(null);
       setSelectedMachineIds([]);
+      setIsManualKg(false);
     } catch {
       // validation error — không cần xử lý
     } finally {
@@ -343,57 +370,20 @@ export default function ScheduleSegmentModal({
 
         <Divider style={{ margin: "8px 0" }} />
 
-        {/* Auto-fill checkbox */}
-        <Form.Item>
-          <Checkbox
-            checked={autoFill}
-            onChange={(e) => handleAutoFillChange(e.target.checked)}
-          >
-            Tự động điền kg/ngày từ định mức thực nghiệm
-          </Checkbox>
-        </Form.Item>
-
-        {/* Benchmark info panel */}
+        {/* Benchmark lookup loading */}
         {lookupLoading && (
           <div style={{ marginBottom: 12 }}>
             <Spin size="small" /> <Text type="secondary"> Đang tra cứu định mức...</Text>
           </div>
         )}
 
-        {!lookupLoading && benchmarkInfo && !benchmarkInfo.notFound && (
-          <Alert
-            type="success"
-            showIcon
-            icon={<InfoCircleOutlined />}
-            message={
-              <span>
-                Định mức thực nghiệm:{" "}
-                <strong>{benchmarkInfo.kgPerDay?.toLocaleString()} kg/ngày</strong>{" "}
-                <Tag color="blue">{benchmarkInfo.versionName}</Tag>
-                {benchmarkInfo.empiricalNote && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {" "}— {benchmarkInfo.empiricalNote}
-                  </Text>
-                )}
-              </span>
-            }
-            style={{ marginBottom: 12 }}
-          />
-        )}
-
-        {!lookupLoading && benchmarkInfo?.notFound && (
+        {/* Warning: nhiều máy khác model */}
+        {!isEdit && multiMachineWarning && (
           <Alert
             type="warning"
             showIcon
             icon={<WarningOutlined />}
-            message={
-              <span>
-                {benchmarkInfo.message ?? "Chưa tìm thấy định mức EMPIRICAL."}{" "}
-                <a href="/dashboard/productivity-benchmark" target="_blank" rel="noreferrer">
-                  <LinkOutlined /> Cấu hình định mức →
-                </a>
-              </span>
-            }
+            message={multiMachineWarning}
             style={{ marginBottom: 12 }}
           />
         )}
@@ -402,21 +392,46 @@ export default function ScheduleSegmentModal({
         <Form.Item
           label="Kg/ngày"
           name="kgPerDay"
-          rules={[
-            { required: true, message: "Nhập hoặc để tự động điền" },
-            { type: "number", min: 0.01, message: "kgPerDay phải > 0" },
-          ]}
+          rules={[{
+            validator: (_, value) => {
+              if (value !== undefined && value !== null && value <= 0)
+                return Promise.reject("Kg/ngày phải > 0");
+              return Promise.resolve();
+            }
+          }]}
         >
           <InputNumber
             min={0.01}
             style={{ width: "100%" }}
-            disabled={autoFill && !!benchmarkInfo && !benchmarkInfo.notFound}
             formatter={(value) =>
               value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""
             }
-            placeholder="kg/ngày"
+            placeholder="Tự động từ định mức hoặc nhập tay"
+            onChange={() => setIsManualKg(true)}
           />
         </Form.Item>
+
+        {/* Hint benchmark inline */}
+        {!lookupLoading && benchmarkInfo && !benchmarkInfo.notFound && (
+          <div style={{ fontSize: 12, color: "#52c41a", marginTop: -16, marginBottom: 12 }}>
+            ✓ Định mức thực nghiệm:{" "}
+            <strong>{benchmarkInfo.kgPerDay?.toLocaleString()} kg/ngày</strong>
+            {benchmarkInfo.versionName && <Tag color="blue" style={{ marginLeft: 6, fontSize: 11 }}>{benchmarkInfo.versionName}</Tag>}
+            {benchmarkInfo.empiricalNote && (
+              <span style={{ color: "#888" }}> — {benchmarkInfo.empiricalNote}</span>
+            )}
+          </div>
+        )}
+
+        {!lookupLoading && benchmarkInfo?.notFound && (
+          <div style={{ fontSize: 12, color: "#faad14", marginTop: -16, marginBottom: 12 }}>
+            ⚠ Chưa có định mức cho máy này.{" "}
+            <a href="/dashboard/productivity-benchmark" target="_blank" rel="noreferrer">
+              <LinkOutlined /> Cấu hình định mức →
+            </a>
+            {" — Nhập kg/ngày thủ công."}
+          </div>
+        )}
 
         {/* Preview */}
         {totalKg > 0 && (
