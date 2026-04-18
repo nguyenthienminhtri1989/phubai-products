@@ -1,140 +1,184 @@
-# TASK: Thêm field `model` vào bảng Machine
+# FIX: Trang Kế hoạch Sản xuất tháng — 2 thay đổi UI
 
-## Bối cảnh
+## Thay đổi 1: Hiển thị kg thay vì tấn
 
-Trang Kế hoạch SX tháng (`/kdsx/production-schedule/[id]`) có tính năng
-auto-fill kg/ngày từ `ProductivityBenchmark.empiricalOutputPerDay`.
-Logic tra cứu cần biết máy thuộc loại máy nào (machineModel như "G32",
-"Murata Qpro-EX"...) để khớp với bảng `productivity_benchmarks`.
-Hiện tại `Machine` chưa có field này nên auto-fill luôn thất bại.
+File: `src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx`
 
-## Thay đổi cần làm
+### 1a. Các ô trong grid (cột ngày)
 
-### 1. Schema — thêm field vào model Machine
+Tìm chỗ render giá trị trong ô ngày, hiện đang hiển thị dạng tấn:
 
-File: `prisma/schema.prisma`
+```tsx
+// CŨ:
+{
+  (seg.kgPerDay / 1000).toFixed(1);
+}
+t;
 
-Tìm model `Machine`, thêm 1 dòng (đặt sau field `currentNE`):
+// MỚI:
+{
+  seg.kgPerDay.toLocaleString();
+}
+kg;
+```
 
-```prisma
-model Machine {
-  // ... các field hiện có ...
-  currentNE Float?
-  model     String?  // THÊM DÒNG NÀY — Loại máy VD: "G32", "Murata Qpro-EX", "Rieter RSB-D50"
-  // ... relations ...
+### 1b. Cột TỔNG bên phải (tổng kg của máy)
+
+```tsx
+// CŨ:
+{
+  machineTotalKg > 0 ? `${(machineTotalKg / 1000).toFixed(1)}t` : "—";
+}
+
+// MỚI:
+{
+  machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : "—";
 }
 ```
 
-Chạy migration:
+### 1c. Hàng TỔNG/NGÀY ở cuối bảng
 
-```bash
-npx prisma migrate dev --name add_model_to_machine
-npx prisma generate
+```tsx
+// CŨ:
+{
+  isHoliday ? "—" : kg > 0 ? `${(kg / 1000).toFixed(1)}t` : "·";
+}
+
+// MỚI:
+{
+  isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·";
+}
 ```
+
+### 1d. Ô tổng góc dưới phải
+
+```tsx
+// CŨ:
+{
+  (grandTotal / 1000).toFixed(1);
+}
+t;
+
+// MỚI:
+{
+  grandTotal.toLocaleString();
+}
+kg;
+```
+
+### 1e. Summary Cards ở đầu trang
+
+Giữ nguyên hiển thị tấn trong summary cards (vì tấn dễ đọc hơn ở level tổng hợp).
+Chỉ đổi trong bảng grid.
 
 ---
 
-### 2. API GET machines — trả thêm field `model`
+## Thay đổi 2: Cho phép chọn nhiều máy trong Modal Thêm Segment
 
-Kiểm tra tất cả các route GET machines, đảm bảo `model` được include
-trong response. Tìm file:
+File: `src/components/kdsx/ScheduleSegmentModal.tsx`
 
-```powershell
-Get-ChildItem -Recurse "src\app\api\machines" -Filter "route.ts" | Select-Object FullName
+### 2a. Đổi Select máy thành multi-select
+
+```tsx
+// CŨ: Select 1 máy
+<Select
+  placeholder="Chọn máy"
+  value={form.machineId}
+  onChange={v => setForm(prev => ({ ...prev, machineId: v }))}
+>
+  {machines.map(m => <Option key={m.id} value={m.id}>{m.name}</Option>)}
+</Select>
+
+// MỚI: Select nhiều máy
+<Select
+  mode="multiple"
+  placeholder="Chọn 1 hoặc nhiều máy"
+  value={form.machineIds}  // đổi thành array
+  onChange={v => setForm(prev => ({ ...prev, machineIds: v }))}
+  showSearch
+  optionFilterProp="children"
+  maxTagCount="responsive"
+>
+  {machines.map(m => (
+    <Option key={m.id} value={m.id}>
+      {m.name}{m.model ? ` (${m.model})` : ""}
+    </Option>
+  ))}
+</Select>
 ```
 
-Trong mỗi query `prisma.machine.findMany()` hoặc `findUnique()`:
+### 2b. Đổi form state từ `machineId` sang `machineIds`
 
-- Nếu dùng `select` → thêm `model: true`
-- Nếu không dùng `select` (lấy all fields) → không cần sửa, Prisma tự trả
+```tsx
+// CŨ:
+const [form, setForm] = useState({
+  machineId: defaultMachineId || null,
+  ...
+});
 
----
-
-### 3. API PUT machine — nhận và lưu field `model`
-
-File: `src/app/api/machines/[id]/route.ts` (hoặc tương đương)
-
-Trong handler PUT, thêm `model` vào phần update:
-
-```typescript
-const {
-  name,
-  processId,
-  formulaType,
-  spindleCount,
-  currentItemId,
-  currentNE,
-  model,
-  isActive,
-} = body;
-
-await prisma.machine.update({
-  where: { id },
-  data: {
-    // ... các field hiện có ...
-    ...(model !== undefined && { model }),
-  },
+// MỚI:
+const [form, setForm] = useState({
+  machineIds: defaultMachineId ? [defaultMachineId] : [],
+  ...
 });
 ```
 
----
-
-### 4. UI trang quản lý máy — thêm field nhập `model`
-
-Tìm trang quản lý máy móc (thường là `/machines` hoặc `/dashboard/machines`).
-
-Thêm field "Loại máy" vào form tạo/sửa máy:
+### 2c. Đổi validation
 
 ```tsx
-<Form.Item
-  label="Loại máy"
-  name="model"
-  tooltip="Dùng để tra định mức năng suất. VD: G32, Murata Qpro-EX, Rieter RSB-D50"
->
-  <Input placeholder="VD: G32" />
-</Form.Item>
+// CŨ:
+const isValid = form.machineId && form.itemId && ...
+
+// MỚI:
+const isValid = form.machineIds.length > 0 && form.itemId && ...
 ```
 
-Thêm cột "Loại máy" vào bảng danh sách máy (optional, nhưng nên có để
-admin biết máy nào đã được cấu hình):
+### 2d. Đổi logic submit — tạo nhiều segments (1 per máy)
+
+```tsx
+// CŨ: submit 1 segment
+const handleSubmit = () => {
+  onSave({ machineId: form.machineId, ... });
+};
+
+// MỚI: submit nhiều segments, 1 API call per máy
+const handleSubmit = async () => {
+  for (const machineId of form.machineIds) {
+    await onSave({ machineId, itemId: form.itemId, fromDay: form.fromDay, toDay: form.toDay, kgPerDay: form.kgPerDay });
+  }
+};
+```
+
+### 2e. Preview cập nhật
+
+Khi chọn nhiều máy, preview hiển thị:
 
 ```tsx
 {
-  title: "Loại máy",
-  dataIndex: "model",
-  key: "model",
-  render: (v: string) => v
-    ? <Tag>{v}</Tag>
-    : <Text type="secondary">Chưa cấu hình</Text>,
+  form.machineIds.length > 0 && form.kgPerDay && (
+    <div>
+      {form.machineIds.length} máy × {form.kgPerDay.toLocaleString()} kg/ngày ×{" "}
+      {daysCount} ngày ={" "}
+      <strong>
+        {(form.machineIds.length * form.kgPerDay * daysCount).toLocaleString()}{" "}
+        kg
+      </strong>
+    </div>
+  );
 }
 ```
 
----
+### 2f. Khi click ô trống trong grid để thêm segment
 
-### 5. Kiểm tra sau khi xong
-
-```powershell
-# Schema có field model chưa
-Select-String -Pattern "model.*String" -LiteralPath "prisma\schema.prisma"
-
-# Migration đã chạy
-npx prisma migrate status
-
-# API trả model không
-Select-String -Pattern "model" -LiteralPath "src\app\api\machines\route.ts"
-```
-
-**Kết quả đúng:**
-
-- Schema có dòng `model  String?` trong model Machine
-- Migration status: "Database schema is up to date"
-- API có xử lý field `model`
+Máy được pre-select từ `defaultMachineId` — vẫn hoạt động vì
+`machineIds = [defaultMachineId]` (array 1 phần tử).
 
 ---
 
 ## Lưu ý
 
-- Field `model` là `String?` (nullable) — máy cũ không bị ảnh hưởng
-- Sau khi thêm field, admin cần vào trang quản lý máy để điền `model`
-  cho từng máy → sau đó auto-fill trong Kế hoạch SX mới hoạt động
-- KHÔNG sửa bất kỳ logic nào khác — strictly additive
+- Khi edit segment (sửa segment đã có) → chỉ cho chọn 1 máy (disable multi-select
+  hoặc chỉ hiện 1 máy của segment đó). Multi-select chỉ áp dụng khi TẠO MỚI.
+- `onSave` được gọi nhiều lần (1 per máy) — đảm bảo hàm này handle async đúng,
+  không bị race condition. Có thể dùng `Promise.all` hoặc sequential await.
+- Sau khi save xong tất cả → gọi `refresh()` 1 lần duy nhất, không gọi mỗi iteration.

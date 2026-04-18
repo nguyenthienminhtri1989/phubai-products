@@ -44,7 +44,7 @@ interface ScheduleSegmentModalProps {
   open: boolean;
   onClose: () => void;
   onSave: (values: {
-    machineId?: number;
+    machineId: number;
     itemId: number;
     fromDay: number;
     toDay: number;
@@ -52,6 +52,7 @@ interface ScheduleSegmentModalProps {
     autoFill: boolean;
     note?: string;
   }) => Promise<void>;
+  onAllSaved?: () => Promise<void>; // callback sau khi save tất cả (thay vì gọi refresh mỗi lần)
   scheduleId: number;
   factoryId: number;
   yearMonth: string; // "YYYY-MM"
@@ -79,6 +80,7 @@ export default function ScheduleSegmentModal({
   open,
   onClose,
   onSave,
+  onAllSaved,
   factoryId,
   yearMonth,
   daysInMonth,
@@ -93,6 +95,7 @@ export default function ScheduleSegmentModal({
   const [autoFill, setAutoFill] = useState(true);
   const [benchmarkInfo, setBenchmarkInfo] = useState<BenchmarkInfo | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([]);
 
   const isEdit = !!editSegment;
 
@@ -103,23 +106,35 @@ export default function ScheduleSegmentModal({
       setAutoFill(initialAutoFill);
       setBenchmarkInfo(null);
 
-      form.setFieldsValue({
-        machineId: editSegment?.machineId ?? defaultMachineId,
-        itemId: editSegment?.itemId ?? undefined,
-        fromDay: editSegment?.fromDay ?? defaultDay ?? 1,
-        toDay: editSegment?.toDay ?? defaultDay ?? daysInMonth,
-        kgPerDay: editSegment?.kgPerDay ?? undefined,
-        note: editSegment?.note ?? undefined,
-      });
-
-      // Nếu edit, lookup benchmark ngay
-      if (editSegment) {
-        lookupBenchmark(editSegment.machineId, editSegment.itemId);
-      } else if (defaultMachineId && !editSegment) {
-        // Không lookup vì chưa có itemId
+      if (isEdit) {
+        // Edit: dùng machineId đơn
+        setSelectedMachineIds([editSegment!.machineId]);
+        form.setFieldsValue({
+          machineId: editSegment!.machineId,
+          machineIds: undefined,
+          itemId: editSegment?.itemId ?? undefined,
+          fromDay: editSegment?.fromDay ?? 1,
+          toDay: editSegment?.toDay ?? daysInMonth,
+          kgPerDay: editSegment?.kgPerDay ?? undefined,
+          note: editSegment?.note ?? undefined,
+        });
+        lookupBenchmark(editSegment!.machineId, editSegment!.itemId);
+      } else {
+        // Tạo mới: dùng machineIds array
+        const initIds = defaultMachineId ? [defaultMachineId] : [];
+        setSelectedMachineIds(initIds);
+        form.setFieldsValue({
+          machineId: undefined,
+          machineIds: initIds.length > 0 ? initIds : undefined,
+          itemId: undefined,
+          fromDay: defaultDay ?? 1,
+          toDay: defaultDay ?? daysInMonth,
+          kgPerDay: undefined,
+          note: undefined,
+        });
       }
     }
-  }, [open, editSegment, defaultMachineId, defaultDay, daysInMonth]);
+  }, [open, editSegment, defaultMachineId, defaultDay, daysInMonth, isEdit]);
 
   const lookupBenchmark = useCallback(
     async (machineId?: number, itemId?: number) => {
@@ -149,8 +164,19 @@ export default function ScheduleSegmentModal({
   );
 
   const handleMachineOrItemChange = () => {
-    const machineId = form.getFieldValue("machineId");
+    // Khi edit: dùng machineId đơn. Khi tạo mới: nếu chỉ chọn 1 máy thì lookup.
+    const machineId = isEdit
+      ? form.getFieldValue("machineId")
+      : selectedMachineIds.length === 1 ? selectedMachineIds[0] : undefined;
     const itemId = form.getFieldValue("itemId");
+    lookupBenchmark(machineId, itemId);
+  };
+
+  const handleMachineIdsChange = (ids: number[]) => {
+    setSelectedMachineIds(ids);
+    const itemId = form.getFieldValue("itemId");
+    // Lookup benchmark nếu chỉ có 1 máy được chọn
+    const machineId = ids.length === 1 ? ids[0] : undefined;
     lookupBenchmark(machineId, itemId);
   };
 
@@ -166,13 +192,40 @@ export default function ScheduleSegmentModal({
       await form.validateFields();
       const values = form.getFieldsValue();
       setLoading(true);
-      await onSave({
-        ...values,
-        autoFill,
-      });
+
+      if (isEdit) {
+        // Edit: save 1 segment duy nhất
+        await onSave({
+          machineId: editSegment!.machineId,
+          itemId: values.itemId,
+          fromDay: values.fromDay,
+          toDay: values.toDay,
+          kgPerDay: values.kgPerDay,
+          autoFill,
+          note: values.note,
+        });
+      } else {
+        // Tạo mới: save tuần tự từng máy
+        const machineIds: number[] = selectedMachineIds;
+        for (const machineId of machineIds) {
+          await onSave({
+            machineId,
+            itemId: values.itemId,
+            fromDay: values.fromDay,
+            toDay: values.toDay,
+            kgPerDay: values.kgPerDay,
+            autoFill,
+            note: values.note,
+          });
+        }
+        // Gọi onAllSaved 1 lần sau khi save tất cả (nếu có)
+        if (onAllSaved) await onAllSaved();
+      }
+
       form.resetFields();
       setBenchmarkInfo(null);
-    } catch (err) {
+      setSelectedMachineIds([]);
+    } catch {
       // validation error — không cần xử lý
     } finally {
       setLoading(false);
@@ -205,26 +258,51 @@ export default function ScheduleSegmentModal({
       destroyOnClose
     >
       <Form form={form} layout="vertical" size="middle">
-        {/* Máy — disable khi edit */}
-        <Form.Item
-          label="Máy"
-          name="machineId"
-          rules={[{ required: true, message: "Chọn máy" }]}
-        >
-          <Select
-            placeholder="Chọn máy..."
-            showSearch
-            filterOption={(input, opt) =>
-              (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
-            }
-            options={machines.map((m) => ({
-              value: m.id,
-              label: m.model ? `${m.name} (${m.model})` : m.name,
-            }))}
-            onChange={handleMachineOrItemChange}
-            disabled={isEdit}
-          />
-        </Form.Item>
+        {/* Máy */}
+        {isEdit ? (
+          // Edit: single select, disabled
+          <Form.Item
+            label="Máy"
+            name="machineId"
+            rules={[{ required: true, message: "Chọn máy" }]}
+          >
+            <Select
+              placeholder="Chọn máy..."
+              showSearch
+              filterOption={(input, opt) =>
+                (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
+              }
+              options={machines.map((m) => ({
+                value: m.id,
+                label: m.model ? `${m.name} (${m.model})` : m.name,
+              }))}
+              onChange={handleMachineOrItemChange}
+              disabled={true}
+            />
+          </Form.Item>
+        ) : (
+          // Tạo mới: multi-select
+          <Form.Item
+            label="Máy"
+            name="machineIds"
+            rules={[{ required: true, message: "Chọn ít nhất 1 máy" }]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="Chọn 1 hoặc nhiều máy..."
+              showSearch
+              filterOption={(input, opt) =>
+                (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
+              }
+              options={machines.map((m) => ({
+                value: m.id,
+                label: m.model ? `${m.name} (${m.model})` : m.name,
+              }))}
+              onChange={handleMachineIdsChange}
+              maxTagCount="responsive"
+            />
+          </Form.Item>
+        )}
 
         {/* Mặt hàng */}
         <Form.Item
@@ -348,12 +426,25 @@ export default function ScheduleSegmentModal({
             message={
               <Space>
                 <Text>
-                  Preview:{" "}
-                  <strong>{totalDays} ngày</strong> ×{" "}
-                  <strong>{kgPerDay?.toLocaleString()} kg/ngày</strong> ={" "}
-                  <strong style={{ color: "#1677ff" }}>
-                    {totalKg.toLocaleString()} kg ({(totalKg / 1000).toFixed(1)} tấn)
-                  </strong>
+                  {!isEdit && selectedMachineIds.length > 1 ? (
+                    <>
+                      <strong>{selectedMachineIds.length} máy</strong> ×{" "}
+                      <strong>{totalDays} ngày</strong> ×{" "}
+                      <strong>{kgPerDay?.toLocaleString()} kg/ngày</strong> ={" "}
+                      <strong style={{ color: "#1677ff" }}>
+                        {(selectedMachineIds.length * totalKg).toLocaleString()} kg ({((selectedMachineIds.length * totalKg) / 1000).toFixed(1)} tấn)
+                      </strong>{" "}(tổng {selectedMachineIds.length} máy)
+                    </>
+                  ) : (
+                    <>
+                      Preview:{" "}
+                      <strong>{totalDays} ngày</strong> ×{" "}
+                      <strong>{kgPerDay?.toLocaleString()} kg/ngày</strong> ={" "}
+                      <strong style={{ color: "#1677ff" }}>
+                        {totalKg.toLocaleString()} kg ({(totalKg / 1000).toFixed(1)} tấn)
+                      </strong>
+                    </>
+                  )}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   (chưa trừ ngày nghỉ)

@@ -135,7 +135,19 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     });
     const data = await res.json();
     if (!res.ok) { message.error(data.error ?? "Lỗi lưu segment"); throw new Error(data.error); }
-    message.success(editSegment ? "Đã cập nhật segment" : "Đã thêm segment");
+    if (editSegment) {
+      // Edit: đóng modal và refresh ngay
+      message.success("Đã cập nhật segment");
+      setModalOpen(false); setEditSegment(null);
+      await refresh();
+    } else {
+      // Tạo mới (có thể nhiều máy): chỉ thông báo, không refresh — handleAllSaved sẽ refresh
+      message.success(`Đã thêm segment cho máy #${values.machineId}`);
+    }
+  };
+
+  // Gọi 1 lần sau khi tạo mới tất cả segments xong
+  const handleAllSaved = async () => {
     setModalOpen(false); setEditSegment(null);
     await refresh();
   };
@@ -401,7 +413,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                           ? <Text type="secondary" style={{ fontSize: 10 }}>—</Text>
                           : seg
                             ? <span style={{ color: itemColor(seg.itemId), fontSize: 10, fontWeight: 600 }}>
-                              {(seg.kgPerDay / 1000).toFixed(1)}t
+                              {seg.kgPerDay.toLocaleString()} kg
                             </span>
                             : <span style={{ color: "#d9d9d9", fontSize: 10 }}>·</span>
                         }
@@ -411,7 +423,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
 
                   {/* Tổng kg máy */}
                   <td style={{ ...tdStyle, background: "#e6f4ff", fontWeight: 700, fontSize: 12, color: "#1677ff" }}>
-                    {machineTotalKg > 0 ? `${(machineTotalKg / 1000).toFixed(1)}t` : "—"}
+                    {machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : "—"}
                   </td>
                 </tr>
               );
@@ -430,12 +442,12 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                     background: isHoliday ? "#434343" : "#1d3557",
                     color: isHoliday ? "#888" : "#52c41a",
                   }}>
-                    {isHoliday ? "—" : kg > 0 ? `${(kg / 1000).toFixed(1)}t` : "·"}
+                    {isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·"}
                   </td>
                 );
               })}
               <td style={{ ...tdStyle, background: "#1d3557", color: "#52c41a", fontWeight: 800, fontSize: 13 }}>
-                {(grandTotal / 1000).toFixed(1)}t
+                {grandTotal.toLocaleString()} kg
               </td>
             </tr>
           </tbody>
@@ -447,6 +459,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditSegment(null); }}
         onSave={handleSaveSegment}
+        onAllSaved={handleAllSaved}
         scheduleId={scheduleId}
         factoryId={factory.id}
         yearMonth={yearMonth}
