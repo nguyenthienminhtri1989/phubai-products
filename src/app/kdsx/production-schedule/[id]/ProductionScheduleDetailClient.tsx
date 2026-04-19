@@ -72,6 +72,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [highlightItemId, setHighlightItemId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("plan");
+  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
 
   const fetchSchedule = useCallback(async () => {
     try {
@@ -289,14 +290,30 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                 machineTotalKg += days * seg.kgPerDay;
               }
 
+              const isRowSelected = selectedMachineId === machine.id;
+              const rowBg = isRowSelected
+                ? "#fffbe6"
+                : mIdx % 2 === 0 ? "#fff" : "#fafafa";
+
               return (
-                <tr key={machine.id} style={{ background: mIdx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                <tr
+                  key={machine.id}
+                  style={{
+                    background: rowBg,
+                    cursor: "pointer",
+                    outline: isRowSelected ? "2px solid #faad14" : undefined,
+                    outlineOffset: isRowSelected ? "-2px" : undefined,
+                  }}
+                  onClick={() => setSelectedMachineId(prev => prev === machine.id ? null : machine.id)}
+                >
                   {/* Máy */}
                   <td style={{
-                    ...tdStyle, textAlign: "left", paddingLeft: 8, fontWeight: 600,
+                    ...tdStyle, textAlign: "left", paddingLeft: 8,
                     position: "sticky", left: 0, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa",
+                    background: rowBg,
                     minWidth: 80,
+                    fontWeight: isRowSelected ? 800 : 600,
+                    color: isRowSelected ? "#d48806" : undefined,
                   }}>
                     {machine.name}
                     {machine.model && <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{machine.model}</div>}
@@ -305,7 +322,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                   {/* Mặt hàng + color picker */}
                   <td style={{
                     ...tdStyle, position: "sticky", left: 80, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa", minWidth: 100,
+                    background: rowBg, minWidth: 100,
                   }}>
                     {machineSegs.length > 0
                       ? machineSegs.map(s => (
