@@ -237,8 +237,8 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   };
   const tdStyle: React.CSSProperties = {
     padding: "5px 5px", textAlign: "center", fontSize: 12, whiteSpace: "nowrap",
-    borderRight: "1px solid #d0d0d0",
-    borderBottom: "1px solid #e8e8e8",
+    borderRight: "1px solid #9e9e9e",
+    borderBottom: "1px solid #bdbdbd",
   };
 
   // Grid Kế hoạch (tab 1)
