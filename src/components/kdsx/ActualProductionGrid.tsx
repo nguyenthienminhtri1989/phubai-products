@@ -73,21 +73,33 @@ export default function ActualProductionGrid({
 }: ActualProductionGridProps) {
   const [grid, setGrid] = useState<ActualGrid>({});
   const [source, setSource] = useState<string>("KD_DAILY_INPUT");
-  const [loading, setLoading] = useState(true);
+  const [loadedScheduleId, setLoadedScheduleId] = useState<number | null>(null);
+  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
+
+  // Derive loading: chưa load xong khi loadedScheduleId chưa khớp với scheduleId hiện tại
+  const loading = loadedScheduleId !== scheduleId;
 
   const [schedYear, schedMonth] = yearMonth.split("-").map(Number);
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+
     fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return;
         setGrid(data.grid ?? {});
         setSource(data.source ?? "KD_DAILY_INPUT");
+        setLoadedScheduleId(scheduleId);
       })
-      .catch(() => setGrid({}))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setGrid({});
+        setLoadedScheduleId(scheduleId);
+      });
+
+    return () => { cancelled = true; };
   }, [scheduleId]);
 
   if (loading) return <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>;
@@ -111,13 +123,16 @@ export default function ActualProductionGrid({
   const grandActualTotal = totalActualByDay.reduce((s, v) => s + v, 0);
 
   const thStyle: React.CSSProperties = {
-    background: "#0a2540", color: "white", padding: "6px 4px",
-    textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+    background: "#0a2540", color: "white", padding: "7px 5px",
+    textAlign: "center", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
     position: "sticky", top: 0, zIndex: 2,
+    borderBottom: "2px solid #1d3557",
+    borderRight: "1px solid #1d3557",
   };
   const tdStyle: React.CSSProperties = {
-    padding: "3px 4px", textAlign: "center", fontSize: 11, whiteSpace: "nowrap",
-    borderRight: "1px solid #f0f0f0",
+    padding: "5px 5px", textAlign: "center", fontSize: 12, whiteSpace: "nowrap",
+    borderRight: "1px solid #d0d0d0",
+    borderBottom: "1px solid #e8e8e8",
   };
 
   return (
@@ -135,7 +150,7 @@ export default function ActualProductionGrid({
         </Text>
       </div>
 
-      <div style={{ overflowX: "auto", border: "1px solid #d9d9d9", borderRadius: 6 }}>
+      <div style={{ overflowX: "auto", border: "2px solid #b0b0b0", borderRadius: 6, boxShadow: "0 1px 6px rgba(0,0,0,0.1)" }}>
         <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
           <thead>
             <tr>
@@ -170,13 +185,29 @@ export default function ActualProductionGrid({
                 }
               }
 
+              const isRowSelected = selectedMachineId === machine.id;
+              const rowBg = isRowSelected
+                ? "#fffbe6"
+                : mIdx % 2 === 0 ? "#fff" : "#fafafa";
+
               return (
-                <tr key={machine.id} style={{ background: mIdx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                <tr
+                  key={machine.id}
+                  style={{
+                    background: rowBg,
+                    cursor: "pointer",
+                    outline: isRowSelected ? "2px solid #faad14" : undefined,
+                    outlineOffset: isRowSelected ? "-2px" : undefined,
+                  }}
+                  onClick={() => setSelectedMachineId(prev => prev === machine.id ? null : machine.id)}
+                >
                   {/* Máy */}
                   <td style={{
-                    ...tdStyle, textAlign: "left", paddingLeft: 8, fontWeight: 600,
+                    ...tdStyle, textAlign: "left", paddingLeft: 8,
                     position: "sticky", left: 0, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa", minWidth: 80,
+                    background: rowBg, minWidth: 80,
+                    fontWeight: isRowSelected ? 800 : 600,
+                    color: isRowSelected ? "#d48806" : undefined,
                   }}>
                     {machine.name}
                     {machine.model && <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{machine.model}</div>}
@@ -185,7 +216,7 @@ export default function ActualProductionGrid({
                   {/* Mặt hàng */}
                   <td style={{
                     ...tdStyle, position: "sticky", left: 80, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa", minWidth: 100,
+                    background: rowBg, minWidth: 100,
                   }}>
                     {machineSegs.length > 0
                       ? machineSegs.map(s => (
@@ -210,37 +241,41 @@ export default function ActualProductionGrid({
                       <td key={day} style={{
                         ...tdStyle,
                         background: isHoliday
-                          ? "#fff1f0"
+                          ? "#ffebe8"
                           : hasData && itemId
                             ? getBg(itemId, itemColors)
                             : undefined,
-                        borderLeft: hasData && itemId && day === (machineGrid[day - 1] ? undefined : day) ? undefined : undefined,
+                        borderLeft: "1px solid #d0d0d0",
                       }}>
                         {isHoliday
-                          ? <Text type="secondary" style={{ fontSize: 10 }}>—</Text>
+                          ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                           : hasData
                             ? <div>
                               <span style={{
                                 color: compareColor(actualKg, planKg),
-                                fontSize: 10, fontWeight: 700,
+                                fontSize: 11, fontWeight: 800,
                               }}>
                                 {actualKg.toLocaleString()}
                               </span>
                               {planKg > 0 && (
-                                <div style={{ fontSize: 9, color: "#aaa" }}>
+                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>
                                   ({planKg.toLocaleString()})
                                 </div>
                               )}
                             </div>
-                            : <span style={{ color: "#d9d9d9", fontSize: 10 }}>·</span>
+                            : <span style={{ color: "#bbb", fontSize: 13, lineHeight: 1 }}>·</span>
                         }
                       </td>
                     );
                   })}
 
                   {/* Tổng kg TH của máy */}
-                  <td style={{ ...tdStyle, background: "#e6f4ff", fontWeight: 700, fontSize: 12, color: "#1677ff" }}>
-                    {machineTotalActual > 0 ? `${machineTotalActual.toLocaleString()} kg` : "—"}
+                  <td style={{
+                    ...tdStyle,
+                    background: "#dbeeff", fontWeight: 800, fontSize: 13,
+                    color: "#0050b3", borderLeft: "2px solid #b0b0b0",
+                  }}>
+                    {machineTotalActual > 0 ? `${machineTotalActual.toLocaleString()} kg` : <span style={{ color: "#bbb" }}>—</span>}
                   </td>
                 </tr>
               );

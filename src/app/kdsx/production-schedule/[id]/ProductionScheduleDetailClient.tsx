@@ -229,13 +229,16 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const grandTotal = summary.reduce((s, i) => s + i.totalKg, 0);
 
   const thStyle: React.CSSProperties = {
-    background: "#001529", color: "white", padding: "6px 4px",
-    textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+    background: "#001529", color: "white", padding: "7px 5px",
+    textAlign: "center", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
     position: "sticky", top: 0, zIndex: 2,
+    borderBottom: "2px solid #1d3557",
+    borderRight: "1px solid #1d3557",
   };
   const tdStyle: React.CSSProperties = {
-    padding: "3px 4px", textAlign: "center", fontSize: 11, whiteSpace: "nowrap",
-    borderRight: "1px solid #f0f0f0",
+    padding: "5px 5px", textAlign: "center", fontSize: 12, whiteSpace: "nowrap",
+    borderRight: "1px solid #d0d0d0",
+    borderBottom: "1px solid #e8e8e8",
   };
 
   // Grid Kế hoạch (tab 1)
@@ -247,7 +250,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         Ngày nghỉ: {holidayArr.length > 0 ? holidayArr.map(d => `${d}/${schedMonth}`).join(", ") : "Chưa có"}
       </div>
 
-      <div style={{ overflowX: "auto", border: "1px solid #d9d9d9", borderRadius: 6 }}>
+      <div style={{ overflowX: "auto", border: "2px solid #b0b0b0", borderRadius: 6, boxShadow: "0 1px 6px rgba(0,0,0,0.1)" }}>
         <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
           <thead>
             <tr>
@@ -357,14 +360,14 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                         style={{
                           ...tdStyle,
                           background: isHoliday
-                            ? "#fff1f0"
+                            ? "#ffebe8"
                             : seg
                               ? getBg(seg.itemId)
                               : undefined,
                           opacity: dimmed ? 0.25 : 1,
                           cursor: isDraft ? "pointer" : "default",
-                          borderLeft: seg && (day === seg.fromDay) ? `2px solid ${getBorder(seg.itemId)}` : undefined,
-                          borderRight: seg && (day === seg.toDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #f0f0f0",
+                          borderLeft: seg && (day === seg.fromDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #d0d0d0",
+                          borderRight: seg && (day === seg.toDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #d0d0d0",
                         }}
                         onClick={() => {
                           if (!isDraft) return;
@@ -381,20 +384,24 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                         title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày${isDraft ? " (Click để sửa)" : ""}` : isDraft ? "Click để thêm segment" : ""}
                       >
                         {isHoliday
-                          ? <Text type="secondary" style={{ fontSize: 10 }}>—</Text>
+                          ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                           : seg
-                            ? <span style={{ color: getColor(seg.itemId), fontSize: 10, fontWeight: 600 }}>
+                            ? <span style={{ color: getColor(seg.itemId), fontSize: 11, fontWeight: 800 }}>
                               {seg.kgPerDay.toLocaleString()} kg
                             </span>
-                            : <span style={{ color: "#d9d9d9", fontSize: 10 }}>·</span>
+                            : <span style={{ color: "#bbb", fontSize: 13, lineHeight: 1 }}>·</span>
                         }
                       </td>
                     );
                   })}
 
                   {/* Tổng kg máy */}
-                  <td style={{ ...tdStyle, background: "#e6f4ff", fontWeight: 700, fontSize: 12, color: "#1677ff" }}>
-                    {machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : "—"}
+                  <td style={{
+                    ...tdStyle,
+                    background: "#dbeeff", fontWeight: 800, fontSize: 13,
+                    color: "#0050b3", borderLeft: "2px solid #b0b0b0",
+                  }}>
+                    {machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : <span style={{ color: "#bbb" }}>—</span>}
                   </td>
                 </tr>
               );
