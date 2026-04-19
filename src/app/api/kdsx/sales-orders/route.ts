@@ -67,8 +67,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, items } = body;
-  if (!orderNo || !customerId || !factoryId || !deliveryDate) {
-    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, customerId, factoryId, deliveryDate)" }, { status: 400 });
+  if (!orderNo || !customerId || !factoryId) {
+    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, customerId, factoryId)" }, { status: 400 });
   }
 
   try {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         customerId: Number(customerId),
         factoryId: Number(factoryId),
         signedDate: signedDate ? new Date(signedDate) : null,
-        deliveryDate: new Date(deliveryDate),
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : new Date("2099-12-31"),
         startDate: startDate ? new Date(startDate) : null,
         note: note || null,
         items: {

@@ -317,7 +317,7 @@ export default function SalesOrdersPage() {
             </Form.Item>
           </Space>
           <Space style={{ width: "100%" }} size="middle">
-            <Form.Item name="deliveryDate" label="Deadline giao hàng" rules={[{ required: true, message: "Bắt buộc" }]} style={{ flex: 1 }}>
+            <Form.Item name="deliveryDate" label="Deadline giao hàng" style={{ flex: 1 }}>
               <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} />
             </Form.Item>
             <Form.Item name="startDate" label="Ngày bắt đầu SX" style={{ flex: 1 }}>
