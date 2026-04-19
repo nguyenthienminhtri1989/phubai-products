@@ -1,7 +1,9 @@
 # PHU BAI ERP — Project Passport
+
 # Dùng file này để bắt đầu conversation mới — paste vào là AI hiểu ngay toàn bộ dự án
 
 ## Stack & Nguyên tắc bất biến
+
 - Next.js 16 App Router + PostgreSQL + Prisma ORM + Ant Design + NextAuth.js v5
 - **Strictly additive** — không xóa/sửa model/field cũ, chỉ thêm mới
 - **Backend là nguồn chân lý** — mọi tính toán ở API, frontend chỉ render
@@ -10,7 +12,9 @@
 - Unique constraint `production_logs`: `(machineId, recordDate, shift, itemId)`
 
 ## Cấu trúc nhà máy
+
 Factory → Process → Machine / Substation
+
 - 3 nhà máy: NM1.2, NMG37, NM3
 - Phân quyền theo department (FACTORY/MANAGEMENT/SALES/ACCOUNTING/WAREHOUSE) + extraModules
 
@@ -19,15 +23,20 @@ Factory → Process → Machine / Substation
 ## Modules đã hoàn thành ✅
 
 ### Core Production (Module 1)
+
 - Nhập sản lượng theo ca (3 ca/ngày), công thức formulaType 1-4
 - Smart Date: tự detect ca/ngày theo giờ hiện tại
 - Mobile input + QR Code
 - Đổi mặt hàng giữa ca (multi-item per shift)
 
 ### Energy Management (Module 2) ✅
+
 ### Maintenance (Module 3) ✅
+
 ### Machine Stop Logging (Module 5) ✅
+
 ### IoT Excel Import (Module 6) ✅
+
 - Multi-format: STANDARD + DANH_ONG (HTML-as-XLS máy đánh ống)
 - Parser architecture: dispatcher + sub-parsers độc lập
 
@@ -36,6 +45,7 @@ Factory → Process → Machine / Substation
 ## Module KD-SX ✅ (hoàn thành đầy đủ)
 
 ### Schema chính
+
 ```
 Customer → SalesOrder → SalesOrderItem
 MonthlyInputParam (giá NVL + tỷ giá, unique: factoryId+yearMonth)
@@ -48,6 +58,7 @@ KdDailyInput (sản lượng ngày phòng KD nhập, unique: machineId+itemId+re
 ```
 
 ### Công thức KD-SX
+
 ```
 DT = SL × Đơn giá USD × Tỷ giá
 CP Cotton = SL × ĐM cotton × Giá bông BQ × Tỷ giá
@@ -56,11 +67,13 @@ Giá bông BQ = (tỷ lệ USA × giá USA) + (tỷ lệ BRA × giá BRA) + 0.02
 LN gộp = DT − CP NVL − CP BH − CP GC + Phế thu hồi
 LN ròng = LN gộp − Tổng CP cố định + DOANH_THU_HDTC
 ```
+
 - **DOANH_THU_HDTC là khoản THU** — cộng vào LN, không trừ
 - PlanLineItem lưu **snapshot** giá tại thời điểm tạo — không tính lại on-the-fly
 - DP (Dự Phòng): salesOrderItemId = null, nhận diện bằng NULL không phải string
 
 ### Allocation Engine
+
 - `runAllocationKD(factoryId, date)` — đọc từ KdDailyInput
 - `runAllocation(factoryId, date)` — đọc từ ProductionLog (giữ nguyên, không xóa)
 - Waterfall theo deadline ASC, cùng deadline ưu tiên plannedQty ASC
@@ -69,6 +82,7 @@ LN ròng = LN gộp − Tổng CP cố định + DOANH_THU_HDTC
 - OrderAllocation có field `source: 'KD' | 'PRODUCTION'`
 
 ### UI Pages
+
 ```
 /kdsx                    → Executive dashboard (Ban GĐ, filter nhà máy + tháng)
 /kdsx/plans              → Kế hoạch tháng (DRAFT/SUBMITTED/APPROVED)
@@ -81,6 +95,7 @@ LN ròng = LN gộp − Tổng CP cố định + DOANH_THU_HDTC
 ```
 
 ### Quy trình duyệt kế hoạch
+
 ```
 DRAFT → SUBMITTED (kế toán trình, khóa sửa)
 SUBMITTED → APPROVED (Ban GĐ duyệt, chính thức)
@@ -90,6 +105,7 @@ APPROVED không được xóa
 ```
 
 ### Validate trước khi Submit
+
 - Phải có ≥1 dòng sợi, qty > 0
 - Phải có ≥1 khoản CP cố định > 0
 - TIEN_LUONG + TIEN_DIEN + KHAU_HAO bắt buộc > 0
@@ -99,11 +115,12 @@ APPROVED không được xóa
 ## Productivity Benchmark ✅
 
 ### 2 loại định mức song song
-| | THEORY | EMPIRICAL |
-|---|---|---|
-| Công thức | calcTheoreticalOutput() — KHÔNG thay đổi | Người dùng nhập kg/ngày |
-| Đơn vị | kg/ca/máy (stdOutputPerShift) | kg/ngày/loại máy (empiricalOutputPerDay) |
-| Dùng cho | Đánh giá máy vs thiết kế | Lập kế hoạch, đàm phán KD |
+
+|           | THEORY                                   | EMPIRICAL                                |
+| --------- | ---------------------------------------- | ---------------------------------------- |
+| Công thức | calcTheoreticalOutput() — KHÔNG thay đổi | Người dùng nhập kg/ngày                  |
+| Đơn vị    | kg/ca/máy (stdOutputPerShift)            | kg/ngày/loại máy (empiricalOutputPerDay) |
+| Dùng cho  | Đánh giá máy vs thiết kế                 | Lập kế hoạch, đàm phán KD                |
 
 - Unique constraint `(versionId, itemId, processId, machineModel)` áp dụng cho cả 2 loại
 - API capacity/comparison: thêm param `benchmarkType=THEORY|EMPIRICAL`
@@ -111,6 +128,7 @@ APPROVED không được xóa
 - THEORY: dailyOutput = stdOutputPerShift × 3
 
 ### Trang Capacity — Bộ tính ngày mới
+
 - 3 input: chọn mặt hàng + nhập số máy bố trí + nhập kg cần SX
 - Tính realtime: days = ceil(needed / (dmPerDay × machines))
 - Bảng so sánh phương án: 1,2,3,5,8,10,15,20 máy
@@ -121,6 +139,7 @@ APPROVED không được xóa
 ## KD Daily Input — Màn hình nhập liệu phòng KD ✅
 
 ### Tính năng chính
+
 - Nhập sản lượng cả ngày (3 ca gộp) cho từng máy — 21 lần thay vì 63 lần
 - **Paste từ Excel**: Ctrl+C cột sản lượng → click ô đầu → Ctrl+V → tự điền xuống
   - Parse số có dấu phẩy: "1,234" → 1234
@@ -131,6 +150,7 @@ APPROVED không được xóa
 - Sau khi lưu: runAllocationKD() chạy non-blocking
 
 ### Schema KdDailyInput
+
 ```prisma
 model KdDailyInput {
   machineId   Int
@@ -158,7 +178,44 @@ Phòng KD → KdDailyInput (theo ngày, gộp 3 ca)
 
 ---
 
+## Production Schedule (Kế hoạch SX tháng) ✅ Phase 1 + Phase 2
+
+### Schema
+
+```
+ProductionSchedule (factoryId + yearMonth, status: DRAFT/SUBMITTED/APPROVED)
+  holidays  Json  — [1,2,30] ngày nghỉ
+  itemColors Json — {"1":"#4CAF50",...} màu per-schedule (Phase 2)
+  segments  ScheduleSegment[]
+
+ScheduleSegment
+  machineId | itemId | fromDay | toDay | kgPerDay
+  isManualKg Boolean — phân biệt auto-fill vs thủ công
+  benchmarkId Int?  — audit trail
+```
+
+### Tính năng chính
+
+- **Auto-fill** kgPerDay từ EMPIRICAL benchmark (hoạt động với cả 1 máy hoặc nhiều máy cùng model)
+- **Color picker** ngay trên grid, lưu vào `itemColors` per-schedule
+- **3 Tabs**: Kế hoạch (grid edit) | Thực hiện (read-only, màu so sánh) | So sánh KH/TH (Recharts)
+- Nguồn dữ liệu TH: KdDailyInput → fallback ProductionLog.groupBy
+- Workflow: DRAFT → SUBMITTED → APPROVED → sync-to-plan (sang MonthlyPlan)
+
+### Files chính
+
+```
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx
+src/components/kdsx/ScheduleSegmentModal.tsx      — multi-machine OK (Phase 2 fix)
+src/components/kdsx/ActualProductionGrid.tsx      — Grid TH read-only [MỚI]
+src/components/kdsx/ScheduleComparisonDashboard.tsx — Bar+Line+Table [MỚI]
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts [MỚI]
+```
+
+---
+
 ## File quan trọng trong project
+
 ```
 src/lib/kdsx/calculator.ts         — calculateLineItem(), refreshSummarySnapshot()
 src/lib/allocation-engine.ts       — runAllocation(), runAllocationKD(), recalculateAllocation()
@@ -166,6 +223,8 @@ src/lib/estimate-completion.ts     — calcEstimatedDoneDate()
 src/lib/permissions.ts             — canViewModule(), canAccessKdsx()
 src/utils/benchmark.ts             — calcTheoreticalOutput() — KHÔNG sửa
 src/lib/iot-parsers/               — parser-standard.ts, parser-danh-ong.ts
+src/components/kdsx/ActualProductionGrid.tsx     — Grid TH read-only
+src/components/kdsx/ScheduleComparisonDashboard.tsx — Dashboard so sánh KH/TH
 CLAUDE.md                          — Standing instructions cho Claude Code
 BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần chi tiết)
 ```
@@ -175,6 +234,7 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 ## Còn thiếu / Known Limitations
 
 ### Chưa implement
+
 - Export Excel báo cáo KH/TH theo format file gốc
 - Copy kế hoạch tháng trước sang tháng mới
 - Tìm kiếm/lọc khách hàng theo customerType
@@ -182,14 +242,18 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 - runAllocation tích hợp vào IoT import route
 - Drill-down comparison theo từng máy (chỉ có tổng hợp tháng)
 - Cảnh báo tự động NS thực tế < ngưỡng
+- Export Excel grid KH/TH Production Schedule
+- Color picker trên grid Thực hiện và So sánh (hiện chỉ ở tab Kế hoạch)
 
 ### Gác lại chủ ý
+
 - Lot management (phân lô, số lô) — làm sau
 - Quản lý kho (tồn kho, xuất kho nội bộ sợi xe đôi) — làm sau
 
 ---
 
 ## Insight quan trọng từ file Excel thực tế (NM3 T1/2026)
+
 - 21 loại sợi, tổng 437,820 kg, DT 35.125 tỷ, LN −0.457 tỷ (lỗ do Tết)
 - Mã HĐ ghép: "443PB25, 17PB26" → 2 dòng riêng trong PlanLineItem
 - "ĐX" suffix = sợi xe đôi (ghép 2 sợi đơn) — bán được cả dạng đơn lẫn xe đôi

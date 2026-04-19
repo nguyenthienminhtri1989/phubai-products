@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Button, Tag, Typography, message, Spin, Breadcrumb, Space, Tooltip,
-  Popconfirm, Card, Row, Col, Modal,
+  Popconfirm, Card, Row, Col, Modal, Tabs,
 } from "antd";
 import {
   ArrowLeftOutlined, CheckCircleOutlined, SendOutlined, SyncOutlined,
@@ -11,6 +11,8 @@ import {
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import ScheduleSegmentModal from "@/components/kdsx/ScheduleSegmentModal";
+import ActualProductionGrid from "@/components/kdsx/ActualProductionGrid";
+import ScheduleComparisonDashboard from "@/components/kdsx/ScheduleComparisonDashboard";
 
 const { Title, Text } = Typography;
 
@@ -27,6 +29,7 @@ interface Schedule {
   id: number; factoryId: number; factory: { id: number; name: string };
   yearMonth: string; status: "DRAFT" | "SUBMITTED" | "APPROVED";
   note?: string | null; holidays: number[]; segments: Segment[];
+  itemColors: Record<string, string>;
   createdAt: string; updatedAt: string;
 }
 interface SummaryItem {
@@ -37,12 +40,17 @@ interface SummaryItem {
 const STATUS_COLORS: Record<string, string> = { DRAFT: "default", SUBMITTED: "processing", APPROVED: "success" };
 const STATUS_LABELS: Record<string, string> = { DRAFT: "Nháp", SUBMITTED: "Đã trình", APPROVED: "Đã duyệt" };
 
-function itemColor(itemId: number, alpha = 1): string {
-  const hue = (itemId * 137.5) % 360;
-  return `hsla(${hue}, 65%, 60%, ${alpha})`;
+const DEFAULT_COLORS = [
+  "#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336",
+  "#00BCD4", "#FFEB3B", "#E91E63", "#3F51B5", "#8BC34A",
+  "#FF5722", "#607D8B", "#009688", "#795548", "#CDDC39", "#673AB7",
+];
+
+function getItemColor(itemId: number, itemColors: Record<string, string>): string {
+  if (itemColors[String(itemId)]) return itemColors[String(itemId)];
+  const idx = itemId % DEFAULT_COLORS.length;
+  return DEFAULT_COLORS[idx];
 }
-function itemBg(itemId: number): string { return itemColor(itemId, 0.18); }
-function itemBorder(itemId: number): string { return itemColor(itemId, 0.7); }
 
 function daysInMonthFn(yearMonth: string): number {
   const [y, m] = yearMonth.split("-").map(Number);
@@ -63,6 +71,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [defaultDay, setDefaultDay] = useState<number | undefined>(undefined);
   const [highlightItemId, setHighlightItemId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("plan");
 
   const fetchSchedule = useCallback(async () => {
     try {
@@ -103,6 +112,19 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     }
   };
 
+  const handleChangeItemColor = async (itemId: number, color: string) => {
+    if (!schedule) return;
+    const newColors = { ...schedule.itemColors, [String(itemId)]: color };
+    // Cập nhật local ngay để UX mượt
+    setSchedule(prev => prev ? { ...prev, itemColors: newColors } : prev);
+    // Lưu lên server (không block)
+    await fetch(`/api/kdsx/production-schedule/${scheduleId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemColors: newColors }),
+    });
+  };
+
   const handleStatusChange = async (newStatus: string) => {
     setActionLoading(true);
     const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}`, {
@@ -136,17 +158,14 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     const data = await res.json();
     if (!res.ok) { message.error(data.error ?? "Lỗi lưu segment"); throw new Error(data.error); }
     if (editSegment) {
-      // Edit: đóng modal và refresh ngay
       message.success("Đã cập nhật segment");
       setModalOpen(false); setEditSegment(null);
       await refresh();
     } else {
-      // Tạo mới (có thể nhiều máy): chỉ thông báo, không refresh — handleAllSaved sẽ refresh
       message.success(`Đã thêm segment cho máy #${values.machineId}`);
     }
   };
 
-  // Gọi 1 lần sau khi tạo mới tất cả segments xong
   const handleAllSaved = async () => {
     setModalOpen(false); setEditSegment(null);
     await refresh();
@@ -163,10 +182,16 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   if (!schedule) return <div>Không tìm thấy kế hoạch.</div>;
 
   const { yearMonth, factory, status, holidays } = schedule;
+  const itemColors = (schedule.itemColors ?? {}) as Record<string, string>;
   const holidayArr: number[] = Array.isArray(holidays) ? holidays as number[] : [];
   const totalDays = daysInMonthFn(yearMonth);
   const [schedYear, schedMonth] = yearMonth.split("-").map(Number);
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
+
+  // Helper màu dùng itemColors từ schedule
+  function getColor(itemId: number): string { return getItemColor(itemId, itemColors); }
+  function getBg(itemId: number): string { return getColor(itemId) + "33"; }
+  function getBorder(itemId: number): string { return getColor(itemId) + "AA"; }
 
   // Nhóm segments theo máy
   const segsByMachine = new Map<number, Segment[]>();
@@ -190,9 +215,8 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     new Map(schedule.segments.map(s => [s.machineId, s.machine])).values()
   ).sort((a, b) => a.id - b.id);
 
-  // Thêm các máy thuộc factory mà chưa có segment (để user có thể thêm)
+  // Thêm các máy thuộc factory mà chưa có segment
   const factoryMachines = machines.filter(m => {
-    // Nếu không có processId filter, show tất cả
     return !uniqueMachines.find(um => um.id === m.id);
   });
   const allMachines = [...uniqueMachines.map(m => ({ id: m.id, name: m.name, model: m.model ?? null, processId: m.processId })),
@@ -201,7 +225,6 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const isDraft = status === "DRAFT";
   const isApproved = status === "APPROVED";
 
-  // Tổng kg của từng mặt hàng (summary cards)
   const grandTotal = summary.reduce((s, i) => s + i.totalKg, 0);
 
   const thStyle: React.CSSProperties = {
@@ -213,6 +236,179 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     padding: "3px 4px", textAlign: "center", fontSize: 11, whiteSpace: "nowrap",
     borderRight: "1px solid #f0f0f0",
   };
+
+  // Grid Kế hoạch (tab 1)
+  const planGrid = (
+    <div>
+      {/* Holiday hint */}
+      <div style={{ marginBottom: 8, fontSize: 12, color: "#888" }}>
+        {isDraft && "💡 Click vào tên ngày (header) để đánh dấu ngày nghỉ lễ. "}
+        Ngày nghỉ: {holidayArr.length > 0 ? holidayArr.map(d => `${d}/${schedMonth}`).join(", ") : "Chưa có"}
+      </div>
+
+      <div style={{ overflowX: "auto", border: "1px solid #d9d9d9", borderRadius: 6 }}>
+        <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
+          <thead>
+            <tr>
+              <th style={{ ...thStyle, minWidth: 80, position: "sticky", left: 0, zIndex: 3, textAlign: "left", paddingLeft: 8 }}>Máy</th>
+              <th style={{ ...thStyle, minWidth: 100, position: "sticky", left: 80, zIndex: 3 }}>Mặt hàng</th>
+              {dayNumbers.map(day => {
+                const isHoliday = holidayArr.includes(day);
+                return (
+                  <th
+                    key={day}
+                    style={{
+                      ...thStyle, minWidth: 38, cursor: isDraft ? "pointer" : "default",
+                      background: isHoliday ? "#cf1322" : "#001529",
+                      color: isHoliday ? "#fff" : "white",
+                      userSelect: "none",
+                    }}
+                    onClick={() => isDraft && handleToggleHoliday(day)}
+                    title={isDraft ? (isHoliday ? "Bỏ đánh dấu nghỉ" : "Đánh dấu ngày nghỉ") : ""}
+                  >
+                    {day}
+                    <br />
+                    <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>{schedMonth}/{String(schedYear).slice(2)}</span>
+                  </th>
+                );
+              })}
+              <th style={{ ...thStyle, minWidth: 70, background: "#1d3557" }}>TỔNG</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allMachines.map((machine, mIdx) => {
+              const machineSegs = segsByMachine.get(machine.id) ?? [];
+              const highlighted = highlightItemId !== null &&
+                machineSegs.some(s => s.itemId === highlightItemId);
+
+              let machineTotalKg = 0;
+              for (const seg of machineSegs) {
+                let days = seg.toDay - seg.fromDay + 1;
+                const hols = holidayArr.filter(h => h >= seg.fromDay && h <= seg.toDay).length;
+                days = Math.max(0, days - hols);
+                machineTotalKg += days * seg.kgPerDay;
+              }
+
+              return (
+                <tr key={machine.id} style={{ background: mIdx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                  {/* Máy */}
+                  <td style={{
+                    ...tdStyle, textAlign: "left", paddingLeft: 8, fontWeight: 600,
+                    position: "sticky", left: 0, zIndex: 1,
+                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa",
+                    minWidth: 80,
+                  }}>
+                    {machine.name}
+                    {machine.model && <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{machine.model}</div>}
+                  </td>
+
+                  {/* Mặt hàng + color picker */}
+                  <td style={{
+                    ...tdStyle, position: "sticky", left: 80, zIndex: 1,
+                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa", minWidth: 100,
+                  }}>
+                    {machineSegs.length > 0
+                      ? machineSegs.map(s => (
+                        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
+                          {isDraft && (
+                            <input
+                              type="color"
+                              value={getColor(s.itemId)}
+                              onChange={(e) => handleChangeItemColor(s.itemId, e.target.value)}
+                              style={{ width: 14, height: 14, border: "none", cursor: "pointer", padding: 0, borderRadius: 2 }}
+                              title="Đổi màu mặt hàng"
+                            />
+                          )}
+                          <span style={{ color: getColor(s.itemId), fontWeight: 600, fontSize: 11 }}>
+                            {s.item.name} ({s.fromDay}–{s.toDay})
+                          </span>
+                        </div>
+                      ))
+                      : <Text type="secondary" style={{ fontSize: 11 }}>—</Text>
+                    }
+                  </td>
+
+                  {/* Ô ngày */}
+                  {dayNumbers.map(day => {
+                    const isHoliday = holidayArr.includes(day);
+                    const seg = machineSegs.find(s => day >= s.fromDay && day <= s.toDay);
+                    const dimmed = highlightItemId !== null && seg && seg.itemId !== highlightItemId;
+
+                    return (
+                      <td
+                        key={day}
+                        style={{
+                          ...tdStyle,
+                          background: isHoliday
+                            ? "#fff1f0"
+                            : seg
+                              ? getBg(seg.itemId)
+                              : undefined,
+                          opacity: dimmed ? 0.25 : 1,
+                          cursor: isDraft ? "pointer" : "default",
+                          borderLeft: seg && (day === seg.fromDay) ? `2px solid ${getBorder(seg.itemId)}` : undefined,
+                          borderRight: seg && (day === seg.toDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #f0f0f0",
+                        }}
+                        onClick={() => {
+                          if (!isDraft) return;
+                          if (seg) {
+                            setEditSegment(seg);
+                            setModalOpen(true);
+                          } else {
+                            setEditSegment(null);
+                            setDefaultMachineId(machine.id);
+                            setDefaultDay(day);
+                            setModalOpen(true);
+                          }
+                        }}
+                        title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày${isDraft ? " (Click để sửa)" : ""}` : isDraft ? "Click để thêm segment" : ""}
+                      >
+                        {isHoliday
+                          ? <Text type="secondary" style={{ fontSize: 10 }}>—</Text>
+                          : seg
+                            ? <span style={{ color: getColor(seg.itemId), fontSize: 10, fontWeight: 600 }}>
+                              {seg.kgPerDay.toLocaleString()} kg
+                            </span>
+                            : <span style={{ color: "#d9d9d9", fontSize: 10 }}>·</span>
+                        }
+                      </td>
+                    );
+                  })}
+
+                  {/* Tổng kg máy */}
+                  <td style={{ ...tdStyle, background: "#e6f4ff", fontWeight: 700, fontSize: 12, color: "#1677ff" }}>
+                    {machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* Hàng cuối: tổng theo ngày */}
+            <tr style={{ background: "#001529" }}>
+              <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#001529", textAlign: "left", paddingLeft: 8 }}>TỔNG</td>
+              <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#001529" }}>kg/ngày</td>
+              {totalKgByDay.map((kg, i) => {
+                const day = i + 1;
+                const isHoliday = holidayArr.includes(day);
+                return (
+                  <td key={day} style={{
+                    ...tdStyle, fontWeight: 600, fontSize: 10,
+                    background: isHoliday ? "#434343" : "#1d3557",
+                    color: isHoliday ? "#888" : "#52c41a",
+                  }}>
+                    {isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·"}
+                  </td>
+                );
+              })}
+              <td style={{ ...tdStyle, background: "#1d3557", color: "#52c41a", fontWeight: 800, fontSize: 13 }}>
+                {grandTotal.toLocaleString()} kg
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -275,13 +471,13 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
             size="small"
             style={{
               cursor: "pointer", minWidth: 120,
-              borderColor: highlightItemId === item.itemId ? itemBorder(item.itemId) : "#d9d9d9",
-              background: highlightItemId === item.itemId ? itemBg(item.itemId) : undefined,
+              borderColor: highlightItemId === item.itemId ? getBorder(item.itemId) : "#d9d9d9",
+              background: highlightItemId === item.itemId ? getBg(item.itemId) : undefined,
               borderWidth: highlightItemId === item.itemId ? 2 : 1,
             }}
             onClick={() => setHighlightItemId(prev => prev === item.itemId ? null : item.itemId)}
           >
-            <div style={{ fontWeight: 700, fontSize: 13, color: itemColor(item.itemId) }}>{item.itemName}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: getColor(item.itemId) }}>{item.itemName}</div>
             <div style={{ fontSize: 16, fontWeight: 800 }}>{item.totalTons.toFixed(1)} tấn</div>
             <div style={{ fontSize: 11, color: "#888" }}>{item.machinesInvolved.length} máy</div>
           </Card>
@@ -295,164 +491,47 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         )}
       </div>
 
-      {/* Holiday hint */}
-      <div style={{ marginBottom: 8, fontSize: 12, color: "#888" }}>
-        {isDraft && "💡 Click vào tên ngày (header) để đánh dấu ngày nghỉ lễ. "}
-        Ngày nghỉ: {holidayArr.length > 0 ? holidayArr.map(d => `${d}/${schedMonth}`).join(", ") : "Chưa có"}
-      </div>
-
-      {/* Grid */}
-      <div style={{ overflowX: "auto", border: "1px solid #d9d9d9", borderRadius: 6 }}>
-        <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
-          <thead>
-            <tr>
-              <th style={{ ...thStyle, minWidth: 80, position: "sticky", left: 0, zIndex: 3, textAlign: "left", paddingLeft: 8 }}>Máy</th>
-              <th style={{ ...thStyle, minWidth: 100, position: "sticky", left: 80, zIndex: 3 }}>Mặt hàng</th>
-              {dayNumbers.map(day => {
-                const isHoliday = holidayArr.includes(day);
-                return (
-                  <th
-                    key={day}
-                    style={{
-                      ...thStyle, minWidth: 38, cursor: isDraft ? "pointer" : "default",
-                      background: isHoliday ? "#cf1322" : "#001529",
-                      color: isHoliday ? "#fff" : "white",
-                      userSelect: "none",
-                    }}
-                    onClick={() => isDraft && handleToggleHoliday(day)}
-                    title={isDraft ? (isHoliday ? "Bỏ đánh dấu nghỉ" : "Đánh dấu ngày nghỉ") : ""}
-                  >
-                    {day}
-                    <br />
-                    <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>{schedMonth}/{String(schedYear).slice(2)}</span>
-                  </th>
-                );
-              })}
-              <th style={{ ...thStyle, minWidth: 70, background: "#1d3557" }}>TỔNG</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allMachines.map((machine, mIdx) => {
-              const machineSegs = segsByMachine.get(machine.id) ?? [];
-              const highlighted = highlightItemId !== null &&
-                machineSegs.some(s => s.itemId === highlightItemId);
-
-              // Tổng kg máy này trong tháng
-              let machineTotalKg = 0;
-              for (const seg of machineSegs) {
-                let days = seg.toDay - seg.fromDay + 1;
-                const hols = holidayArr.filter(h => h >= seg.fromDay && h <= seg.toDay).length;
-                days = Math.max(0, days - hols);
-                machineTotalKg += days * seg.kgPerDay;
-              }
-
-              return (
-                <tr key={machine.id} style={{ background: mIdx % 2 === 0 ? "#fff" : "#fafafa" }}>
-                  {/* Máy */}
-                  <td style={{
-                    ...tdStyle, textAlign: "left", paddingLeft: 8, fontWeight: 600,
-                    position: "sticky", left: 0, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa",
-                    minWidth: 80,
-                  }}>
-                    {machine.name}
-                    {machine.model && <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{machine.model}</div>}
-                  </td>
-
-                  {/* Mặt hàng hiện tại (lấy từ segment đầu tiên) */}
-                  <td style={{
-                    ...tdStyle, position: "sticky", left: 80, zIndex: 1,
-                    background: mIdx % 2 === 0 ? "#fff" : "#fafafa", minWidth: 100,
-                  }}>
-                    {machineSegs.length > 0
-                      ? machineSegs.map(s => (
-                        <div key={s.id} style={{ fontSize: 11, color: itemColor(s.itemId), fontWeight: 600 }}>
-                          {s.item.name} ({s.fromDay}–{s.toDay})
-                        </div>
-                      ))
-                      : <Text type="secondary" style={{ fontSize: 11 }}>—</Text>
-                    }
-                  </td>
-
-                  {/* Ô ngày */}
-                  {dayNumbers.map(day => {
-                    const isHoliday = holidayArr.includes(day);
-                    const seg = machineSegs.find(s => day >= s.fromDay && day <= s.toDay);
-                    const dimmed = highlightItemId !== null && seg && seg.itemId !== highlightItemId;
-
-                    return (
-                      <td
-                        key={day}
-                        style={{
-                          ...tdStyle,
-                          background: isHoliday
-                            ? "#fff1f0"
-                            : seg
-                              ? itemBg(seg.itemId)
-                              : undefined,
-                          opacity: dimmed ? 0.25 : 1,
-                          cursor: isDraft ? "pointer" : "default",
-                          borderLeft: seg && (day === seg.fromDay) ? `2px solid ${itemBorder(seg.itemId)}` : undefined,
-                          borderRight: seg && (day === seg.toDay) ? `2px solid ${itemBorder(seg.itemId)}` : "1px solid #f0f0f0",
-                        }}
-                        onClick={() => {
-                          if (!isDraft) return;
-                          if (seg) {
-                            setEditSegment(seg);
-                            setModalOpen(true);
-                          } else {
-                            setEditSegment(null);
-                            setDefaultMachineId(machine.id);
-                            setDefaultDay(day);
-                            setModalOpen(true);
-                          }
-                        }}
-                        title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày${isDraft ? " (Click để sửa)" : ""}` : isDraft ? "Click để thêm segment" : ""}
-                      >
-                        {isHoliday
-                          ? <Text type="secondary" style={{ fontSize: 10 }}>—</Text>
-                          : seg
-                            ? <span style={{ color: itemColor(seg.itemId), fontSize: 10, fontWeight: 600 }}>
-                              {seg.kgPerDay.toLocaleString()} kg
-                            </span>
-                            : <span style={{ color: "#d9d9d9", fontSize: 10 }}>·</span>
-                        }
-                      </td>
-                    );
-                  })}
-
-                  {/* Tổng kg máy */}
-                  <td style={{ ...tdStyle, background: "#e6f4ff", fontWeight: 700, fontSize: 12, color: "#1677ff" }}>
-                    {machineTotalKg > 0 ? `${machineTotalKg.toLocaleString()} kg` : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-
-            {/* Hàng cuối: tổng theo ngày */}
-            <tr style={{ background: "#001529" }}>
-              <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#001529", textAlign: "left", paddingLeft: 8 }}>TỔNG</td>
-              <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#001529" }}>kg/ngày</td>
-              {totalKgByDay.map((kg, i) => {
-                const day = i + 1;
-                const isHoliday = holidayArr.includes(day);
-                return (
-                  <td key={day} style={{
-                    ...tdStyle, fontWeight: 600, fontSize: 10,
-                    background: isHoliday ? "#434343" : "#1d3557",
-                    color: isHoliday ? "#888" : "#52c41a",
-                  }}>
-                    {isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·"}
-                  </td>
-                );
-              })}
-              <td style={{ ...tdStyle, background: "#1d3557", color: "#52c41a", fontWeight: 800, fontSize: 13 }}>
-                {grandTotal.toLocaleString()} kg
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* Tabs: Kế hoạch / Thực hiện / So sánh */}
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: "plan",
+            label: "📋 Kế hoạch",
+            children: planGrid,
+          },
+          {
+            key: "actual",
+            label: "📊 Thực hiện",
+            children: (
+              <ActualProductionGrid
+                scheduleId={scheduleId}
+                segments={schedule.segments}
+                holidays={holidayArr}
+                totalDays={totalDays}
+                itemColors={itemColors}
+                yearMonth={yearMonth}
+              />
+            ),
+          },
+          {
+            key: "compare",
+            label: "📈 So sánh KH/TH",
+            children: (
+              <ScheduleComparisonDashboard
+                scheduleId={scheduleId}
+                summary={summary}
+                yearMonth={yearMonth}
+                itemColors={itemColors}
+                segments={schedule.segments}
+                holidays={holidayArr}
+                totalDays={totalDays}
+              />
+            ),
+          },
+        ]}
+      />
 
       {/* Segment Modal */}
       <ScheduleSegmentModal

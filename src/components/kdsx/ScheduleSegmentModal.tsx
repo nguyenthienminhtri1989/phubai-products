@@ -165,10 +165,11 @@ export default function ScheduleSegmentModal({
   );
 
   const handleMachineOrItemChange = () => {
-    // Khi edit: chỉ hiển thị info, không overwrite. Khi tạo mới: 1 máy → lookup và fill.
+    // Khi edit: chỉ hiển thị info, không overwrite.
+    // Khi tạo mới: gọi với máy đầu tiên, bất kể chọn bao nhiêu máy
     const machineId = isEdit
       ? form.getFieldValue("machineId")
-      : selectedMachineIds.length === 1 ? selectedMachineIds[0] : undefined;
+      : selectedMachineIds.length > 0 ? selectedMachineIds[0] : undefined;
     const itemId = form.getFieldValue("itemId");
     lookupBenchmark(machineId, itemId, !isEdit);
   };

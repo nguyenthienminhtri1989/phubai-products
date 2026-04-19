@@ -1232,6 +1232,9 @@ model ProductionSchedule {
   // VD: [30] = ngày 30 nghỉ; [1, 2, 30] = ngày 1, 2, 30 nghỉ
   holidays Json @default("[]")
 
+  // Bảng màu per-item trong schedule này: {"1":"#4CAF50","5":"#2196F3",...}
+  itemColors Json @default("{}")
+
   segments ScheduleSegment[]
 
   createdAt DateTime @default(now())

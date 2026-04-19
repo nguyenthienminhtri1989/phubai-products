@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 // GET /api/kdsx/production-schedule/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: idStr } = await params;
   const id = parseInt(idStr);
@@ -26,7 +26,10 @@ export async function GET(
   });
 
   if (!schedule) {
-    return NextResponse.json({ error: "Không tìm thấy kế hoạch" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Không tìm thấy kế hoạch" },
+      { status: 404 },
+    );
   }
 
   return NextResponse.json(schedule);
@@ -35,23 +38,28 @@ export async function GET(
 // PUT /api/kdsx/production-schedule/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: idStr } = await params;
   const id = parseInt(idStr);
   const body = await req.json();
-  const { note, holidays, status } = body;
+  const { note, holidays, status, itemColors } = body;
 
-  const existing = await prisma.productionSchedule.findUnique({ where: { id } });
+  const existing = await prisma.productionSchedule.findUnique({
+    where: { id },
+  });
   if (!existing) {
-    return NextResponse.json({ error: "Không tìm thấy kế hoạch" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Không tìm thấy kế hoạch" },
+      { status: 404 },
+    );
   }
 
   // Guard: APPROVED schedule không cho sửa trực tiếp
-  if (existing.status === "APPROVED" && !status) {
+  if (existing.status === "APPROVED" && !status && !itemColors) {
     return NextResponse.json(
       { error: "Kế hoạch đã phê duyệt. Phải unapprove trước khi sửa." },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -61,6 +69,7 @@ export async function PUT(
       ...(note !== undefined && { note }),
       ...(holidays !== undefined && { holidays }),
       ...(status !== undefined && { status }),
+      ...(itemColors !== undefined && { itemColors }),
     },
   });
 
@@ -70,20 +79,25 @@ export async function PUT(
 // DELETE /api/kdsx/production-schedule/[id]
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: idStr } = await params;
   const id = parseInt(idStr);
 
-  const existing = await prisma.productionSchedule.findUnique({ where: { id } });
+  const existing = await prisma.productionSchedule.findUnique({
+    where: { id },
+  });
   if (!existing) {
-    return NextResponse.json({ error: "Không tìm thấy kế hoạch" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Không tìm thấy kế hoạch" },
+      { status: 404 },
+    );
   }
 
   if (existing.status !== "DRAFT") {
     return NextResponse.json(
       { error: "Chỉ được xóa kế hoạch ở trạng thái DRAFT" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 

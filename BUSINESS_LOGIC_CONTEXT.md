@@ -1724,3 +1724,131 @@ src/components/AdminLayout.tsx                                            ← Th
 - Khi `sync-to-plan`, `PlanLineItem.unitPriceUsd` được set = 0 với dòng tạo mới tự động — user cần cập nhật đơn giá sau
 - `sync-to-plan` chỉ upsert dòng `salesOrderItemId = null`; các dòng gắn HĐ cụ thể phải tự map
 - Chưa có seed data mẫu 21 máy × 30 ngày (phase 2 nếu cần)
+
+---
+
+## PRODUCTION-SCHEDULE — Cải tiến Phase 2 (2026-04-19)
+
+**Status:** ✅ Completed 2026-04-19
+
+### Những thay đổi đã thực hiện
+
+#### 1. Fix auto-fill kgPerDay khi chọn nhiều máy
+
+**File:** `src/components/kdsx/ScheduleSegmentModal.tsx`
+
+- **Vấn đề cũ:** Khi chọn nhiều máy cùng model, `handleMachineOrItemChange` chỉ gọi `lookupBenchmark` khi `selectedMachineIds.length === 1`, nên auto-fill không hoạt động với đa máy.
+- **Fix:** Đổi điều kiện sang `> 0` — luôn lookup với máy đầu tiên trong danh sách (đảm bảo cùng model). `handleMachineIdsChange` vẫn giữ logic kiểm tra cùng model để quyết định lookup hay warning.
+
+#### 2. Màu mặt hàng per-schedule (itemColors)
+
+**Vấn đề cũ:** Màu dùng `hue = (itemId * 137.5) % 360` — cố định, không đổi được.
+
+**Schema thêm:**
+
+```prisma
+model ProductionSchedule {
+  // ... fields hiện có
+  itemColors Json @default("{}") // {"1":"#4CAF50","5":"#2196F3",...}
+}
+```
+
+**Migration:** `20260419114408_add_item_colors_to_schedule`
+
+**API PUT** `src/app/api/kdsx/production-schedule/[id]/route.ts`:
+
+- Thêm `itemColors` vào body destructuring và data upsert
+- Guard `APPROVED` được nới lỏng: `!status && !itemColors` (cho phép lưu màu kể cả khi APPROVED)
+
+**UI** `ProductionScheduleDetailClient.tsx`:
+
+- Hàm `getItemColor(itemId, itemColors)`: tra `itemColors[String(itemId)]`, fallback palette 16 màu theo `itemId % 16`
+- Helpers: `getColor()`, `getBg()` (`+33` = alpha 20%), `getBorder()` (`+AA` = alpha 67%)
+- Color picker `<input type="color" />` (14×14px) hiển thị cạnh tên mặt hàng trong cột sticky — **chỉ khi DRAFT**
+- `handleChangeItemColor`: optimistic update local state ngay, gọi PUT API non-blocking
+
+#### 3. Tab Thực hiện — Grid sản lượng thực tế
+
+**API mới:** `GET /api/kdsx/production-schedule/[id]/actual`
+
+- File: `src/app/api/kdsx/production-schedule/[id]/actual/route.ts`
+- Ưu tiên `KdDailyInput` (phòng KD nhập). Nếu trống → fallback `ProductionLog.groupBy` theo `(machineId, itemId, recordDate)` SUM finalOutput
+- Trả về: `{ grid: { machineId: { day: { itemId, kg } } }, source: "KD_DAILY_INPUT" | "PRODUCTION_LOG" }`
+
+**Component mới:** `src/components/kdsx/ActualProductionGrid.tsx`
+
+- Layout giống grid KH (cùng sticky columns, cùng cấu trúc)
+- **Read-only** — dữ liệu từ `/actual` API
+- Màu ô so sánh TH vs KH: `xanh (TH ≥ KH)`, `vàng (KH×0.9 ≤ TH < KH)`, `đỏ (TH < KH×0.9)`
+- Mỗi ô hiện 2 số: số thực tế (lớn, đậm) + số KH (nhỏ, nhạt, trong ngoặc)
+- Badge "Nguồn dữ liệu": KD Daily Input (xanh) hoặc Nhật ký SX (cam)
+
+#### 4. Tab So sánh KH/TH — Dashboard
+
+**Component mới:** `src/components/kdsx/ScheduleComparisonDashboard.tsx`
+
+- Dùng Recharts (đã có trong `package.json: "recharts": "^3.7.0"`)
+- **Bar chart**: mỗi mặt hàng 1 nhóm 2 cột (Kế hoạch vs Thực hiện, đơn vị tấn)
+- **Line chart**: 2 đường tích lũy theo ngày (KH và TH), giúp thấy tiến độ so với kế hoạch
+- **Bảng tổng hợp**: Mặt hàng | KH (kg) | TH (kg) | Chênh lệch | Tỷ lệ (tag màu ≥100% xanh / 90-99% vàng / <90% đỏ)
+- Tính tổng TH từ `/actual` API (gọi riêng, lazy load khi chuyển tab)
+
+#### 5. Tabs tích hợp vào trang chi tiết
+
+**File sửa:** `src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx`
+
+Thêm `<Tabs>` component Ant Design với 3 tab:
+
+- `📋 Kế hoạch` — grid KH hiện tại (giữ nguyên)
+- `📊 Thực hiện` — `<ActualProductionGrid />`
+- `📈 So sánh KH/TH` — `<ScheduleComparisonDashboard />`
+
+Props truyền vào `ActualProductionGrid` và `ScheduleComparisonDashboard` đều bao gồm `itemColors` từ schedule để dùng cùng bảng màu.
+
+### Files created/modified (Phase 2)
+
+```
+prisma/schema.prisma                                                      ← Thêm itemColors Json vào ProductionSchedule
+prisma/migrations/20260419114408_add_item_colors_to_schedule/             ← Migration SQL
+
+src/app/api/kdsx/production-schedule/[id]/route.ts                       ← PUT thêm itemColors, guard APPROVED nới lỏng
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts                ← **MỚI** GET actual data
+
+src/components/kdsx/ScheduleSegmentModal.tsx                             ← Fix auto-fill multi-machine
+src/components/kdsx/ActualProductionGrid.tsx                             ← **MỚI** Grid thực hiện read-only
+src/components/kdsx/ScheduleComparisonDashboard.tsx                     ← **MỚI** Dashboard so sánh KH/TH
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx ← Tabs + color picker + itemColors
+```
+
+### API endpoints mới (Phase 2)
+
+| Method | Path                                        | Mô tả                                                                   |
+| ------ | ------------------------------------------- | ----------------------------------------------------------------------- |
+| GET    | `/api/kdsx/production-schedule/[id]/actual` | Sản lượng thực tế theo ngày/máy (KdDailyInput → fallback ProductionLog) |
+
+### Cập nhật API endpoints hiện có (Phase 2)
+
+| Method | Path                                 | Thay đổi                            |
+| ------ | ------------------------------------ | ----------------------------------- |
+| PUT    | `/api/kdsx/production-schedule/[id]` | Thêm field `itemColors` vào payload |
+
+### Logic màu (itemColors) — Quy tắc
+
+```typescript
+// Palette fallback 16 màu (index = itemId % 16)
+const DEFAULT_COLORS = ["#4CAF50","#2196F3","#FF9800","#9C27B0","#F44336",
+  "#00BCD4","#FFEB3B","#E91E63","#3F51B5","#8BC34A",
+  "#FF5722","#607D8B","#009688","#795548","#CDDC39","#673AB7"];
+
+function getItemColor(itemId, itemColors): string {
+  if (itemColors[String(itemId)]) return itemColors[String(itemId)]; // user đã chọn
+  return DEFAULT_COLORS[itemId % 16]; // fallback
+}
+// Alpha variants:
+getBg(itemId)     → getColor(itemId) + "33"  // 20% opacity
+getBorder(itemId) → getColor(itemId) + "AA"  // 67% opacity
+```
+
+**Ghi chú:** `itemColors` là per-schedule (không phải per-item global) — mỗi schedule tự quản lý bảng màu, không ảnh hưởng lẫn nhau.
+
+_Cập nhật lần cuối: 2026-04-19 — Production Schedule Phase 2: fix multi-machine auto-fill, itemColors, Tab Thực hiện, Tab So sánh_
