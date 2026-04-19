@@ -50,17 +50,6 @@ interface Schedule {
   updatedAt: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "default",
-  SUBMITTED: "processing",
-  APPROVED: "success",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Nháp",
-  SUBMITTED: "Trình duyệt",
-  APPROVED: "Đã duyệt",
-};
 
 export default function ProductionSchedulePage() {
   const router = useRouter();
@@ -195,15 +184,6 @@ export default function ProductionSchedulePage() {
       sorter: (a, b) => a.totalTons - b.totalTons,
     },
     {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      align: "center",
-      render: (status: string) => (
-        <Tag color={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Tag>
-      ),
-    },
-    {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
@@ -223,20 +203,18 @@ export default function ProductionSchedulePage() {
               onClick={() => router.push(`/kdsx/production-schedule/${record.id}`)}
             />
           </Tooltip>
-          {record.status === "DRAFT" && (
-            <Popconfirm
-              title="Xóa kế hoạch này?"
-              description="Tất cả segments sẽ bị xóa theo. Không thể hoàn tác."
-              onConfirm={() => handleDelete(record.id)}
-              okText="Xóa"
-              cancelText="Hủy"
-              okType="danger"
-            >
-              <Tooltip title="Xóa (chỉ khi DRAFT)">
-                <Button danger icon={<DeleteOutlined />} size="small" />
-              </Tooltip>
-            </Popconfirm>
-          )}
+          <Popconfirm
+            title="Xóa kế hoạch này?"
+            description="Tất cả segments sẽ bị xóa theo. Không thể hoàn tác."
+            onConfirm={() => handleDelete(record.id)}
+            okText="Xóa"
+            cancelText="Hủy"
+            okType="danger"
+          >
+            <Tooltip title="Xóa kế hoạch">
+              <Button danger icon={<DeleteOutlined />} size="small" />
+            </Tooltip>
+          </Popconfirm>
         </Space>
       ),
     },

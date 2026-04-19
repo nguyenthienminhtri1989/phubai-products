@@ -34,6 +34,7 @@ interface SalesOrderItem {
   item: Item;
   plannedQty: number;
   unitPrice: number;
+  sellingCostRate: number | null;
   note: string | null;
 }
 interface SalesOrder {
@@ -114,6 +115,7 @@ export default function SalesOrdersPage() {
         itemId: it.itemId,
         plannedQty: it.plannedQty,
         unitPrice: it.unitPrice,
+        sellingCostRate: it.sellingCostRate != null ? it.sellingCostRate * 100 : null,
         note: it.note,
       })),
     });
@@ -137,6 +139,10 @@ export default function SalesOrdersPage() {
         signedDate: values.signedDate ? values.signedDate.format("YYYY-MM-DD") : null,
         deliveryDate: values.deliveryDate ? values.deliveryDate.format("YYYY-MM-DD") : null,
         startDate: values.startDate ? values.startDate.format("YYYY-MM-DD") : null,
+        items: values.items?.map((item: any) => ({
+          ...item,
+          sellingCostRate: item.sellingCostRate != null ? item.sellingCostRate / 100 : null,
+        })),
       };
       const url = editing ? `/api/kdsx/sales-orders/${editing.id}` : "/api/kdsx/sales-orders";
       const method = editing ? "PUT" : "POST";
@@ -230,6 +236,12 @@ export default function SalesOrdersPage() {
       { title: "Loại sợi", key: "item", render: (_: unknown, r: SalesOrderItem) => r.item.name },
       { title: "SL HĐ (kg)", dataIndex: "plannedQty", key: "qty" },
       { title: "Đơn giá (USD/kg)", dataIndex: "unitPrice", key: "price" },
+      {
+        title: "CP BH (%)",
+        key: "sellingCostRate",
+        render: (_: unknown, r: SalesOrderItem) =>
+          r.sellingCostRate != null ? `${(r.sellingCostRate * 100).toFixed(0)}%` : "-",
+      },
       { title: "Ghi chú", dataIndex: "note", key: "note", render: (v: string | null) => v || "-" },
     ];
     return (
@@ -343,6 +355,19 @@ export default function SalesOrdersPage() {
                         </Form.Item>
                         <Form.Item {...restField} name={[name, "unitPrice"]} rules={[{ required: true }]}>
                           <InputNumber placeholder="Giá (USD/kg)" min={0} step={0.01} style={{ width: 130 }} />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "sellingCostRate"]}
+                          rules={[{ required: true, message: "Nhập %" }]}
+                        >
+                          <InputNumber
+                            placeholder="CP BH (%)"
+                            min={0}
+                            max={100}
+                            step={1}
+                            style={{ width: 110 }}
+                          />
                         </Form.Item>
                         <Form.Item {...restField} name={[name, "note"]}>
                           <Input placeholder="Ghi chú" style={{ width: 150 }} />

@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Button, Tag, Typography, message, Spin, Breadcrumb, Space, Tooltip,
+  Button, Typography, message, Spin, Breadcrumb, Space,
   Popconfirm, Card, Row, Col, Modal, Tabs,
 } from "antd";
 import {
-  ArrowLeftOutlined, CheckCircleOutlined, SendOutlined, SyncOutlined,
-  ExportOutlined, UndoOutlined,
+  ArrowLeftOutlined, SyncOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import ScheduleSegmentModal from "@/components/kdsx/ScheduleSegmentModal";
@@ -36,9 +35,6 @@ interface SummaryItem {
   itemId: number; itemName: string; totalKg: number; totalTons: number;
   segmentCount: number; machinesInvolved: number[];
 }
-
-const STATUS_COLORS: Record<string, string> = { DRAFT: "default", SUBMITTED: "processing", APPROVED: "success" };
-const STATUS_LABELS: Record<string, string> = { DRAFT: "Nháp", SUBMITTED: "Đã trình", APPROVED: "Đã duyệt" };
 
 const DEFAULT_COLORS = [
   "#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336",
@@ -100,7 +96,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const refresh = async () => { await Promise.all([fetchSchedule(), fetchSummary()]); };
 
   const handleToggleHoliday = async (day: number) => {
-    if (!schedule || schedule.status !== "DRAFT") return;
+    if (!schedule) return;
     const current: number[] = Array.isArray(schedule.holidays) ? schedule.holidays as number[] : [];
     const next = current.includes(day) ? current.filter(d => d !== day) : [...current, day].sort((a, b) => a - b);
     const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}`, {
@@ -124,18 +120,6 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemColors: newColors }),
     });
-  };
-
-  const handleStatusChange = async (newStatus: string) => {
-    setActionLoading(true);
-    const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    const data = await res.json();
-    if (!res.ok) { message.error(data.error ?? "Lỗi đổi trạng thái"); }
-    else { message.success("Đã cập nhật trạng thái"); await refresh(); }
-    setActionLoading(false);
   };
 
   const handleSyncToPlan = async () => {
@@ -182,7 +166,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   if (loading) return <div style={{ textAlign: "center", padding: 80 }}><Spin size="large" /></div>;
   if (!schedule) return <div>Không tìm thấy kế hoạch.</div>;
 
-  const { yearMonth, factory, status, holidays } = schedule;
+  const { yearMonth, factory, holidays } = schedule;
   const itemColors = (schedule.itemColors ?? {}) as Record<string, string>;
   const holidayArr: number[] = Array.isArray(holidays) ? holidays as number[] : [];
   const totalDays = daysInMonthFn(yearMonth);
@@ -223,9 +207,6 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const allMachines = [...uniqueMachines.map(m => ({ id: m.id, name: m.name, model: m.model ?? null, processId: m.processId })),
   ...factoryMachines.slice(0, Math.max(0, 21 - uniqueMachines.length))];
 
-  const isDraft = status === "DRAFT";
-  const isApproved = status === "APPROVED";
-
   const grandTotal = summary.reduce((s, i) => s + i.totalKg, 0);
 
   const thStyle: React.CSSProperties = {
@@ -246,7 +227,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     <div>
       {/* Holiday hint */}
       <div style={{ marginBottom: 8, fontSize: 12, color: "#888" }}>
-        {isDraft && "💡 Click vào tên ngày (header) để đánh dấu ngày nghỉ lễ. "}
+        💡 Click vào tên ngày (header) để đánh dấu ngày nghỉ lễ.{" "}
         Ngày nghỉ: {holidayArr.length > 0 ? holidayArr.map(d => `${d}/${schedMonth}`).join(", ") : "Chưa có"}
       </div>
 
@@ -262,13 +243,13 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                   <th
                     key={day}
                     style={{
-                      ...thStyle, minWidth: 38, cursor: isDraft ? "pointer" : "default",
+                      ...thStyle, minWidth: 38, cursor: "pointer",
                       background: isHoliday ? "#cf1322" : "#001529",
                       color: isHoliday ? "#fff" : "white",
                       userSelect: "none",
                     }}
-                    onClick={() => isDraft && handleToggleHoliday(day)}
-                    title={isDraft ? (isHoliday ? "Bỏ đánh dấu nghỉ" : "Đánh dấu ngày nghỉ") : ""}
+                    onClick={() => handleToggleHoliday(day)}
+                    title={isHoliday ? "Bỏ đánh dấu nghỉ" : "Đánh dấu ngày nghỉ"}
                   >
                     {day}
                     <br />
@@ -330,15 +311,13 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                     {machineSegs.length > 0
                       ? machineSegs.map(s => (
                         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                          {isDraft && (
-                            <input
-                              type="color"
-                              value={getColor(s.itemId)}
-                              onChange={(e) => handleChangeItemColor(s.itemId, e.target.value)}
-                              style={{ width: 14, height: 14, border: "none", cursor: "pointer", padding: 0, borderRadius: 2 }}
-                              title="Đổi màu mặt hàng"
-                            />
-                          )}
+                          <input
+                            type="color"
+                            value={getColor(s.itemId)}
+                            onChange={(e) => handleChangeItemColor(s.itemId, e.target.value)}
+                            style={{ width: 14, height: 14, border: "none", cursor: "pointer", padding: 0, borderRadius: 2 }}
+                            title="Đổi màu mặt hàng"
+                          />
                           <span style={{ color: getColor(s.itemId), fontWeight: 600, fontSize: 11 }}>
                             {s.item.name} ({s.fromDay}–{s.toDay})
                           </span>
@@ -365,12 +344,11 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                               ? getBg(seg.itemId)
                               : undefined,
                           opacity: dimmed ? 0.25 : 1,
-                          cursor: isDraft ? "pointer" : "default",
+                          cursor: "pointer",
                           borderLeft: seg && (day === seg.fromDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #d0d0d0",
                           borderRight: seg && (day === seg.toDay) ? `2px solid ${getBorder(seg.itemId)}` : "1px solid #d0d0d0",
                         }}
                         onClick={() => {
-                          if (!isDraft) return;
                           if (seg) {
                             setEditSegment(seg);
                             setModalOpen(true);
@@ -381,7 +359,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                             setModalOpen(true);
                           }
                         }}
-                        title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày${isDraft ? " (Click để sửa)" : ""}` : isDraft ? "Click để thêm segment" : ""}
+                        title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa)` : "Click để thêm segment"}
                       >
                         {isHoliday
                           ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
@@ -450,40 +428,15 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
           <Title level={4} style={{ margin: 0 }}>
             KH SX — {factory.name} — Tháng {schedMonth}/{schedYear}
           </Title>
-          <Tag color={STATUS_COLORS[status]} style={{ fontSize: 13 }}>{STATUS_LABELS[status]}</Tag>
         </div>
 
         <Space wrap>
-          {status === "DRAFT" && (
-            <Popconfirm title="Trình duyệt kế hoạch này?" onConfirm={() => handleStatusChange("SUBMITTED")} okText="Trình">
-              <Button icon={<SendOutlined />} loading={actionLoading}>Trình duyệt</Button>
-            </Popconfirm>
-          )}
-          {status === "SUBMITTED" && (
-            <>
-              <Popconfirm title="Phê duyệt kế hoạch này?" onConfirm={() => handleStatusChange("APPROVED")} okText="Phê duyệt" okType="primary">
-                <Button type="primary" icon={<CheckCircleOutlined />} loading={actionLoading}>Phê duyệt</Button>
-              </Popconfirm>
-              <Popconfirm title="Hoàn về DRAFT?" onConfirm={() => handleStatusChange("DRAFT")} okText="Hoàn về">
-                <Button icon={<UndoOutlined />} loading={actionLoading}>Hoàn về nháp</Button>
-              </Popconfirm>
-            </>
-          )}
-          {status === "APPROVED" && (
-            <>
-              <Popconfirm title="Đồng bộ sản lượng sang Kế hoạch DT?" description="Sẽ cập nhật/tạo PlanLineItem.qty" onConfirm={handleSyncToPlan} okText="Đồng bộ" okType="primary">
-                <Button type="primary" icon={<SyncOutlined />} loading={actionLoading}>Đồng bộ sang KH DT</Button>
-              </Popconfirm>
-              <Popconfirm title="Unapprove để sửa?" onConfirm={() => handleStatusChange("SUBMITTED")} okText="Unapprove">
-                <Button icon={<UndoOutlined />} loading={actionLoading}>Unapprove</Button>
-              </Popconfirm>
-            </>
-          )}
-          {isDraft && (
-            <Button type="dashed" icon={<span>+</span>} onClick={() => { setEditSegment(null); setDefaultMachineId(undefined); setDefaultDay(undefined); setModalOpen(true); }}>
-              Thêm segment
-            </Button>
-          )}
+          <Popconfirm title="Đồng bộ sản lượng sang Kế hoạch DT?" description="Sẽ cập nhật/tạo PlanLineItem.qty" onConfirm={handleSyncToPlan} okText="Đồng bộ" okType="primary">
+            <Button type="primary" icon={<SyncOutlined />} loading={actionLoading}>Đồng bộ sang KH DT</Button>
+          </Popconfirm>
+          <Button type="dashed" icon={<span>+</span>} onClick={() => { setEditSegment(null); setDefaultMachineId(undefined); setDefaultDay(undefined); setModalOpen(true); }}>
+            Thêm segment
+          </Button>
         </Space>
       </div>
 

@@ -92,14 +92,6 @@ export async function POST(
     return NextResponse.json({ error: "Không tìm thấy kế hoạch" }, { status: 404 });
   }
 
-  // Guard: không cho thêm segment khi đã APPROVED hoặc SUBMITTED
-  if (schedule.status !== "DRAFT") {
-    return NextResponse.json(
-      { error: "Chỉ được thêm segment khi kế hoạch ở trạng thái DRAFT" },
-      { status: 403 }
-    );
-  }
-
   // Validate ngày
   const maxDay = daysInMonth(schedule.yearMonth);
   if (!fromDay || !toDay || fromDay < 1 || toDay > maxDay || fromDay > toDay) {

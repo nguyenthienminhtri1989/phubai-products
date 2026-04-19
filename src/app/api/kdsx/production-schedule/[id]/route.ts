@@ -43,7 +43,7 @@ export async function PUT(
   const { id: idStr } = await params;
   const id = parseInt(idStr);
   const body = await req.json();
-  const { note, holidays, status, itemColors } = body;
+  const { note, holidays, itemColors } = body;
 
   const existing = await prisma.productionSchedule.findUnique({
     where: { id },
@@ -55,20 +55,11 @@ export async function PUT(
     );
   }
 
-  // Guard: APPROVED schedule không cho sửa trực tiếp
-  if (existing.status === "APPROVED" && !status && !itemColors) {
-    return NextResponse.json(
-      { error: "Kế hoạch đã phê duyệt. Phải unapprove trước khi sửa." },
-      { status: 403 },
-    );
-  }
-
   const updated = await prisma.productionSchedule.update({
     where: { id },
     data: {
       ...(note !== undefined && { note }),
       ...(holidays !== undefined && { holidays }),
-      ...(status !== undefined && { status }),
       ...(itemColors !== undefined && { itemColors }),
     },
   });
@@ -91,13 +82,6 @@ export async function DELETE(
     return NextResponse.json(
       { error: "Không tìm thấy kế hoạch" },
       { status: 404 },
-    );
-  }
-
-  if (existing.status !== "DRAFT") {
-    return NextResponse.json(
-      { error: "Chỉ được xóa kế hoạch ở trạng thái DRAFT" },
-      { status: 403 },
     );
   }
 

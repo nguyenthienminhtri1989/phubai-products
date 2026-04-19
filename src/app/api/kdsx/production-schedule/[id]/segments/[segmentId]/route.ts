@@ -87,13 +87,6 @@ export async function PUT(
     return NextResponse.json({ error: "Không tìm thấy segment" }, { status: 404 });
   }
 
-  if (segment.schedule.status !== "DRAFT") {
-    return NextResponse.json(
-      { error: "Chỉ sửa được segment khi kế hoạch ở trạng thái DRAFT" },
-      { status: 403 }
-    );
-  }
-
   const { itemId, fromDay, toDay, kgPerDay, note } = body;
   const finalItemId = itemId ?? segment.itemId;
   const finalFromDay = fromDay ?? segment.fromDay;
@@ -184,13 +177,6 @@ export async function DELETE(
 
   if (!segment || segment.scheduleId !== scheduleId) {
     return NextResponse.json({ error: "Không tìm thấy segment" }, { status: 404 });
-  }
-
-  if (segment.schedule.status !== "DRAFT") {
-    return NextResponse.json(
-      { error: "Chỉ xóa được segment khi kế hoạch ở trạng thái DRAFT" },
-      { status: 403 }
-    );
   }
 
   await prisma.scheduleSegment.delete({ where: { id: segmentId } });
