@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Spin, Table, Tag, Typography } from "antd";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, LineChart, Line,
+  Legend, ResponsiveContainer, LineChart, Line, LabelList
 } from "recharts";
 
 const { Text } = Typography;
@@ -201,14 +201,18 @@ export default function ScheduleComparisonDashboard({
       <div>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📊 So sánh KH/TH theo mặt hàng (tấn)</div>
         <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+          <BarChart data={barData} margin={{ top: 25, right: 20, left: 0, bottom: 60 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" angle={-30} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
             <YAxis label={{ value: "Tấn", angle: -90, position: "insideLeft", fontSize: 11 }} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v) => [`${Number(v ?? 0).toLocaleString()} tấn`]} />
             <Legend />
-            <Bar dataKey="khTons" name="Kế hoạch" fill="#1677ff" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="thTons" name="Thực hiện" fill="#52c41a" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="khTons" name="Kế hoạch" fill="#1677ff" radius={[3, 3, 0, 0]}>
+              <LabelList dataKey="khTons" position="top" style={{ fontSize: 10, fill: "#1677ff", fontWeight: 600 }} />
+            </Bar>
+            <Bar dataKey="thTons" name="Thực hiện" fill="#52c41a" radius={[3, 3, 0, 0]}>
+              <LabelList dataKey="thTons" position="top" style={{ fontSize: 10, fill: "#52c41a", fontWeight: 600 }} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
