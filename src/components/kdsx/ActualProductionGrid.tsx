@@ -123,7 +123,7 @@ export default function ActualProductionGrid({
   const grandActualTotal = totalActualByDay.reduce((s, v) => s + v, 0);
 
   const thStyle: React.CSSProperties = {
-    background: "#0a2540", color: "white", padding: "7px 5px",
+    background: "#001529", color: "white", padding: "7px 5px",
     textAlign: "center", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
     position: "sticky", top: 0, zIndex: 2,
     borderBottom: "2px solid #1d3557",
@@ -161,7 +161,7 @@ export default function ActualProductionGrid({
                 return (
                   <th key={day} style={{
                     ...thStyle, minWidth: 38,
-                    background: isHoliday ? "#cf1322" : "#0a2540",
+                    background: isHoliday ? "#cf1322" : "#001529",
                   }}>
                     {day}
                     <br />
@@ -282,9 +282,9 @@ export default function ActualProductionGrid({
             })}
 
             {/* Hàng cuối: tổng theo ngày */}
-            <tr style={{ background: "#0a2540" }}>
-              <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#0a2540", textAlign: "left", paddingLeft: 8 }}>TỔNG TH</td>
-              <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#0a2540" }}>kg/ngày</td>
+            <tr style={{ background: "#001529" }}>
+              <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#001529", textAlign: "left", paddingLeft: 8 }}>TỔNG TH</td>
+              <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#001529" }}>kg/ngày</td>
               {totalActualByDay.map((kg, i) => {
                 const day = i + 1;
                 const isHoliday = holidays.includes(day);
