@@ -333,7 +333,6 @@ export default function SalesOrdersPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
 
-          {!editing && (
             <>
               <Title level={5}>Chi tiết sợi trong HĐ</Title>
               <Form.List name="items">
@@ -382,7 +381,6 @@ export default function SalesOrdersPage() {
                 )}
               </Form.List>
             </>
-          )}
         </Form>
       </Modal>
     </div>

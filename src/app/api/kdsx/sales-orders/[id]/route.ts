@@ -81,7 +81,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, isActive } = body;
 
-  const order = await prisma.salesOrder.update({
+  await prisma.salesOrder.update({
     where: { id: Number(id) },
     data: {
       orderNo,
@@ -93,12 +93,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       note: note ?? null,
       isActive: isActive !== undefined ? Boolean(isActive) : undefined,
     },
+  });
+
+  if (body.items && Array.isArray(body.items)) {
+    // Xóa items cũ
+    await prisma.salesOrderItem.deleteMany({ where: { orderId: Number(id) } });
+    // Tạo lại từ body
+    await prisma.salesOrderItem.createMany({
+      data: body.items.map((item: any) => ({
+        orderId: Number(id),
+        itemId: item.itemId,
+        plannedQty: item.plannedQty,
+        unitPrice: item.unitPrice,
+        sellingCostRate: item.sellingCostRate ?? null,
+        note: item.note ?? null,
+      })),
+    });
+  }
+
+  const order = await prisma.salesOrder.findUnique({
+    where: { id: Number(id) },
     include: {
       customer: true,
       factory: { select: { id: true, name: true } },
       items: { include: { item: true } },
     },
   });
+
   return NextResponse.json(order);
 }
 
