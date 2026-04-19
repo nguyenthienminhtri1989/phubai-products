@@ -387,7 +387,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                           ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                           : seg
                             ? <span style={{ color: getColor(seg.itemId), fontSize: 11, fontWeight: 800 }}>
-                              {seg.kgPerDay.toLocaleString()} kg
+                              {seg.kgPerDay.toLocaleString()}
                             </span>
                             : <span style={{ color: "#bbb", fontSize: 13, lineHeight: 1 }}>·</span>
                         }
@@ -493,11 +493,15 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
           <Card
             key={item.itemId}
             size="small"
+            hoverable
             style={{
               cursor: "pointer", minWidth: 120,
               borderColor: highlightItemId === item.itemId ? getBorder(item.itemId) : "#d9d9d9",
               background: highlightItemId === item.itemId ? getBg(item.itemId) : undefined,
               borderWidth: highlightItemId === item.itemId ? 2 : 1,
+              boxShadow: highlightItemId === item.itemId ? "0 4px 12px rgba(0,0,0,0.15)" : "0 1px 4px rgba(0,0,0,0.05)",
+              transform: highlightItemId === item.itemId ? "translateY(-2px)" : "none",
+              transition: "all 0.2s ease-in-out",
             }}
             onClick={() => setHighlightItemId(prev => prev === item.itemId ? null : item.itemId)}
           >
@@ -507,7 +511,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
           </Card>
         ))}
         {summary.length > 0 && (
-          <Card size="small" style={{ minWidth: 120, background: "#001529", cursor: "default" }}>
+          <Card size="small" style={{ minWidth: 120, background: "#001529", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>TỔNG THÁNG</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: "#52c41a" }}>{(grandTotal / 1000).toFixed(1)} tấn</div>
             <div style={{ fontSize: 11, color: "#aaa" }}>{schedule.segments.length} segments</div>
