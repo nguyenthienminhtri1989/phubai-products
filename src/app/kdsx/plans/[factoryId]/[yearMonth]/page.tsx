@@ -32,6 +32,7 @@ import {
   SettingOutlined,
   RollbackOutlined,
   StopOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { use } from "react";
 import { useRouter } from "next/navigation";
@@ -88,13 +89,14 @@ interface Plan {
   fixedCosts: FixedCostEntry[];
 }
 
-function fmtBillion(v: number | null | undefined) {
-  if (v === null || v === undefined) return "0";
-  return (v / 1e9).toFixed(3);
-}
-function fmtTy(v: number | null | undefined) {
-  if (v === null || v === undefined) return "-";
-  return `${(v / 1e9).toFixed(3)} tỷ`;
+function fmtVnd(v: number | null | undefined): string {
+  if (v == null) return "0.00 đ";
+  return (
+    v.toLocaleString("vi-VN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " đ"
+  );
 }
 
 const STATUS_COLOR = { DRAFT: "default", SUBMITTED: "blue", APPROVED: "green" } as const;
@@ -137,6 +139,9 @@ export default function PlanDetailPage({
   const [unapproveModal, setUnapproveModal] = useState(false);
   const [unapproveReason, setUnapproveReason] = useState("");
   const [unapproving, setUnapproving] = useState(false);
+
+  // Recalculate
+  const [recalculating, setRecalculating] = useState(false);
 
   const fetchPlan = useCallback(async () => {
     setLoading(true);
@@ -369,6 +374,26 @@ export default function PlanDetailPage({
     }
   }
 
+  async function handleRecalculate() {
+    if (!plan) return;
+    setRecalculating(true);
+    try {
+      const res = await fetch(`/api/kdsx/monthly-plans/${plan.id}/recalculate`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        message.success(`Đã tính lại ${data.updated} dòng sợi`);
+        fetchPlan();
+      } else {
+        const err = await res.json();
+        message.error(err.error || "Lỗi tính lại");
+      }
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
   function openAddLineItem() {
     if (!hasParam) {
       message.warning("Hãy nhập thông số tháng trước khi thêm dòng sợi");
@@ -413,18 +438,18 @@ export default function PlanDetailPage({
     },
     { title: "SL (kg)", dataIndex: "qty", key: "qty", render: (v: number) => v.toLocaleString() },
     { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
-    { title: "DT (tỷ)", key: "rev", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.revenueVnd) },
-    { title: "CP Bông (tỷ)", key: "cotton", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.cottonCostVnd) },
-    { title: "CP PE (tỷ)", key: "pe", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.peCostVnd) },
-    { title: "CP BH (tỷ)", key: "sell", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.sellingCostVnd) },
-    { title: "CP GC (tỷ)", key: "gc", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.gcDoubleTwistVnd) },
-    { title: "Phế (tỷ)", key: "waste", render: (_: unknown, r: PlanLineItem) => fmtBillion(r.wasteRecoveryVnd) },
+    { title: "Doanh thu (đ)", key: "rev", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.revenueVnd) },
+    { title: "CP Bông (đ)", key: "cotton", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.cottonCostVnd) },
+    { title: "CP PE (đ)", key: "pe", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.peCostVnd) },
+    { title: "CP BH (đ)", key: "sell", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.sellingCostVnd) },
+    { title: "CP GC (đ)", key: "gc", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.gcDoubleTwistVnd) },
+    { title: "Phế thu hồi (đ)", key: "waste", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.wasteRecoveryVnd) },
     {
-      title: "LN gộp (tỷ)",
+      title: "LN gộp (đ)",
       key: "profit",
       render: (_: unknown, r: PlanLineItem) => (
         <Text type={(r.grossProfitVnd ?? 0) >= 0 ? "success" : "danger"}>
-          {fmtBillion(r.grossProfitVnd)}
+          {fmtVnd(r.grossProfitVnd)}
         </Text>
       ),
     },
@@ -478,6 +503,19 @@ export default function PlanDetailPage({
           <Button icon={<SettingOutlined />} onClick={() => setParamModal(true)}>
             Thông số tháng {!hasParam && <Tag color="red">!</Tag>}
           </Button>
+
+          {/* Tính lại tất cả: chỉ DRAFT */}
+          {isDraft && (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={recalculating}
+              onClick={handleRecalculate}
+              disabled={!hasParam || (plan?.lineItems.length ?? 0) === 0}
+              title={!hasParam ? "Cần nhập thông số tháng trước" : ""}
+            >
+              Tính lại tất cả
+            </Button>
+          )}
 
           {/* Xóa kế hoạch: DRAFT cho admin/manager, SUBMITTED chỉ admin */}
           {isDraft && (isAdmin || isManager) && (
@@ -591,34 +629,34 @@ export default function PlanDetailPage({
                   <Text strong>{plan.lineItems.reduce((s, li) => s + li.qty, 0).toLocaleString("vi-VN")} kg</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Tổng doanh thu">
-                  <Text strong style={{ color: "#3f8600" }}>{fmtTy(totalRevenue)}</Text>
+                  <Text strong style={{ color: "#3f8600" }}>{fmtVnd(totalRevenue)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Lợi nhuận gộp">
                   <Text strong style={{ color: totalGrossProfit >= 0 ? "#3f8600" : "#cf1322" }}>
-                    {fmtTy(totalGrossProfit)}
+                    {fmtVnd(totalGrossProfit)}
                   </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="CP nguyên vật liệu">
                   <Text style={{ color: "#cf1322" }}>
-                    {fmtTy(plan.lineItems.reduce((s, li) => s + (li.cottonCostVnd ?? 0) + (li.peCostVnd ?? 0), 0))}
+                    {fmtVnd(plan.lineItems.reduce((s, li) => s + (li.cottonCostVnd ?? 0) + (li.peCostVnd ?? 0), 0))}
                   </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="CP bán hàng & gia công">
                   <Text style={{ color: "#cf1322" }}>
-                    {fmtTy(plan.lineItems.reduce((s, li) => s + (li.sellingCostVnd ?? 0) + (li.gcDoubleTwistVnd ?? 0), 0))}
+                    {fmtVnd(plan.lineItems.reduce((s, li) => s + (li.sellingCostVnd ?? 0) + (li.gcDoubleTwistVnd ?? 0), 0))}
                   </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Phế thu hồi">
                   <Text style={{ color: "#3f8600" }}>
-                    -{fmtTy(plan.lineItems.reduce((s, li) => s + (li.wasteRecoveryVnd ?? 0), 0))}
+                    -{fmtVnd(plan.lineItems.reduce((s, li) => s + (li.wasteRecoveryVnd ?? 0), 0))}
                   </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Tổng CP cố định (trừ HĐTC)">
-                  <Text style={{ color: "#cf1322" }}>{fmtTy(totalFixedCost)}</Text>
+                  <Text style={{ color: "#cf1322" }}>{fmtVnd(totalFixedCost)}</Text>
                 </Descriptions.Item>
                 {financialIncome > 0 && (
                   <Descriptions.Item label="Doanh thu HĐTC">
-                    <Text style={{ color: "#3f8600" }}>+{fmtTy(financialIncome)}</Text>
+                    <Text style={{ color: "#3f8600" }}>+{fmtVnd(financialIncome)}</Text>
                   </Descriptions.Item>
                 )}
                 <Descriptions.Item label={<Text strong style={{ fontSize: 15 }}>LỢI NHUẬN RÒNG</Text>} span={2}>
@@ -628,7 +666,7 @@ export default function PlanDetailPage({
                     </Tooltip>
                   ) : (
                     <Text strong style={{ fontSize: 18, color: netProfit >= 0 ? "#3f8600" : "#cf1322" }}>
-                      {fmtTy(netProfit)}
+                      {fmtVnd(netProfit)}
                     </Text>
                   )}
                 </Descriptions.Item>
@@ -821,14 +859,14 @@ export default function PlanDetailPage({
             {!hasLineItems
               ? "Chưa có dòng sợi nào trong kế hoạch"
               : invalidLines.length > 0
-              ? `${invalidLines.length} dòng sợi có số lượng hoặc đơn giá bằng 0`
-              : `${plan.lineItems.length} dòng sợi đã nhập đầy đủ`}
+                ? `${invalidLines.length} dòng sợi có số lượng hoặc đơn giá bằng 0`
+                : `${plan.lineItems.length} dòng sợi đã nhập đầy đủ`}
           </div>
           {/* ② Có chi phí cố định */}
           <div style={{ marginBottom: 6 }}>
             {hasAnyFixedCost ? "✅" : "❌"}{" "}
             {hasAnyFixedCost
-              ? `Chi phí cố định đã nhập (${fmtTy(totalFixedCost)})`
+              ? `Chi phí cố định đã nhập (${fmtVnd(totalFixedCost)})`
               : "Chưa nhập chi phí cố định tháng"}
           </div>
           {/* ③ Các khoản bắt buộc */}
@@ -844,7 +882,7 @@ export default function PlanDetailPage({
           <div style={{ marginBottom: 6 }}>
             ✅ Lợi nhuận ước tính:{" "}
             <Text strong style={{ color: netProfit >= 0 ? "#3f8600" : "#cf1322" }}>
-              {fmtTy(netProfit)}
+              {fmtVnd(netProfit)}
             </Text>
           </div>
         </div>

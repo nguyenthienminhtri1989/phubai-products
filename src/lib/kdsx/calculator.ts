@@ -33,7 +33,12 @@ export interface CalcOutput {
 
 export function calculateLineItem(input: CalcInput): CalcOutput {
   const { qty, unitPriceUsd, rates, params } = input;
-  const { exchangeRate, avgCottonPrice, peBenmaPrice = 0, wastePrice = 0 } = params;
+  const {
+    exchangeRate,
+    avgCottonPrice,
+    peBenmaPrice = 0,
+    wastePrice = 0,
+  } = params;
   const {
     cottonRate = 0,
     peRate = 0,
@@ -47,8 +52,8 @@ export function calculateLineItem(input: CalcInput): CalcOutput {
   const peCostVnd = qty * peRate * peBenmaPrice * exchangeRate;
   const sellingCostVnd = qty * sellingCostRate * exchangeRate;
   const gcDoubleTwistVnd = qty * doubleTwistGcRate * exchangeRate;
-  // wastePrice đã là VNĐ/kg
-  const wasteRecoveryVnd = qty * wasteRate * exchangeRate;
+  // wastePrice đã là VNĐ/kg; nhân 0.95 theo Excel (hệ số thu hồi thực tế)
+  const wasteRecoveryVnd = qty * wasteRate * exchangeRate * 0.95;
   const grossProfitVnd =
     revenueVnd -
     cottonCostVnd -
@@ -73,7 +78,7 @@ export function calculateLineItem(input: CalcInput): CalcOutput {
 export async function refreshSummarySnapshot(
   factoryId: number,
   yearMonth: string,
-  type: SnapshotType
+  type: SnapshotType,
 ) {
   if (type === SnapshotType.KH) {
     const plan = await prisma.monthlyPlan.findUnique({
@@ -95,7 +100,7 @@ export async function refreshSummarySnapshot(
     const totalQtyKg = plan.lineItems.reduce((s: number, li) => s + li.qty, 0);
     const totalRevenueVnd = plan.lineItems.reduce(
       (s: number, li) => s + (li.revenueVnd ?? 0),
-      0
+      0,
     );
     const variableCostVnd = plan.lineItems.reduce(
       (s: number, li) =>
@@ -105,20 +110,25 @@ export async function refreshSummarySnapshot(
         (li.sellingCostVnd ?? 0) +
         (li.gcDoubleTwistVnd ?? 0) -
         (li.wasteRecoveryVnd ?? 0),
-      0
+      0,
     );
     // DOANH_THU_HDTC là khoản thu — cộng vào lợi nhuận, không tính vào chi phí
     const fixedCostVnd = plan.fixedCosts
       .filter((fc) => fc.costType !== "DOANH_THU_HDTC")
       .reduce((s: number, fc) => s + fc.amountVnd, 0);
-    const financialIncome = plan.fixedCosts
-      .find((fc) => fc.costType === "DOANH_THU_HDTC")?.amountVnd ?? 0;
+    const financialIncome =
+      plan.fixedCosts.find((fc) => fc.costType === "DOANH_THU_HDTC")
+        ?.amountVnd ?? 0;
     const totalCostVnd = variableCostVnd + fixedCostVnd;
     const totalProfitVnd = totalRevenueVnd - totalCostVnd + financialIncome;
 
     await prisma.monthlySummarySnapshot.upsert({
       where: {
-        factoryId_yearMonth_type: { factoryId, yearMonth, type: SnapshotType.KH },
+        factoryId_yearMonth_type: {
+          factoryId,
+          yearMonth,
+          type: SnapshotType.KH,
+        },
       },
       create: {
         factoryId,
@@ -156,7 +166,7 @@ export async function refreshSummarySnapshot(
     const totalQtyKg = actual.lineItems.reduce((s, li) => s + li.qty, 0);
     const totalRevenueVnd = actual.lineItems.reduce(
       (s, li) => s + (li.revenueVnd ?? 0),
-      0
+      0,
     );
     const variableCostVnd = actual.lineItems.reduce(
       (s, li) =>
@@ -166,20 +176,25 @@ export async function refreshSummarySnapshot(
         (li.sellingCostVnd ?? 0) +
         (li.gcDoubleTwistVnd ?? 0) -
         (li.wasteRecoveryVnd ?? 0),
-      0
+      0,
     );
     // DOANH_THU_HDTC là khoản thu — cộng vào lợi nhuận, không tính vào chi phí
     const fixedCostVnd = actual.fixedCosts
       .filter((fc) => fc.costType !== "DOANH_THU_HDTC")
       .reduce((s, fc) => s + fc.amountVnd, 0);
-    const financialIncome = actual.fixedCosts
-      .find((fc) => fc.costType === "DOANH_THU_HDTC")?.amountVnd ?? 0;
+    const financialIncome =
+      actual.fixedCosts.find((fc) => fc.costType === "DOANH_THU_HDTC")
+        ?.amountVnd ?? 0;
     const totalCostVnd = variableCostVnd + fixedCostVnd;
     const totalProfitVnd = totalRevenueVnd - totalCostVnd + financialIncome;
 
     await prisma.monthlySummarySnapshot.upsert({
       where: {
-        factoryId_yearMonth_type: { factoryId, yearMonth, type: SnapshotType.TH },
+        factoryId_yearMonth_type: {
+          factoryId,
+          yearMonth,
+          type: SnapshotType.TH,
+        },
       },
       create: {
         factoryId,
