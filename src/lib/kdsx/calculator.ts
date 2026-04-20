@@ -48,7 +48,7 @@ export function calculateLineItem(input: CalcInput): CalcOutput {
   const sellingCostVnd = qty * sellingCostRate * exchangeRate;
   const gcDoubleTwistVnd = qty * doubleTwistGcRate * exchangeRate;
   // wastePrice đã là VNĐ/kg
-  const wasteRecoveryVnd = qty * wasteRate * wastePrice;
+  const wasteRecoveryVnd = qty * wasteRate * exchangeRate;
   const grossProfitVnd =
     revenueVnd -
     cottonCostVnd -
