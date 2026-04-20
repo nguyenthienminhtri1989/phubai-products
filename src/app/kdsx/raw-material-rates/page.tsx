@@ -332,7 +332,7 @@ export default function RawMaterialRatesPage() {
       align: "right" as const,
       render: (_: unknown, r: RawMaterialRate) =>
         hasPE(r.item.name) ? (
-          <Text code>{fmt2(r.peRate)}</Text>
+          <Text code>{fmt3(r.peRate)}</Text>
         ) : (
           <Text type="secondary">—</Text>
         ),
@@ -623,11 +623,11 @@ export default function RawMaterialRatesPage() {
               >
                 <InputNumber
                   style={{ width: "100%" }}
-                  step={0.01}
-                  precision={2}
+                  step={0.001}
+                  precision={3}
                   min={0}
                   disabled={!showPE}
-                  placeholder={showPE ? "VD: 1.02" : "—"}
+                  placeholder={showPE ? "VD: 0.408" : "—"}
                 />
               </Form.Item>
             </Col>
