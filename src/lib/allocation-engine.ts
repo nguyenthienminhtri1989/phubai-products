@@ -85,7 +85,7 @@ export async function runAllocation(factoryId: number, date: Date) {
     for (const orderItem of pendingItems) {
       if (remaining <= 0) break
 
-      const stillNeeded = orderItem.plannedQty - orderItem.allocatedQty
+      const stillNeeded = orderItem.plannedQty - (orderItem.deliveredQty ?? 0) - orderItem.allocatedQty
       if (stillNeeded <= 0) continue
 
       const toAllocate = Math.min(remaining, stillNeeded)
@@ -110,7 +110,7 @@ export async function runAllocation(factoryId: number, date: Date) {
       const updatedItem = await prisma.salesOrderItem.findUnique({
         where: { id: orderItem.id },
       })
-      if (updatedItem && updatedItem.allocatedQty >= orderItem.plannedQty) {
+      if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
         const allDone = await checkAllItemsDone(orderItem.orderId)
         if (allDone) {
           await prisma.salesOrder.update({
@@ -139,7 +139,7 @@ async function checkAllItemsDone(salesOrderId: number): Promise<boolean> {
   const items = await prisma.salesOrderItem.findMany({
     where: { orderId: salesOrderId },
   })
-  return items.every((item) => item.allocatedQty >= item.plannedQty)
+  return items.every((item) => (item.allocatedQty + (item.deliveredQty ?? 0)) >= item.plannedQty)
 }
 
 /**
@@ -227,7 +227,7 @@ export async function runAllocationKD(factoryId: number, date: Date) {
     for (const orderItem of pendingItems) {
       if (remaining <= 0) break
 
-      const stillNeeded = orderItem.plannedQty - orderItem.allocatedQty
+      const stillNeeded = orderItem.plannedQty - (orderItem.deliveredQty ?? 0) - orderItem.allocatedQty
       if (stillNeeded <= 0) continue
 
       const toAllocate = Math.min(remaining, stillNeeded)
@@ -253,7 +253,7 @@ export async function runAllocationKD(factoryId: number, date: Date) {
       const updatedItem = await prisma.salesOrderItem.findUnique({
         where: { id: orderItem.id },
       })
-      if (updatedItem && updatedItem.allocatedQty >= orderItem.plannedQty) {
+      if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
         const allDone = await checkAllItemsDone(orderItem.orderId)
         if (allDone) {
           await prisma.salesOrder.update({

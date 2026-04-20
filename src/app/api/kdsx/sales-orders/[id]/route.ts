@@ -3,9 +3,13 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { calcEstimatedDoneDate } from "@/lib/estimate-completion";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const order = await prisma.salesOrder.findUnique({
@@ -18,10 +22,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           item: { select: { id: true, name: true, code: true } },
           allocations: {
             select: { productionDate: true, allocatedQty: true },
-            orderBy: { productionDate: 'asc' },
+            orderBy: { productionDate: "asc" },
           },
         },
-        orderBy: { id: 'asc' },
+        orderBy: { id: "asc" },
       },
     },
   });
@@ -30,11 +34,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // Enrich each item with progress data
   const enrichedItems = await Promise.all(
     order.items.map(async (item) => {
-      const remainingQty = Math.max(0, item.plannedQty - item.allocatedQty);
+      const totalDelivered = (item.deliveredQty ?? 0) + item.allocatedQty;
+      const remainingQty = Math.max(0, item.plannedQty - totalDelivered);
       const progressPct = Math.min(
         100,
         item.plannedQty > 0
-          ? Math.round((item.allocatedQty / item.plannedQty) * 1000) / 10
+          ? Math.round((totalDelivered / item.plannedQty) * 1000) / 10
           : 0,
       );
 
@@ -43,7 +48,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       const cumulativeData = item.allocations.map((a) => {
         cumulative += a.allocatedQty;
         return {
-          date: a.productionDate.toISOString().split('T')[0],
+          date: a.productionDate.toISOString().split("T")[0],
           qty: a.allocatedQty,
           cumulative,
         };
@@ -60,7 +65,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         remainingQty,
         progressPct,
         cumulativeData,
-        estimatedDoneDate: estimatedDoneDate?.toISOString().split('T')[0] ?? null,
+        estimatedDoneDate:
+          estimatedDoneDate?.toISOString().split("T")[0] ?? null,
       };
     }),
   );
@@ -68,9 +74,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...order, items: enrichedItems });
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
@@ -79,7 +89,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const body = await req.json();
-  const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, isActive } = body;
+  const {
+    orderNo,
+    customerId,
+    factoryId,
+    signedDate,
+    deliveryDate,
+    startDate,
+    note,
+    isActive,
+  } = body;
 
   await prisma.salesOrder.update({
     where: { id: Number(id) },
@@ -106,6 +125,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         plannedQty: item.plannedQty,
         unitPrice: item.unitPrice,
         sellingCostRate: item.sellingCostRate ?? null,
+        deliveredQty: item.deliveredQty ?? 0,
         note: item.note ?? null,
       })),
     });
@@ -123,9 +143,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(order);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   if (userRole !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

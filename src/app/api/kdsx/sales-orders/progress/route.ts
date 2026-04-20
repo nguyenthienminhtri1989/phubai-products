@@ -7,7 +7,8 @@ import { calcEstimatedDoneDate } from "@/lib/estimate-completion";
 // Params: factoryId (required), status (comma-sep, default "ACTIVE,OVERDUE"), month (YYYY-MM optional)
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const factoryId = searchParams.get("factoryId");
@@ -15,7 +16,10 @@ export async function GET(req: NextRequest) {
   const month = searchParams.get("month"); // YYYY-MM
 
   if (!factoryId) {
-    return NextResponse.json({ error: "factoryId là bắt buộc" }, { status: 400 });
+    return NextResponse.json(
+      { error: "factoryId là bắt buộc" },
+      { status: 400 },
+    );
   }
 
   const statusList = statusParam.split(",").map((s) => s.trim()) as any[];
@@ -61,11 +65,12 @@ export async function GET(req: NextRequest) {
 
       const items = await Promise.all(
         order.items.map(async (item) => {
-          const remainingQty = Math.max(0, item.plannedQty - item.allocatedQty);
+          const totalDelivered = (item.deliveredQty ?? 0) + item.allocatedQty;
+          const remainingQty = Math.max(0, item.plannedQty - totalDelivered);
           const progressPct = Math.min(
             100,
             item.plannedQty > 0
-              ? Math.round((item.allocatedQty / item.plannedQty) * 1000) / 10
+              ? Math.round((totalDelivered / item.plannedQty) * 1000) / 10
               : 0,
           );
           const estimatedDoneDate = await calcEstimatedDoneDate(
@@ -78,10 +83,11 @@ export async function GET(req: NextRequest) {
             itemName: item.item.name,
             itemCode: item.item.code,
             plannedQty: item.plannedQty,
-            allocatedQty: item.allocatedQty,
+            allocatedQty: totalDelivered,
             remainingQty,
             progressPct,
-            estimatedDoneDate: estimatedDoneDate?.toISOString().split("T")[0] ?? null,
+            estimatedDoneDate:
+              estimatedDoneDate?.toISOString().split("T")[0] ?? null,
           };
         }),
       );

@@ -1851,4 +1851,34 @@ getBorder(itemId) → getColor(itemId) + "AA"  // 67% opacity
 
 **Ghi chú:** `itemColors` là per-schedule (không phải per-item global) — mỗi schedule tự quản lý bảng màu, không ảnh hưởng lẫn nhau.
 
-_Cập nhật lần cuối: 2026-04-19 — Production Schedule Phase 2: fix multi-machine auto-fill, itemColors, Tab Thực hiện, Tab So sánh_
+_Cập nhật lần cuối: 2026-04-20 — Thêm deliveredQty cho theo dõi đơn hàng cũ_
+
+---
+
+## ORDER-TRACKING — Thêm `deliveredQty` (Lịch sử giao hàng)
+
+**Status:** ✅ Completed 2026-04-20
+
+### What was built
+
+Hỗ trợ nhập số lượng "Đã giao trước khi dùng phần mềm" (`deliveredQty`) cho các hợp đồng cũ để hệ thống tính đúng số "Còn lại".
+Công thức tính "Còn lại" = `plannedQty - deliveredQty - allocatedQty`.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                      ← Thêm field deliveredQty vào SalesOrderItem
+src/app/api/kdsx/sales-orders/route.ts                    ← Nhận deliveredQty khi POST và sửa cách tính progress
+src/app/api/kdsx/sales-orders/[id]/route.ts               ← PUT/GET deliveredQty và sửa cách tính remainingQty
+src/app/api/kdsx/sales-orders/progress/route.ts           ← Cập nhật tính toán remainingQty và progressPct
+src/app/kdsx/sales-orders/page.tsx                        ← Thêm ô nhập "Đã giao trước" trong form và hiển thị
+src/lib/allocation-engine.ts                              ← Cập nhật công thức stillNeeded và checkAllItemsDone
+```
+
+### Key business logic implemented
+
+- Field `deliveredQty` là một số Float, default = 0.
+- `stillNeeded = plannedQty - deliveredQty - allocatedQty`.
+- Hệ thống Allocation Engine (`runAllocation` và `runAllocationKD`) được update để lấy `deliveredQty` khi tính toán stillNeeded.
+- `checkAllItemsDone` sử dụng `(allocatedQty + deliveredQty) >= plannedQty`.
+- UI `progressPct` được điều chỉnh dựa trên `totalDelivered = allocatedQty + deliveredQty`.

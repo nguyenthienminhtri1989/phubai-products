@@ -821,6 +821,7 @@ model SalesOrderItem {
   plannedQty      Float    // Số lượng HĐ (kg)
   unitPrice       Float    // Đơn giá (USD/kg)
   sellingCostRate Float?   // Hệ số CP bán hàng (VD: 0.08 = 8%)
+  deliveredQty    Float    @default(0)  // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
   deliveryDate    DateTime? @db.Date  // deadline riêng nếu khác HĐ
   allocatedQty    Float    @default(0) // cached, cập nhật tự động
   note            String?

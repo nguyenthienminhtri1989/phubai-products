@@ -35,6 +35,7 @@ interface SalesOrderItem {
   plannedQty: number;
   unitPrice: number;
   sellingCostRate: number | null;
+  deliveredQty: number;
   note: string | null;
 }
 interface SalesOrder {
@@ -54,9 +55,9 @@ interface SalesOrder {
 }
 
 const STATUS_TAG: Record<string, { color: string; label: string }> = {
-  ACTIVE:    { color: "green",   label: "Đang SX" },
-  DONE:      { color: "blue",    label: "Hoàn thành" },
-  OVERDUE:   { color: "red",     label: "Quá hạn" },
+  ACTIVE: { color: "green", label: "Đang SX" },
+  DONE: { color: "blue", label: "Hoàn thành" },
+  OVERDUE: { color: "red", label: "Quá hạn" },
   CANCELLED: { color: "default", label: "Đã huỷ" },
 };
 
@@ -116,6 +117,7 @@ export default function SalesOrdersPage() {
         plannedQty: it.plannedQty,
         unitPrice: it.unitPrice,
         sellingCostRate: it.sellingCostRate != null ? it.sellingCostRate * 100 : null,
+        deliveredQty: it.deliveredQty ?? 0,
         note: it.note,
       })),
     });
@@ -242,6 +244,7 @@ export default function SalesOrdersPage() {
         render: (_: unknown, r: SalesOrderItem) =>
           r.sellingCostRate != null ? `${(r.sellingCostRate * 100).toFixed(0)}%` : "-",
       },
+      { title: "Đã giao trước (kg)", dataIndex: "deliveredQty", key: "deliveredQty" },
       { title: "Ghi chú", dataIndex: "note", key: "note", render: (v: string | null) => v || "-" },
     ];
     return (
@@ -291,7 +294,7 @@ export default function SalesOrdersPage() {
         confirmLoading={saving}
         okText="Lưu"
         cancelText="Hủy"
-        width={800}
+        width={1000}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Space style={{ width: "100%", display: "flex" }} size="middle">
@@ -333,54 +336,67 @@ export default function SalesOrdersPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
 
-            <>
-              <Title level={5}>Chi tiết sợi trong HĐ</Title>
-              <Form.List name="items">
-                {(fields, { add, remove }) => (
-                  <>
-                    {fields.map(({ key, name, ...restField }) => (
-                      <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
-                        <Form.Item {...restField} name={[name, "itemId"]} rules={[{ required: true, message: "Chọn loại sợi" }]}>
-                          <Select
-                            options={items.map((i) => ({ label: i.name, value: i.id }))}
-                            showSearch
-                            optionFilterProp="label"
-                            placeholder="Loại sợi"
-                            style={{ width: 220 }}
-                          />
-                        </Form.Item>
-                        <Form.Item {...restField} name={[name, "plannedQty"]} rules={[{ required: true }]}>
-                          <InputNumber placeholder="SL (kg)" min={0} style={{ width: 120 }} />
-                        </Form.Item>
-                        <Form.Item {...restField} name={[name, "unitPrice"]} rules={[{ required: true }]}>
-                          <InputNumber placeholder="Giá (USD/kg)" min={0} step={0.01} style={{ width: 130 }} />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "sellingCostRate"]}
-                          rules={[{ required: true, message: "Nhập %" }]}
-                        >
-                          <InputNumber
-                            placeholder="CP BH (%)"
-                            min={0}
-                            max={100}
-                            step={1}
-                            style={{ width: 110 }}
-                          />
-                        </Form.Item>
-                        <Form.Item {...restField} name={[name, "note"]}>
-                          <Input placeholder="Ghi chú" style={{ width: 150 }} />
-                        </Form.Item>
-                        <Button danger onClick={() => remove(name)}>Xóa</Button>
-                      </Space>
-                    ))}
-                    <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
-                      Thêm loại sợi
-                    </Button>
-                  </>
-                )}
-              </Form.List>
-            </>
+          <>
+            <Title level={5}>Chi tiết sợi trong HĐ</Title>
+            <Form.List name="items">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
+                      <Form.Item {...restField} name={[name, "itemId"]} rules={[{ required: true, message: "Chọn loại sợi" }]}>
+                        <Select
+                          options={items.map((i) => ({ label: i.name, value: i.id }))}
+                          showSearch
+                          optionFilterProp="label"
+                          placeholder="Loại sợi"
+                          style={{ width: 220 }}
+                        />
+                      </Form.Item>
+                      <Form.Item {...restField} name={[name, "plannedQty"]} rules={[{ required: true }]}>
+                        <InputNumber placeholder="SL (kg)" min={0} style={{ width: 120 }} />
+                      </Form.Item>
+                      <Form.Item {...restField} name={[name, "unitPrice"]} rules={[{ required: true }]}>
+                        <InputNumber placeholder="Giá (USD/kg)" min={0} step={0.01} style={{ width: 130 }} />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "sellingCostRate"]}
+                        rules={[{ required: true, message: "Nhập %" }]}
+                      >
+                        <InputNumber
+                          placeholder="CP BH (%)"
+                          min={0}
+                          max={100}
+                          step={1}
+                          style={{ width: 110 }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "deliveredQty"]}
+                        tooltip="Chỉ nhập khi HĐ cũ đã giao 1 phần trước khi dùng phần mềm. HĐ mới để 0."
+                        initialValue={0}
+                      >
+                        <InputNumber
+                          min={0}
+                          step={100}
+                          placeholder="Đã giao (kg)"
+                          style={{ width: 130 }}
+                        />
+                      </Form.Item>
+                      <Form.Item {...restField} name={[name, "note"]}>
+                        <Input placeholder="Ghi chú" style={{ width: 130 }} />
+                      </Form.Item>
+                      <Button danger onClick={() => remove(name)}>Xóa</Button>
+                    </Space>
+                  ))}
+                  <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
+                    Thêm loại sợi
+                  </Button>
+                </>
+              )}
+            </Form.List>
+          </>
         </Form>
       </Modal>
     </div>

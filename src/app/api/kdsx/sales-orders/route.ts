@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     );
 
     const totalQty = order.items.reduce((s, i) => s + i.plannedQty, 0);
-    const totalAllocated = order.items.reduce((s, i) => s + i.allocatedQty, 0);
+    const totalAllocated = order.items.reduce((s, i) => s + (i.deliveredQty ?? 0) + i.allocatedQty, 0);
     const overallProgressPct = Math.min(
       100,
       totalQty > 0 ? Math.round((totalAllocated / totalQty) * 1000) / 10 : 0,
@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
             plannedQty: Number(it.plannedQty),
             unitPrice: Number(it.unitPrice),
             sellingCostRate: it.sellingCostRate ?? null,
+            deliveredQty: it.deliveredQty ?? 0,
             note: it.note || null,
           })),
         },
