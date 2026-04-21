@@ -7,17 +7,17 @@ export interface CalcInput {
   qty: number; // kg
   unitPriceUsd: number; // USD/kg
   rates: {
-    cottonRate?: number; // kg cotton / kg TP
-    peRate?: number; // kg PE / kg TP
-    wasteRate?: number; // tỷ lệ phế (0-1)
-    sellingCostRate?: number; // USD/kg
-    doubleTwistGcRate?: number; // USD/kg
+    cottonRate?: number; // ĐM tiêu hao cotton (kg NL/kg TP) — từ RawMaterialRate
+    peRate?: number; // ĐM tiêu hao PE (kg NL/kg TP) — giá trị GỐC, từ RawMaterialRate
+    cottonRatio?: number; // Tỷ lệ cotton (0-1) — từ RawMaterialRate hoặc snapshot
+    wasteRate?: number; // Tỷ lệ phế (0-1) — từ RawMaterialRate
+    sellingCostRate?: number; // USD/kg — từ SalesOrderItem
+    doubleTwistGcRate?: number; // USD/kg — từ RawMaterialRate
   };
   params: {
-    exchangeRate: number; // VNĐ/USD
-    avgCottonPrice: number; // USD/kg bông bình quân
-    peBenmaPrice?: number; // USD/kg PE Benma
-    wastePrice?: number; // VNĐ/kg phế liệu
+    exchangeRate: number; // Tỷ giá VNĐ/USD — từ MonthlyInputParam
+    cottonPriceUsd: number; // Giá bông đã chọn (USD/kg) — từ MaterialPrice hoặc snapshot
+    pePriceUsd?: number; // Giá PE đã chọn (USD/kg) — từ MaterialPrice hoặc snapshot
   };
 }
 
@@ -33,27 +33,34 @@ export interface CalcOutput {
 
 export function calculateLineItem(input: CalcInput): CalcOutput {
   const { qty, unitPriceUsd, rates, params } = input;
-  const {
-    exchangeRate,
-    avgCottonPrice,
-    peBenmaPrice = 0,
-    wastePrice = 0,
-  } = params;
+  const { exchangeRate, cottonPriceUsd, pePriceUsd = 0 } = params;
   const {
     cottonRate = 0,
     peRate = 0,
+    cottonRatio = 1.0, // mặc định 100% cotton
     wasteRate = 0,
     sellingCostRate = 0,
     doubleTwistGcRate = 0,
   } = rates;
 
+  const peRatio = 1 - cottonRatio; // tự tính, không lưu DB
+
   const revenueVnd = qty * unitPriceUsd * exchangeRate;
-  const cottonCostVnd = qty * cottonRate * avgCottonPrice * exchangeRate;
-  const peCostVnd = qty * peRate * peBenmaPrice * exchangeRate;
+
+  // CP Cotton = tỷ giá × sản lượng × giá bông × định mức × tỷ lệ cotton
+  const cottonCostVnd =
+    exchangeRate * qty * cottonPriceUsd * cottonRate * cottonRatio;
+
+  // CP PE = tỷ giá × sản lượng × giá PE × định mức PE (GỐC) × tỷ lệ PE
+  const peCostVnd =
+    peRatio > 0 ? exchangeRate * qty * pePriceUsd * peRate * peRatio : 0;
+
   const sellingCostVnd = qty * sellingCostRate * exchangeRate;
   const gcDoubleTwistVnd = qty * doubleTwistGcRate * exchangeRate;
-  // wastePrice đã là VNĐ/kg; nhân 0.95 theo Excel (hệ số thu hồi thực tế)
+
+  // Phế thu hồi × 0.95 (hệ số thu hồi thực tế)
   const wasteRecoveryVnd = qty * wasteRate * exchangeRate * 0.95;
+
   const grossProfitVnd =
     revenueVnd -
     cottonCostVnd -

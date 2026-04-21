@@ -1882,3 +1882,131 @@ src/lib/allocation-engine.ts                              ← Cập nhật công
 - Hệ thống Allocation Engine (`runAllocation` và `runAllocationKD`) được update để lấy `deliveredQty` khi tính toán stillNeeded.
 - `checkAllItemsDone` sử dụng `(allocatedQty + deliveredQty) >= plannedQty`.
 - UI `progressPct` được điều chỉnh dựa trên `totalDelivered = allocatedQty + deliveredQty`.
+
+---
+
+## MATERIAL PRICE MANAGEMENT — Quản lý Giá Nguyên vật liệu Động
+
+**Status:** ✅ Completed 2026-04-21
+
+### What was built
+
+Hệ thống quản lý giá NVL động (database-driven) thay thế các trường giá hard-code trong `MonthlyInputParam`. Cho phép nhập giá bông/PE theo tháng, lưu snapshot giá vào từng `PlanLineItem`/`ActualLineItem` để bảo toàn lịch sử.
+
+### Schema changes
+
+```prisma
+// Mới: Danh mục loại NVL
+model MaterialType {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique  // "AUS", "US_PVC", "PE_BENMA"...
+  name     String           // "Bông Úc", "PE Benma (Indo)"...
+  category String           // "COTTON" hoặc "PE"
+  isActive Boolean @default(true)
+  prices   MaterialPrice[]
+}
+
+// Mới: Giá NVL theo tháng
+model MaterialPrice {
+  id             Int          @id @default(autoincrement())
+  materialTypeId Int
+  materialType   MaterialType
+  yearMonth      String       // "2026-04"
+  priceUsd       Float        // USD/kg
+  @@unique([materialTypeId, yearMonth])
+}
+
+// Cập nhật: RawMaterialRate — thêm cottonRatio
+model RawMaterialRate {
+  // ... fields cũ ...
+  cottonRatio Float @default(1.0)  // Tỷ lệ cotton (0-1), peRatio = 1 - cottonRatio
+  // peRate = giá trị GỐC (kg NL/kg TP), code tự nhân peRatio khi tính
+}
+
+// Cập nhật: PlanLineItem/ActualLineItem — thêm snapshot NVL
+// cottonMaterialTypeId, cottonPriceUsd, cottonRatio
+// peMaterialTypeId, pePriceUsd, peRatio
+```
+
+### Business logic changes
+
+```typescript
+// Công thức mới trong calculateLineItem()
+// CP Cotton = tỷ giá × qty × cottonPriceUsd × cottonRate × cottonRatio
+const cottonCostVnd =
+  exchangeRate * qty * cottonPriceUsd * cottonRate * cottonRatio;
+
+// CP PE = tỷ giá × qty × pePriceUsd × peRate(GỐC) × peRatio
+const peRatio = 1 - cottonRatio;
+const peCostVnd =
+  peRatio > 0 ? exchangeRate * qty * pePriceUsd * peRate * peRatio : 0;
+
+// CalcInput.params mới:
+// cottonPriceUsd: number  (thay avgCottonPrice)
+// pePriceUsd?: number     (thay peBenmaPrice)
+// REMOVED: wastePrice (đã dùng exchangeRate × 0.95 đúng công thức)
+```
+
+### Key principles
+
+1. **Snapshot giá bất biến:** Khi tạo `PlanLineItem`, lưu `cottonPriceUsd`, `pePriceUsd`, `cottonRatio` vào đó. `recalculate` chỉ tính lại số tiền, KHÔNG tra cứu lại giá mới — giữ nguyên snapshot.
+2. **Fallback cho actuals sync:** Nếu không có kế hoạch tương ứng, lấy giá NVL đầu tiên từ `MaterialPrice` tháng đó theo category.
+3. **cottonRatio trong RawMaterialRate:** Nhập 1 lần khi tạo định mức. Ví dụ: sợi CVCM = 0.6 (60% cotton, 40% PE).
+4. **peRate là giá trị GỐC:** Nhập kg NL/kg TP không tính tỷ lệ. Code tự nhân peRatio khi tính chi phí.
+5. **MonthlyInputParam đơn giản hóa:** Chỉ còn `exchangeRate` và `note`. Các trường giá cũ (`avgCottonPrice`, `peBenmaPrice`, `wastePrice`...) giữ lại trong DB (nullable) nhưng không còn dùng trong tính toán mới.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                          ← Thêm MaterialType, MaterialPrice; cottonRatio vào RawMaterialRate; snapshot fields vào PlanLineItem/ActualLineItem
+prisma/migrations/20260421_add_material_type_and_price_system/ ← Migration tự động
+scripts/seed-material-types.ts                               ← Seed 10 loại NVL mẫu
+src/lib/kdsx/calculator.ts                                   ← CalcInput interface và calculateLineItem() dùng cottonPriceUsd/pePriceUsd/cottonRatio
+src/app/api/kdsx/material-types/route.ts                     ← GET list, POST tạo mới (ADMIN only)
+src/app/api/kdsx/material-types/[id]/route.ts                ← PUT sửa, DELETE (chỉ khi chưa có giá)
+src/app/api/kdsx/material-prices/route.ts                    ← GET list (filter yearMonth/category), POST upsert giá
+src/app/api/kdsx/material-prices/by-month/route.ts           ← GET tất cả loại NVL + giá tháng, grouped by COTTON/PE
+src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts      ← POST: nhận cottonMaterialTypeId/cottonPriceUsd/peMaterialTypeId/pePriceUsd
+src/app/api/kdsx/monthly-plans/[id]/line-items/[lineItemId]/route.ts ← PUT: cập nhật snapshot NVL nếu body gửi lên
+src/app/api/kdsx/monthly-plans/[id]/recalculate/route.ts     ← POST: dùng snapshot cottonPriceUsd/pePriceUsd trong lineItem
+src/app/api/kdsx/monthly-actuals/[id]/sync/route.ts          ← Tra cứu PlanLineItem cùng tháng để lấy snapshot giá; fallback lấy giá đầu từ MaterialPrice
+src/app/api/kdsx/raw-material-rates/route.ts                 ← POST: nhận cottonRatio
+src/app/api/kdsx/raw-material-rates/[id]/route.ts            ← PUT: nhận cottonRatio
+src/app/kdsx/material-types/page.tsx                         ← Trang CRUD danh mục NVL
+src/app/kdsx/material-prices/page.tsx                        ← Trang nhập/xem giá NVL theo tháng
+src/app/kdsx/raw-material-rates/page.tsx                     ← Thêm cột/field cottonRatio (hiển thị "60% cotton/40% PE")
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx          ← Modal thông số tháng đơn giản hóa; modal dòng sợi thêm dropdown chọn loại bông/PE
+src/components/AdminLayout.tsx                               ← Thêm 2 menu mới: Danh mục NVL + Giá NVL theo tháng
+prisma/fix-data.js                                           ← Thêm page registry entries cho material-types và material-prices
+```
+
+### API endpoints mới
+
+| Method | Path                                          | Description                                       |
+| ------ | --------------------------------------------- | ------------------------------------------------- |
+| GET    | /api/kdsx/material-types                      | Danh sách loại NVL (filter: category, isActive)   |
+| POST   | /api/kdsx/material-types                      | Tạo mới (ADMIN only)                              |
+| PUT    | /api/kdsx/material-types/[id]                 | Sửa name/note/isActive                            |
+| DELETE | /api/kdsx/material-types/[id]                 | Xóa (chỉ khi chưa có giá)                         |
+| GET    | /api/kdsx/material-prices                     | Giá NVL (filter: yearMonth, category)             |
+| POST   | /api/kdsx/material-prices                     | Upsert giá theo unique(materialTypeId, yearMonth) |
+| GET    | /api/kdsx/material-prices/by-month?yearMonth= | Tất cả loại NVL + giá tháng, grouped COTTON/PE    |
+
+### Seed data (10 loại NVL mẫu)
+
+| Code        | Tên                 | Category |
+| ----------- | ------------------- | -------- |
+| AUS         | Bông Úc (Australia) | COTTON   |
+| US_PVC      | Bông Mỹ PVC         | COTTON   |
+| BRA         | Bông Brazil         | COTTON   |
+| WEST_AFRICA | Bông Tây Phi        | COTTON   |
+| PIMA        | Bông Pima           | COTTON   |
+| SUPIMA      | Bông Supima         | COTTON   |
+| CMIA        | Bông CMIA           | COTTON   |
+| PE_BENMA    | PE Benma (Indo)     | PE       |
+| PE_THAI     | PE Thái Lan         | PE       |
+| VISCOSE     | Xơ Viscose          | PE       |
+
+---
+
+_Cập nhật lần cuối: 2026-04-21 — Thêm Material Price Management System_

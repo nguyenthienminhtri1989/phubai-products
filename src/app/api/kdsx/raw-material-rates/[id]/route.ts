@@ -18,6 +18,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { id: Number(id) },
     data: {
       cottonRate: body.cottonRate ?? null,
+      cottonRatio: body.cottonRatio != null ? Number(body.cottonRatio) : undefined,
       peRate: body.peRate ?? null,
       wasteRate: body.wasteRate ?? null,
       doubleTwistGcRate: body.doubleTwistGcRate ?? null,

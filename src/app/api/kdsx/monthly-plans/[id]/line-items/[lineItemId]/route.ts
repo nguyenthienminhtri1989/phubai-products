@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateLineItem, refreshSummarySnapshot } from "@/lib/kdsx/calculator";
+import {
+  calculateLineItem,
+  refreshSummarySnapshot,
+} from "@/lib/kdsx/calculator";
 import { SnapshotType } from "@prisma/client";
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; lineItemId: string }> }
+  { params }: { params: Promise<{ id: string; lineItemId: string }> },
 ) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
@@ -19,16 +23,35 @@ export async function PUT(
   const { id, lineItemId } = await params;
   const planId = Number(id);
   const plan = await prisma.monthlyPlan.findUnique({ where: { id: planId } });
-  if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+  if (!plan)
+    return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 
   const body = await req.json();
-  const { itemId, salesOrderItemId, qty, unitPriceUsd, note } = body;
+  const {
+    itemId,
+    salesOrderItemId,
+    qty,
+    unitPriceUsd,
+    note,
+    cottonMaterialTypeId,
+    cottonPriceUsd,
+    peMaterialTypeId,
+    pePriceUsd,
+  } = body;
 
   const inputParam = await prisma.monthlyInputParam.findUnique({
-    where: { factoryId_yearMonth: { factoryId: plan.factoryId, yearMonth: plan.yearMonth } },
+    where: {
+      factoryId_yearMonth: {
+        factoryId: plan.factoryId,
+        yearMonth: plan.yearMonth,
+      },
+    },
   });
   if (!inputParam) {
-    return NextResponse.json({ error: "Chưa có thông số tháng" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Chưa có thông số tháng" },
+      { status: 400 },
+    );
   }
 
   const rate = await prisma.rawMaterialRate.findFirst({
@@ -47,21 +70,36 @@ export async function PUT(
     sellingCostRate = body.sellingCostRate ?? 0;
   }
 
+  // Snapshot giá NVL: dùng từ body nếu có, ngược lại giữ nguyên snapshot cũ
+  const existingLi = await prisma.planLineItem.findUnique({
+    where: { id: Number(lineItemId) },
+  });
+  const cottonPrice =
+    cottonPriceUsd !== undefined
+      ? Number(cottonPriceUsd)
+      : (existingLi?.cottonPriceUsd ?? 0);
+  const pePrice =
+    pePriceUsd !== undefined
+      ? Number(pePriceUsd)
+      : (existingLi?.pePriceUsd ?? 0);
+  const cottonRatioValue = rate?.cottonRatio ?? existingLi?.cottonRatio ?? 1.0;
+  const peRatioValue = cottonRatioValue < 1.0 ? 1 - cottonRatioValue : 0;
+
   const calcResult = calculateLineItem({
     qty: Number(qty),
     unitPriceUsd: Number(unitPriceUsd),
     rates: {
       cottonRate: rate?.cottonRate ?? 0,
       peRate: rate?.peRate ?? 0,
+      cottonRatio: cottonRatioValue,
       wasteRate: rate?.wasteRate ?? 0,
       sellingCostRate,
       doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
     },
     params: {
       exchangeRate: inputParam.exchangeRate,
-      avgCottonPrice: inputParam.avgCottonPrice ?? 0,
-      peBenmaPrice: inputParam.peBenmaPrice ?? 0,
-      wastePrice: inputParam.wastePrice ?? 0,
+      cottonPriceUsd: cottonPrice,
+      pePriceUsd: pePrice,
     },
   });
 
@@ -72,12 +110,37 @@ export async function PUT(
       salesOrderItemId: salesOrderItemId ? Number(salesOrderItemId) : null,
       qty: Number(qty),
       unitPriceUsd: Number(unitPriceUsd),
+      // Cập nhật snapshot giá NVL nếu body gửi lên
+      ...(cottonMaterialTypeId !== undefined
+        ? {
+            cottonMaterialTypeId: cottonMaterialTypeId
+              ? Number(cottonMaterialTypeId)
+              : null,
+          }
+        : {}),
+      ...(cottonPriceUsd !== undefined
+        ? { cottonPriceUsd: cottonPrice || null }
+        : {}),
+      ...(cottonRatioValue !== undefined
+        ? { cottonRatio: cottonRatioValue }
+        : {}),
+      ...(peMaterialTypeId !== undefined
+        ? {
+            peMaterialTypeId: peMaterialTypeId
+              ? Number(peMaterialTypeId)
+              : null,
+          }
+        : {}),
+      ...(pePriceUsd !== undefined ? { pePriceUsd: pePrice || null } : {}),
+      ...(peRatioValue !== undefined ? { peRatio: peRatioValue || null } : {}),
       note: note || null,
       ...calcResult,
     },
     include: {
       item: { select: { id: true, name: true, code: true } },
-      salesOrderItem: { include: { order: { select: { id: true, orderNo: true } } } },
+      salesOrderItem: {
+        include: { order: { select: { id: true, orderNo: true } } },
+      },
     },
   });
 
@@ -88,10 +151,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; lineItemId: string }> }
+  { params }: { params: Promise<{ id: string; lineItemId: string }> },
 ) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
@@ -101,7 +165,8 @@ export async function DELETE(
   const { id, lineItemId } = await params;
   const planId = Number(id);
   const plan = await prisma.monthlyPlan.findUnique({ where: { id: planId } });
-  if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+  if (!plan)
+    return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 
   await prisma.planLineItem.delete({ where: { id: Number(lineItemId) } });
   await refreshSummarySnapshot(plan.factoryId, plan.yearMonth, SnapshotType.KH);

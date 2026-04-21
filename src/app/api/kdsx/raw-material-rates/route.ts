@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const itemId = searchParams.get("itemId");
@@ -21,7 +22,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
@@ -29,15 +31,29 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { itemId, cottonRate, peRate, wasteRate, doubleTwistGcRate, effectiveFrom, effectiveTo, note } = body;
+  const {
+    itemId,
+    cottonRate,
+    cottonRatio,
+    peRate,
+    wasteRate,
+    doubleTwistGcRate,
+    effectiveFrom,
+    effectiveTo,
+    note,
+  } = body;
   if (!itemId || !effectiveFrom) {
-    return NextResponse.json({ error: "Thiếu itemId hoặc effectiveFrom" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Thiếu itemId hoặc effectiveFrom" },
+      { status: 400 },
+    );
   }
 
   const rate = await prisma.rawMaterialRate.create({
     data: {
       itemId: Number(itemId),
       cottonRate: cottonRate ?? null,
+      cottonRatio: cottonRatio != null ? Number(cottonRatio) : 1.0,
       peRate: peRate ?? null,
       wasteRate: wasteRate ?? null,
       doubleTwistGcRate: doubleTwistGcRate ?? null,

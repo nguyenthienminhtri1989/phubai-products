@@ -13,14 +13,14 @@ datasource db {
 // ENUM: VAI TRÒ NGƯỜI DÙNG
 // ==========================================
 enum UserRole {
-  ADMIN            // Quản trị hệ thống — full quyền
-  DIRECTOR         // Tổng/Phó Tổng GĐ — xem tất cả, sửa trang được gán
-  FACTORY_MANAGER  // Giám đốc Nhà máy — xem/sửa NM mình, xem NM khác
-  SALES            // Phòng Kinh doanh
-  PROCESS_LEAD     // Trưởng công đoạn
-  STATISTICIAN     // Người thống kê (nhập liệu sản lượng, điện năng)
-  TEAM_LEAD        // Tổ trưởng — nhập liệu + xem CĐ mình
-  VIEWER           // Chỉ xem — mặc định cho user mới
+  ADMIN // Quản trị hệ thống — full quyền
+  DIRECTOR // Tổng/Phó Tổng GĐ — xem tất cả, sửa trang được gán
+  FACTORY_MANAGER // Giám đốc Nhà máy — xem/sửa NM mình, xem NM khác
+  SALES // Phòng Kinh doanh
+  PROCESS_LEAD // Trưởng công đoạn
+  STATISTICIAN // Người thống kê (nhập liệu sản lượng, điện năng)
+  TEAM_LEAD // Tổ trưởng — nhập liệu + xem CĐ mình
+  VIEWER // Chỉ xem — mặc định cho user mới
 }
 
 // ==========================================
@@ -233,7 +233,7 @@ model User {
   fullName String
 
   // --- PHÂN QUYỀN MỚI ---
-  userRole  UserRole @default(VIEWER) // Vai trò chính của user
+  userRole UserRole @default(VIEWER) // Vai trò chính của user
 
   // Gán nhà máy (cho FACTORY_MANAGER, STATISTICIAN, TEAM_LEAD)
   factoryId Int?
@@ -243,7 +243,7 @@ model User {
   isActive Boolean @default(false) // false: Chờ duyệt, true: Được dùng
 
   // --- PHẠM VI CÔNG VIỆC ---
-  userProcesses   UserProcess[]    // User thuộc các công đoạn nào?
+  userProcesses   UserProcess[] // User thuộc các công đoạn nào?
   pagePermissions PagePermission[] // Quyền xem/sửa từng trang
 
   createdLogs   ProductionLog[] // Quan hệ: Ai nhập dòng này?
@@ -304,7 +304,6 @@ model MaintenanceTask {
 //   ...
 //   maintenanceTasks MaintenanceTask[]
 // }
-
 
 // ==========================================
 // BẢNG NHẬT KÝ BẢO DƯỠNG (Maintenance History)
@@ -454,7 +453,6 @@ model PowerRecord {
   @@map("power_records")
 }
 
-
 // ==========================================
 // MODULE SO DO LINE SAN XUAT (Production Line Routing)
 // ==========================================
@@ -582,8 +580,8 @@ model MachineStopLog {
 
 // Định dạng file mà nguồn IoT xuất ra
 enum IotFileFormat {
-  STANDARD   // File XLS/XLSX thông thường: có cột Ngày, Ca, Máy, Mặt hàng, Sản lượng
-  DANH_ONG   // File HTML-as-XLS của máy đánh ống: ngày+ca trong <div>, cột A=Lô, B=Số máy, M=PRKG
+  STANDARD // File XLS/XLSX thông thường: có cột Ngày, Ca, Máy, Mặt hàng, Sản lượng
+  DANH_ONG // File HTML-as-XLS của máy đánh ống: ngày+ca trong <div>, cột A=Lô, B=Số máy, M=PRKG
 }
 
 // Nguồn IoT — mỗi phần mềm IoT là 1 source
@@ -599,8 +597,8 @@ model IotSource {
   // VD: ["Dao soi", "Dao", "TEST"]
   skipItems   Json          @default("[]")
   isActive    Boolean       @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   machineMaps IotMachineMap[]
   itemMaps    IotItemMap[]
@@ -714,7 +712,7 @@ model MeterGroupCategory {
 // --- Enums ---
 
 enum BenchmarkType {
-  THEORY    // Định mức lý thuyết — tính từ công thức vật lý
+  THEORY // Định mức lý thuyết — tính từ công thức vật lý
   EMPIRICAL // Định mức thực nghiệm — nhập tay từ kinh nghiệm
 }
 
@@ -725,20 +723,20 @@ enum PlanStatus {
 }
 
 enum FixedCostType {
-  TIEN_LUONG           // Chi phí tiền lương
-  TRICH_TRUOC_LUONG    // Trích trước tiền lương
-  TIEN_AN_CA           // Tiền ăn ca
-  BHXH_YT_TN_KPCD     // BHXH, YT, TN, KPCĐ
-  TIEN_DIEN            // Tiền điện
-  KHAU_HAO             // Khấu hao
-  ONG_CONE_BAO_PP      // Ống cone, thùng CT, bao PP...
-  CHI_PHI_VAT_LIEU     // CP vật liệu + CP khác
-  CHI_PHI_QUAN_LY      // CP quản lý doanh nghiệp
-  LAI_VAY_VCD          // Lãi vay vốn cố định
-  LAI_VAY_VLD          // Lãi vay vốn lưu động
+  TIEN_LUONG // Chi phí tiền lương
+  TRICH_TRUOC_LUONG // Trích trước tiền lương
+  TIEN_AN_CA // Tiền ăn ca
+  BHXH_YT_TN_KPCD // BHXH, YT, TN, KPCĐ
+  TIEN_DIEN // Tiền điện
+  KHAU_HAO // Khấu hao
+  ONG_CONE_BAO_PP // Ống cone, thùng CT, bao PP...
+  CHI_PHI_VAT_LIEU // CP vật liệu + CP khác
+  CHI_PHI_QUAN_LY // CP quản lý doanh nghiệp
+  LAI_VAY_VCD // Lãi vay vốn cố định
+  LAI_VAY_VLD // Lãi vay vốn lưu động
   LO_CHENH_LECH_TY_GIA // Lỗ chênh lệch tỷ giá
-  DOANH_THU_HDTC       // Doanh thu hoạt động tài chính (cộng vào lợi nhuận)
-  KHAC                 // Khác
+  DOANH_THU_HDTC // Doanh thu hoạt động tài chính (cộng vào lợi nhuận)
+  KHAC // Khác
 }
 
 enum SnapshotType {
@@ -748,7 +746,7 @@ enum SnapshotType {
 
 enum CustomerType {
   DOMESTIC // Khách hàng trong nước
-  FOREIGN  // Khách hàng nước ngoài
+  FOREIGN // Khách hàng nước ngoài
 }
 
 enum OrderStatus {
@@ -763,12 +761,12 @@ enum OrderStatus {
 // 1. Danh mục khách hàng
 model Customer {
   id           Int          @id @default(autoincrement())
-  name         String       // Tên khách hàng
+  name         String // Tên khách hàng
   code         String?      @unique // Mã KH (nếu có)
-  address      String?      // Địa chỉ
-  phone        String?      // Số điện thoại
-  email        String?      // Email
-  taxCode      String?      // Mã số thuế
+  address      String? // Địa chỉ
+  phone        String? // Số điện thoại
+  email        String? // Email
+  taxCode      String? // Mã số thuế
   customerType CustomerType @default(DOMESTIC) // Trong nước / Nước ngoài
   note         String?
 
@@ -818,12 +816,12 @@ model SalesOrderItem {
   itemId Int
   item   Item @relation(fields: [itemId], references: [id])
 
-  plannedQty      Float    // Số lượng HĐ (kg)
-  unitPrice       Float    // Đơn giá (USD/kg)
-  sellingCostRate Float?   // Hệ số CP bán hàng (VD: 0.08 = 8%)
-  deliveredQty    Float    @default(0)  // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
-  deliveryDate    DateTime? @db.Date  // deadline riêng nếu khác HĐ
-  allocatedQty    Float    @default(0) // cached, cập nhật tự động
+  plannedQty      Float // Số lượng HĐ (kg)
+  unitPrice       Float // Đơn giá (USD/kg)
+  sellingCostRate Float? // Hệ số CP bán hàng (VD: 0.08 = 8%)
+  deliveredQty    Float     @default(0) // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
+  deliveryDate    DateTime? @db.Date // deadline riêng nếu khác HĐ
+  allocatedQty    Float     @default(0) // cached, cập nhật tự động
   note            String?
 
   planLineItems   PlanLineItem[]
@@ -891,8 +889,12 @@ model RawMaterialRate {
   // Định mức Cotton (kg NVL / kg thành phẩm)
   cottonRate Float?
 
-  // Định mức PE (kg NVL / kg TP) — chỉ cho sợi CVCM/CRC
+  // Định mức PE (kg NVL / kg TP) — giá trị GỐC (VD: 1.02), code tự nhân peRatio khi tính
   peRate Float?
+
+  // Tỷ lệ cotton (0-1). VD: 1.0=100% cotton, 0.6=60% cotton
+  // peRatio = 1 - cottonRatio, không cần lưu
+  cottonRatio Float @default(1.0)
 
   // Tỷ lệ phế (0.0–1.0)
   wasteRate Float?
@@ -950,6 +952,14 @@ model PlanLineItem {
 
   qty          Float // Số lượng kế hoạch (kg)
   unitPriceUsd Float // Đơn giá (USD/kg)
+
+  // Snapshot loại NVL + giá tại thời điểm tạo — KHÔNG thay đổi dù giá tháng sau đổi
+  cottonMaterialTypeId Int? // Loại bông đã chọn (FK → MaterialType)
+  cottonPriceUsd       Float? // Snapshot giá bông (USD/kg) lúc tạo
+  cottonRatio          Float? // Snapshot tỷ lệ cotton (0-1)
+  peMaterialTypeId     Int? // Loại PE đã chọn (null nếu 100% cotton)
+  pePriceUsd           Float? // Snapshot giá PE (USD/kg) lúc tạo
+  peRatio              Float? // Snapshot tỷ lệ PE (= 1 - cottonRatio)
 
   // Snapshot giá trị tính toán tại thời điểm tạo — KHÔNG tính lại on-the-fly
   revenueVnd       Float? // Doanh thu (VNĐ)
@@ -1022,6 +1032,14 @@ model ActualLineItem {
   qty          Float // Sản lượng thực (kg) — tổng hợp từ ProductionLog
   unitPriceUsd Float // Đơn giá thực tế (USD/kg)
 
+  // Snapshot loại NVL + giá tại thời điểm sync
+  cottonMaterialTypeId Int?
+  cottonPriceUsd       Float?
+  cottonRatio          Float?
+  peMaterialTypeId     Int?
+  pePriceUsd           Float?
+  peRatio              Float?
+
   // Snapshot giá trị tính toán tại thời điểm tạo
   revenueVnd       Float?
   cottonCostVnd    Float?
@@ -1045,19 +1063,19 @@ model ActualLineItem {
 // Phiên bản định mức — mỗi lần kỹ thuật cập nhật tạo 1 version mới
 model BenchmarkVersion {
   id            Int       @id @default(autoincrement())
-  versionName   String    // "v1.0 - 2026", "v1.1 - Sau cải tiến tháng 3"
+  versionName   String // "v1.0 - 2026", "v1.1 - Sau cải tiến tháng 3"
   factoryId     Int
   factory       Factory   @relation(fields: [factoryId], references: [id])
   effectiveFrom DateTime  @db.Date
-  effectiveTo   DateTime? @db.Date  // null = đang hiệu lực
-  approvedBy    String?   // tên người duyệt
-  note          String?   // lý do cập nhật
+  effectiveTo   DateTime? @db.Date // null = đang hiệu lực
+  approvedBy    String? // tên người duyệt
+  note          String? // lý do cập nhật
   isActive      Boolean   @default(true)
 
-  benchmarks    ProductivityBenchmark[]
+  benchmarks ProductivityBenchmark[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([factoryId])
   @@index([effectiveFrom])
@@ -1066,42 +1084,42 @@ model BenchmarkVersion {
 
 // Định mức từng mặt hàng trên từng công đoạn
 model ProductivityBenchmark {
-  id                Int              @id @default(autoincrement())
-  versionId         Int
-  version           BenchmarkVersion @relation(fields: [versionId], references: [id])
+  id        Int              @id @default(autoincrement())
+  versionId Int
+  version   BenchmarkVersion @relation(fields: [versionId], references: [id])
 
   // Liên kết với danh mục hiện có
-  itemId            Int
-  item              Item             @relation(fields: [itemId], references: [id])
-  processId         Int
-  process           Process          @relation(fields: [processId], references: [id])
+  itemId    Int
+  item      Item    @relation(fields: [itemId], references: [id])
+  processId Int
+  process   Process @relation(fields: [processId], references: [id])
 
   // Thông tin loại máy (không phải máy cụ thể — là loại máy trong công đoạn đó)
-  machineModel      String  // "G32", "Murata Qpro-EX", "Rieter RSB-D50"
-  speedUnit         String  // "rpm" (vòng/phút) hoặc "mpm" (m/phút)
+  machineModel String // "G32", "Murata Qpro-EX", "Rieter RSB-D50"
+  speedUnit    String // "rpm" (vòng/phút) hoặc "mpm" (m/phút)
 
   // Thông số kỹ thuật đầu vào
-  nm                Float   // chỉ số Nm
-  ne                Float   // chỉ số Ne
-  twist             Float?  // độ săn (x/m) — null với máy ghép/ống
-  speedValue        Float   // tốc độ (v/p hoặc m/p)
-  spindleOrHeadCount Int?   // số cọc (máy sợi con) hoặc số đầu ra (máy ghép)
+  nm                 Float // chỉ số Nm
+  ne                 Float // chỉ số Ne
+  twist              Float? // độ săn (x/m) — null với máy ghép/ống
+  speedValue         Float // tốc độ (v/p hoặc m/p)
+  spindleOrHeadCount Int? // số cọc (máy sợi con) hoặc số đầu ra (máy ghép)
 
   // Kết quả tính toán — lưu snapshot
-  theoreticalOutput Float   // NS lý thuyết (kg/ca) — tính từ công thức
-  efficiency        Float   // hiệu suất chuẩn (0.80 – 0.95)
-  stdOutputPerShift Float   // ĐỊNH MỨC = theoreticalOutput × efficiency (kg/ca/máy)
+  theoreticalOutput Float // NS lý thuyết (kg/ca) — tính từ công thức
+  efficiency        Float // hiệu suất chuẩn (0.80 – 0.95)
+  stdOutputPerShift Float // ĐỊNH MỨC = theoreticalOutput × efficiency (kg/ca/máy)
 
-  note              String? // ghi chú kỹ thuật
+  note String? // ghi chú kỹ thuật
 
   // --- THÊM MỚI: Định mức thực nghiệm (EMPIRICAL) ---
   // Strictly additive — không ảnh hưởng rows cũ (default THEORY)
-  benchmarkType         BenchmarkType @default(THEORY)  // loại định mức
-  empiricalOutputPerDay Float?        // kg/ngày (3 ca) — chỉ dùng khi EMPIRICAL
-  empiricalNote         String?       // nguồn số liệu thực nghiệm
+  benchmarkType         BenchmarkType @default(THEORY) // loại định mức
+  empiricalOutputPerDay Float? // kg/ngày (3 ca) — chỉ dùng khi EMPIRICAL
+  empiricalNote         String? // nguồn số liệu thực nghiệm
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([versionId, itemId, processId, machineModel])
   @@index([versionId])
@@ -1125,7 +1143,7 @@ model OrderAllocation {
   allocationDate   DateTime       @default(now())
 
   // Phân biệt nguồn allocation: "PRODUCTION" (công nhân) hoặc "KD" (phòng kinh doanh)
-  source           String         @default("PRODUCTION")
+  source String @default("PRODUCTION")
 
   @@index([salesOrderItemId])
   @@index([productionDate, factoryId, itemId])
@@ -1143,7 +1161,7 @@ model KdDailyInput {
   itemId      Int
   item        Item     @relation(fields: [itemId], references: [id])
   recordDate  DateTime @db.Date
-  outputKg    Float    // sản lượng cả ngày (3 ca gộp) — KD tự tổng hợp
+  outputKg    Float // sản lượng cả ngày (3 ca gộp) — KD tự tổng hợp
   note        String?
   createdById Int
   createdBy   User     @relation(fields: [createdById], references: [id])
@@ -1189,10 +1207,10 @@ model MonthlySummarySnapshot {
 // Danh mục các trang trong hệ thống — seed khi khởi tạo
 model PageRegistry {
   id        Int    @id @default(autoincrement())
-  pageKey   String @unique   // VD: "production.daily-input", "kdsx.plans"
-  pageName  String           // VD: "Nhập sản lượng", "Kế hoạch tháng"
-  pageGroup String           // VD: "SẢN XUẤT", "KINH DOANH", "ĐIỆN NĂNG"
-  path      String           // VD: "/production/daily-input"
+  pageKey   String @unique // VD: "production.daily-input", "kdsx.plans"
+  pageName  String // VD: "Nhập sản lượng", "Kế hoạch tháng"
+  pageGroup String // VD: "SẢN XUẤT", "KINH DOANH", "ĐIỆN NĂNG"
+  path      String // VD: "/production/daily-input"
   sortOrder Int    @default(0) // Thứ tự hiển thị trong bảng quản lý
 
   permissions PagePermission[]
@@ -1202,13 +1220,13 @@ model PageRegistry {
 
 // Bảng phân quyền: User <-> Page (nhiều-nhiều) với 2 cờ VIEW/EDIT
 model PagePermission {
-  id     Int  @id @default(autoincrement())
+  id     Int          @id @default(autoincrement())
   userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   pageId Int
   page   PageRegistry @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
-  canView Boolean @default(true)  // Được xem trang này?
+  canView Boolean @default(true) // Được xem trang này?
   canEdit Boolean @default(false) // Được chỉnh sửa trên trang này?
 
   @@unique([userId, pageId])
@@ -1222,10 +1240,10 @@ model PagePermission {
 
 // Bảng chính: 1 kế hoạch = 1 nhà máy × 1 tháng
 model ProductionSchedule {
-  id        Int     @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   factoryId Int
-  factory   Factory @relation(fields: [factoryId], references: [id])
-  yearMonth String  // "2026-04"
+  factory   Factory    @relation(fields: [factoryId], references: [id])
+  yearMonth String // "2026-04"
   status    PlanStatus @default(DRAFT) // tái dùng enum PlanStatus sẵn có
   note      String?
 
@@ -1259,13 +1277,13 @@ model ScheduleSegment {
   itemId Int
   item   Item @relation(fields: [itemId], references: [id])
 
-  fromDay  Int   // 1–31: ngày bắt đầu trong tháng
-  toDay    Int   // 1–31: ngày kết thúc (bao gồm)
+  fromDay  Int // 1–31: ngày bắt đầu trong tháng
+  toDay    Int // 1–31: ngày kết thúc (bao gồm)
   kgPerDay Float // Sản lượng kg/ngày (auto-fill từ empiricalOutputPerDay hoặc user sửa)
 
   // Lưu metadata để biết auto-fill từ đâu (optional, cho audit)
-  benchmarkId   Int?    // ProductivityBenchmark.id được dùng để auto-fill
-  isManualKg    Boolean @default(false) // true nếu user sửa kg/ngày khác với định mức
+  benchmarkId Int? // ProductivityBenchmark.id được dùng để auto-fill
+  isManualKg  Boolean @default(false) // true nếu user sửa kg/ngày khác với định mức
 
   note String?
 
@@ -1276,4 +1294,46 @@ model ScheduleSegment {
   @@index([machineId])
   @@index([itemId])
   @@map("schedule_segments")
+}
+
+// ==========================================
+// MODULE DANH MỤC NGUYÊN VẬT LIỆU
+// ==========================================
+
+// Danh mục loại nguyên vật liệu (bông, PE, viscose...)
+// Admin quản lý — thêm/sửa/xóa không cần sửa code
+model MaterialType {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique // "AUS", "US_PVC", "BRA", "PE_INDO"...
+  name     String // "Bông Úc", "Bông Mỹ PVC", "PE Benma Indo"...
+  category String // "COTTON" hoặc "PE" — phân loại để filter
+  isActive Boolean @default(true)
+  note     String?
+
+  prices MaterialPrice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("material_types")
+}
+
+// Giá nguyên vật liệu theo tháng
+// Kế toán nhập đầu mỗi tháng
+model MaterialPrice {
+  id             Int          @id @default(autoincrement())
+  materialTypeId Int
+  materialType   MaterialType @relation(fields: [materialTypeId], references: [id])
+  yearMonth      String // "2026-04"
+  priceUsd       Float // Giá USD/kg
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([materialTypeId, yearMonth])
+  @@index([materialTypeId])
+  @@index([yearMonth])
+  @@map("material_prices")
 }

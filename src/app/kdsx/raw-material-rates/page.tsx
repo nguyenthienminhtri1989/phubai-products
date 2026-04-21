@@ -52,6 +52,7 @@ interface RawMaterialRate {
   item: ItemInfo;
   cottonRate: number | null;
   peRate: number | null;
+  cottonRatio: number; // Tỷ lệ cotton (0-1), default 1.0
   wasteRate: number | null;
   doubleTwistGcRate: number | null;
   effectiveFrom: string;
@@ -204,7 +205,7 @@ export default function RawMaterialRatesPage() {
     setEditing(null);
     setSelectedItem(null);
     form.resetFields();
-    form.setFieldsValue({ effectiveFrom: dayjs() });
+    form.setFieldsValue({ effectiveFrom: dayjs(), cottonRatio: 100 });
     setModalOpen(true);
   }
 
@@ -214,6 +215,7 @@ export default function RawMaterialRatesPage() {
     form.setFieldsValue({
       itemId: r.itemId,
       cottonRate: r.cottonRate,
+      cottonRatio: Math.round(r.cottonRatio * 100),
       peRate: r.peRate,
       wasteRate: r.wasteRate,
       doubleTwistGcRate: r.doubleTwistGcRate,
@@ -235,6 +237,7 @@ export default function RawMaterialRatesPage() {
       const payload = {
         itemId: values.itemId,
         cottonRate: values.cottonRate ?? null,
+        cottonRatio: values.cottonRatio != null ? values.cottonRatio / 100 : 1.0,
         peRate: values.peRate ?? null,
         wasteRate: values.wasteRate ?? null,
         doubleTwistGcRate: values.doubleTwistGcRate ?? null,
@@ -323,8 +326,26 @@ export default function RawMaterialRatesPage() {
     },
     {
       title: (
-        <Tooltip title="PE/Benma — chỉ sợi CVCM">
-          ĐM PE/Benma <InfoCircleOutlined />
+        <Tooltip title="Tỷ lệ thành phần cotton (100% = thuần cotton, 60% = sợi pha 60/40)">
+          Tỷ lệ cotton <InfoCircleOutlined />
+        </Tooltip>
+      ),
+      key: "cottonRatio",
+      width: 130,
+      render: (_: unknown, r: RawMaterialRate) => {
+        const cr = r.cottonRatio ?? 1.0;
+        if (cr >= 1.0) return <Tag color="green">100% cotton</Tag>;
+        return (
+          <Tag color="orange">
+            {Math.round(cr * 100)}% cotton / {Math.round((1 - cr) * 100)}% PE
+          </Tag>
+        );
+      },
+    },
+    {
+      title: (
+        <Tooltip title="PE/Benma — giá trị GỐC (kg NL/kg TP), KHÔNG nhân tỷ lệ">
+          ĐM PE (gốc) <InfoCircleOutlined />
         </Tooltip>
       ),
       key: "peRate",
@@ -612,7 +633,7 @@ export default function RawMaterialRatesPage() {
                 name="peRate"
                 label={
                   <span>
-                    Định mức PE/Benma{" "}
+                    ĐM PE/Benma (kg NL/kg TP — giá trị GỐC){" "}
                     {!showPE && (
                       <Text type="secondary" style={{ fontSize: 11 }}>
                         (chỉ CVCM)
@@ -627,7 +648,34 @@ export default function RawMaterialRatesPage() {
                   precision={3}
                   min={0}
                   disabled={!showPE}
-                  placeholder={showPE ? "VD: 0.408" : "—"}
+                  placeholder={showPE ? "VD: 1.02 (giá trị gốc, KHÔNG nhân tỷ lệ)" : "—"}
+                />
+              </Form.Item>
+            </Col>
+
+            {/* Cotton Ratio */}
+            <Col span={12}>
+              <Form.Item
+                name="cottonRatio"
+                label={
+                  <Tooltip title="Tỷ lệ thành phần cotton trong sợi. 100% = thuần cotton. 60% = sợi CVCM (60% bông, 40% PE)">
+                    Tỷ lệ cotton (%) <InfoCircleOutlined />
+                  </Tooltip>
+                }
+                rules={[{ required: true, message: "Nhập tỷ lệ cotton" }]}
+              >
+                <InputNumber
+                  style={{ width: "100%" }}
+                  step={5}
+                  precision={0}
+                  min={1}
+                  max={100}
+                  formatter={(v) => v != null ? `${v}%` : ""}
+                  parser={(v) => {
+                    if (!v) return 100 as unknown as 100;
+                    return parseFloat(v.replace("%", "")) as unknown as 100;
+                  }}
+                  placeholder="VD: 100 (thuần cotton), 60 (CVCM)"
                 />
               </Form.Item>
             </Col>

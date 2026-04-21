@@ -126,6 +126,11 @@ export default function PlanDetailPage({
   const [saving, setSaving] = useState(false);
   const [hasParam, setHasParam] = useState(false);
 
+  // NVL state
+  const [cottonTypes, setCottonTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
+  const [peTypes, setPeTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
+
+
   // Submit checklist modal
   const [submitCheckModal, setSubmitCheckModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -188,7 +193,17 @@ export default function PlanDetailPage({
   useEffect(() => {
     fetchPlan();
     fetchItems();
-  }, [fetchPlan, fetchItems]);
+    // Load giá NVL theo tháng
+    fetch(`/api/kdsx/material-prices/by-month?yearMonth=${yearMonth}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setCottonTypes(data.cotton ?? []);
+          setPeTypes(data.pe ?? []);
+        }
+      });
+  }, [fetchPlan, fetchItems, yearMonth]);
+
 
   // Tính tổng
   const totalRevenue = plan?.lineItems.reduce((s, li) => s + (li.revenueVnd ?? 0), 0) ?? 0;
@@ -701,7 +716,7 @@ export default function PlanDetailPage({
         );
       })()}
 
-      {/* Modal thông số tháng */}
+      {/* Modal thông số tháng — đơn giản hóa */}
       <Modal
         title="Thông số đầu vào tháng"
         open={paramModal}
@@ -710,64 +725,45 @@ export default function PlanDetailPage({
         confirmLoading={saving}
         okText="Lưu"
         cancelText="Hủy"
-        width={700}
+        width={520}
       >
         <Form form={paramForm} layout="vertical" style={{ marginTop: 16 }}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="exchangeRate" label="Tỷ giá (VNĐ/USD)" rules={[{ required: true }]}>
-                <InputNumber min={0} style={{ width: "100%" }} placeholder="VD: 25000" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="avgCottonPrice" label="Giá bông BQ tính toán (USD/kg)">
-                <InputNumber min={0} step={0.001} style={{ width: "100%" }} placeholder="Tự động tính" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="cottonUsaPrice" label="Giá bông USA (USD/kg)">
-                <InputNumber min={0} step={0.001} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="cottonUsaRatio" label="Tỷ lệ bông USA (0-1)">
-                <InputNumber min={0} max={1} step={0.01} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="warehouseFee" label="Phí về kho (USD/kg)">
-                <InputNumber min={0} step={0.001} style={{ width: "100%" }} placeholder="0.02" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="cottonBrazilPrice" label="Giá bông Brazil (USD/kg)">
-                <InputNumber min={0} step={0.001} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="cottonBrazilRatio" label="Tỷ lệ bông Brazil (0-1)">
-                <InputNumber min={0} max={1} step={0.01} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="peBenmaPrice" label="Giá PE Benma (USD/kg)">
-                <InputNumber min={0} step={0.001} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="wastePrice" label="Giá phế liệu (VNĐ/kg)">
-                <InputNumber min={0} style={{ width: "100%" }} placeholder="VD: 3000" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item name="exchangeRate" label="Tỷ giá (VNĐ/USD)" rules={[{ required: true }]}>
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="VD: 25000" />
+          </Form.Item>
+          <Form.Item name="note" label="Ghi chú">
+            <Input placeholder="Ghi chú thêm (tùy chọn)" />
+          </Form.Item>
+          {/* Giá NVL tháng này — read-only, chỉ xem */}
+          {(cottonTypes.length > 0 || peTypes.length > 0) && (
+            <div style={{ background: "#f6f8fa", borderRadius: 6, padding: "10px 14px", marginTop: 8 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: "#595959" }}>
+                Giá NVL tháng {yearMonth}
+              </div>
+              {cottonTypes.slice(0, 5).map((t) => (
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
+                  <span>🌾 {t.name}</span>
+                  <span style={{ color: t.priceUsd ? "#1677ff" : "#ff4d4f" }}>
+                    {t.priceUsd ? `${t.priceUsd} USD/kg` : "Chưa nhập giá"}
+                  </span>
+                </div>
+              ))}
+              {peTypes.slice(0, 3).map((t) => (
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
+                  <span>🔵 {t.name}</span>
+                  <span style={{ color: t.priceUsd ? "#1677ff" : "#ff4d4f" }}>
+                    {t.priceUsd ? `${t.priceUsd} USD/kg` : "Chưa nhập giá"}
+                  </span>
+                </div>
+              ))}
+              <div style={{ marginTop: 8, fontSize: 12, color: "#888" }}>
+                ℹ️ Nhập/sửa giá NVL qua trang &quot;Giá NVL theo tháng&quot;
+              </div>
+            </div>
+          )}
         </Form>
       </Modal>
+
 
       {/* Modal thêm/sửa dòng sợi */}
       <Modal
@@ -833,11 +829,65 @@ export default function PlanDetailPage({
               </Form.Item>
             </Col>
           </Row>
+          {/* Chọn loại NVL */}
+          {cottonTypes.length > 0 && (
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="cottonMaterialTypeId" label="Loại bông">
+                  <Select
+                    options={cottonTypes.map((t) => ({
+                      label: t.priceUsd ? `${t.name} — ${t.priceUsd} USD/kg` : `${t.name} — Chưa có giá`,
+                      value: t.id,
+                      disabled: !t.priceUsd,
+                    }))}
+                    allowClear
+                    placeholder="Chọn loại bông"
+                    onChange={(val) => {
+                      const found = cottonTypes.find((t) => t.id === val);
+                      lineItemForm.setFieldValue("cottonPriceUsd", found?.priceUsd ?? undefined);
+                    }}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="cottonPriceUsd" label="Giá bông (USD/kg)">
+                  <InputNumber min={0} step={0.001} precision={3} style={{ width: "100%" }} placeholder="Tự điền khi chọn loại" />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+          {peTypes.length > 0 && (
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="peMaterialTypeId" label="Loại PE (nếu có)">
+                  <Select
+                    options={peTypes.map((t) => ({
+                      label: t.priceUsd ? `${t.name} — ${t.priceUsd} USD/kg` : `${t.name} — Chưa có giá`,
+                      value: t.id,
+                      disabled: !t.priceUsd,
+                    }))}
+                    allowClear
+                    placeholder="Không dùng PE"
+                    onChange={(val) => {
+                      const found = peTypes.find((t) => t.id === val);
+                      lineItemForm.setFieldValue("pePriceUsd", found?.priceUsd ?? undefined);
+                    }}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="pePriceUsd" label="Giá PE (USD/kg)">
+                  <InputNumber min={0} step={0.001} precision={3} style={{ width: "100%" }} placeholder="Tự điền khi chọn loại" />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
           <Form.Item name="note" label="Ghi chú">
             <Input />
           </Form.Item>
         </Form>
       </Modal>
+
 
       {/* Modal checklist trình duyệt */}
       <Modal

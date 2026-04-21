@@ -92,21 +92,62 @@ export async function POST(
     };
 
     if (inputParam && unitPriceUsd > 0) {
+      // Tìm giá NVL từ PlanLineItem tương ứng (nếu có kế hoạch tháng này)
+      // Hoặc lấy giá bông mặc định đầu tiên từ MaterialPrice cho tháng đó
+      let cottonPriceUsd = 0;
+      let pePriceUsd = 0;
+      let cottonRatioValue = rate?.cottonRatio ?? 1.0;
+
+      // Tra cứu PlanLineItem tương ứng để lấy snapshot giá
+      const planLineItem = await prisma.planLineItem.findFirst({
+        where: {
+          plan: { factoryId, yearMonth },
+          itemId,
+        },
+      });
+
+      if (planLineItem?.cottonPriceUsd) {
+        cottonPriceUsd = planLineItem.cottonPriceUsd;
+        pePriceUsd = planLineItem.pePriceUsd ?? 0;
+        cottonRatioValue = planLineItem.cottonRatio ?? cottonRatioValue;
+      } else {
+        // Fallback: lấy giá NVL đầu tiên từ MaterialPrice tháng đó
+        const defaultCottonPrice = await prisma.materialPrice.findFirst({
+          where: {
+            yearMonth,
+            materialType: { category: "COTTON", isActive: true },
+          },
+          orderBy: { id: "asc" },
+        });
+        cottonPriceUsd = defaultCottonPrice?.priceUsd ?? 0;
+
+        if (cottonRatioValue < 1.0) {
+          const defaultPePrice = await prisma.materialPrice.findFirst({
+            where: {
+              yearMonth,
+              materialType: { category: "PE", isActive: true },
+            },
+            orderBy: { id: "asc" },
+          });
+          pePriceUsd = defaultPePrice?.priceUsd ?? 0;
+        }
+      }
+
       calcResult = calculateLineItem({
         qty,
         unitPriceUsd,
         rates: {
           cottonRate: rate?.cottonRate ?? 0,
           peRate: rate?.peRate ?? 0,
+          cottonRatio: cottonRatioValue,
           wasteRate: rate?.wasteRate ?? 0,
-          sellingCostRate: soItem?.sellingCostRate ?? 0, // ← sửa ở đây
+          sellingCostRate: soItem?.sellingCostRate ?? 0,
           doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
         },
         params: {
           exchangeRate: inputParam.exchangeRate,
-          avgCottonPrice: inputParam.avgCottonPrice ?? 0,
-          peBenmaPrice: inputParam.peBenmaPrice ?? 0,
-          wastePrice: inputParam.wastePrice ?? 0,
+          cottonPriceUsd,
+          pePriceUsd,
         },
       });
     }

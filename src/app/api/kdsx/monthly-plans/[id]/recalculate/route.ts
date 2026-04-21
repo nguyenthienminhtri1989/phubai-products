@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateLineItem, refreshSummarySnapshot } from "@/lib/kdsx/calculator";
+import {
+  calculateLineItem,
+  refreshSummarySnapshot,
+} from "@/lib/kdsx/calculator";
 import { SnapshotType } from "@prisma/client";
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userRole = (session.user as any)?.userRole as string | undefined;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
@@ -20,7 +24,7 @@ export async function POST(
   const { id } = await params;
   const planId = Number(id);
 
-  // 1. Load plan + all lineItems
+  // 1. Load plan + all lineItems (bao gồm snapshot giá NVL)
   const plan = await prisma.monthlyPlan.findUnique({
     where: { id: planId },
     include: { lineItems: true },
@@ -31,24 +35,31 @@ export async function POST(
   if (plan.status !== "DRAFT") {
     return NextResponse.json(
       { error: "Chỉ có thể tính lại kế hoạch ở trạng thái Nháp (DRAFT)" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  // 2. Load inputParam cho (factoryId, yearMonth)
+  // 2. Load inputParam cho (factoryId, yearMonth) — chỉ cần exchangeRate
   const inputParam = await prisma.monthlyInputParam.findUnique({
-    where: { factoryId_yearMonth: { factoryId: plan.factoryId, yearMonth: plan.yearMonth } },
+    where: {
+      factoryId_yearMonth: {
+        factoryId: plan.factoryId,
+        yearMonth: plan.yearMonth,
+      },
+    },
   });
   if (!inputParam) {
     return NextResponse.json(
-      { error: "Chưa có thông số tháng. Hãy nhập thông số trước khi tính lại." },
-      { status: 400 }
+      {
+        error: "Chưa có thông số tháng. Hãy nhập thông số trước khi tính lại.",
+      },
+      { status: 400 },
     );
   }
 
   let updated = 0;
 
-  // 3. Với mỗi lineItem — tính lại
+  // 3. Với mỗi lineItem — tính lại dùng SNAPSHOT giá NVL (không tra MaterialPrice mới)
   for (const li of plan.lineItems) {
     // a. Tra RawMaterialRate mới nhất theo itemId
     const rate = await prisma.rawMaterialRate.findFirst({
@@ -66,26 +77,30 @@ export async function POST(
       sellingCostRate = soi?.sellingCostRate ?? 0;
     }
 
-    // c. Gọi calculateLineItem()
+    // c. Dùng snapshot cottonRatio từ lineItem nếu có, nếu không dùng từ rate
+    const cottonRatioValue = li.cottonRatio ?? rate?.cottonRatio ?? 1.0;
+
+    // d. Gọi calculateLineItem() — dùng SNAPSHOT giá (cottonPriceUsd, pePriceUsd)
     const calcResult = calculateLineItem({
       qty: li.qty,
       unitPriceUsd: li.unitPriceUsd,
       rates: {
         cottonRate: rate?.cottonRate ?? 0,
         peRate: rate?.peRate ?? 0,
+        cottonRatio: cottonRatioValue,
         wasteRate: rate?.wasteRate ?? 0,
         sellingCostRate,
         doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
       },
       params: {
         exchangeRate: inputParam.exchangeRate,
-        avgCottonPrice: inputParam.avgCottonPrice ?? 0,
-        peBenmaPrice: inputParam.peBenmaPrice ?? 0,
-        wastePrice: inputParam.wastePrice ?? 0,
+        // Dùng snapshot giá đã lưu trong lineItem — KHÔNG tra MaterialPrice mới
+        cottonPriceUsd: li.cottonPriceUsd ?? 0,
+        pePriceUsd: li.pePriceUsd ?? 0,
       },
     });
 
-    // d. Update lineItem với kết quả mới
+    // e. Update lineItem với kết quả mới (giữ nguyên snapshot giá NVL)
     await prisma.planLineItem.update({
       where: { id: li.id },
       data: { ...calcResult },
