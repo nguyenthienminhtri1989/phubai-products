@@ -32,7 +32,33 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(schedule);
+  // Gắn thêm empiricalOutputPerDay từ ProductivityBenchmark vào từng segment
+  // (benchmarkId là FK số thuần, không có relation Prisma)
+  const benchmarkIds = Array.from(
+    new Set(
+      schedule.segments
+        .map((s) => s.benchmarkId)
+        .filter((id): id is number => id !== null),
+    ),
+  );
+  const benchmarkMap = new Map<number, number | null>();
+  if (benchmarkIds.length > 0) {
+    const benchmarks = await prisma.productivityBenchmark.findMany({
+      where: { id: { in: benchmarkIds } },
+      select: { id: true, empiricalOutputPerDay: true },
+    });
+    benchmarks.forEach((b) => benchmarkMap.set(b.id, b.empiricalOutputPerDay));
+  }
+
+  const segmentsWithBenchmark = schedule.segments.map((s) => ({
+    ...s,
+    benchmark:
+      s.benchmarkId !== null
+        ? { empiricalOutputPerDay: benchmarkMap.get(s.benchmarkId) ?? null }
+        : null,
+  }));
+
+  return NextResponse.json({ ...schedule, segments: segmentsWithBenchmark });
 }
 
 // PUT /api/kdsx/production-schedule/[id]

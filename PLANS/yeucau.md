@@ -1,15 +1,7 @@
-trong trang báo cáo vừa làm thì cột tên máy đang được sắp xếp như thế này:
+Trong trang định mức năng suất (dashboard/productivity-benchmark) có 1 loại là định mức thực nghiệm, ở đây người ta sẽ nhập luôn giá trị kg/máy/ngày theo từng dòng sợi cụ thể, bảng kế hoạch và bảng thực hiện cũng lấy giá trị này để điền vào ô kế hoạch và ô thực tế.
 
-- dòng 1: Máy ống QPRO số 1
-- dòng 2: Máy ống QPRO số 10
-- dòng 3: Máy ống QPRO số 11
-- dòng 4: Máy ống QPRO số 12
+Bảng kế hoạch: trong bảng hiển thị sản lượng dự kiến của mỗi máy theo từng ngày, với mỗi ngày thì có giá trị sản lượng, định mức năng suất và màu sắc của ô, màu sắc của ô được lấy từ màu của mặt hàng mà ngày hôm đó chạy
 
-- Đây là đang sắp xếp theo thứ tự tăng dần của chuỗi, thực tế tôi muốn sắp xếp theo thứ tự tăng dần của số máy, cụ thể là:
-- dòng 1: Máy ống QPRO số 1
-- dòng 2: Máy ống QPRO số 2
-- dòng 3: Máy ống QPRO số 3
-- dòng ...: Máy ống QPRO số 10
-- dòng ...: Máy ống QPRO số 11
-- dòng ...: Máy ống QPRO số 12
-  Trong chuỗi ký tự tên máy thì 2 ký tự cuối là số máy, cụ thể là: "Máy ống QPRO số " + số máy
+Bảng thực tế: trong bảng hiển thị sản lượng thực tế của mỗi máy theo từng ngày, với mỗi ngày thì có giá trị sản lượng, định mức năng suất và màu sắc của ô, màu sắc của ô được lấy từ màu của mặt hàng mà ngày hôm đó chạy
+
+Việc lấy giá trị định mức năng suất là đang để tự fill vào ô chứ chưa cần nhập tay, bởi vì chúng ta đã xây dựng bảng định mức năng suất theo tên mặt hàng rồi mà, mỗi máy thì chạy theo 1 số loại mặt hàng nhất định thì chúng ta có thể lấy thông tin này từ định mức năng suất để điền vào ô
