@@ -23,7 +23,6 @@ interface Segment {
   isManualKg: boolean; benchmarkId?: number | null; note?: string | null;
   machine: { id: number; name: string; model?: string | null; processId: number };
   item: { id: number; name: string };
-  benchmark?: { empiricalOutputPerDay: number | null } | null;
 }
 interface Schedule {
   id: number; factoryId: number; factory: { id: number; name: string };
@@ -391,9 +390,6 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                     const seg = machineSegs.find(s => day >= s.fromDay && day <= s.toDay);
                     const dimmed = highlightItemId !== null && seg && seg.itemId !== highlightItemId;
 
-                    const benchmarkKg = seg?.benchmark?.empiricalOutputPerDay ?? null;
-                    const isDiffFromBenchmark = seg && seg.isManualKg && benchmarkKg !== null && seg.kgPerDay !== benchmarkKg;
-
                     return (
                       <td
                         key={day}
@@ -420,31 +416,14 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                             setModalOpen(true);
                           }
                         }}
-                        title={
-                          seg
-                            ? `${seg.item.name} | KH: ${seg.kgPerDay.toLocaleString()} kg/ngày` +
-                            (benchmarkKg !== null ? ` | ĐM: ${benchmarkKg.toLocaleString()} kg/ngày` : "") +
-                            (isDiffFromBenchmark ? " (KH đã sửa tay)" : "") +
-                            " (Click để sửa)"
-                            : "Click để thêm segment"
-                        }
+                        title={seg ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa)` : "Click để thêm segment"}
                       >
                         {isHoliday
                           ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                           : seg
-                            ? <div>
-                              <span style={{ color: getColor(seg.itemId), fontSize: 11, fontWeight: 800 }}>
-                                {seg.kgPerDay.toLocaleString()}
-                                {isDiffFromBenchmark && (
-                                  <span style={{ color: "#fa8c16", fontSize: 9, marginLeft: 1 }} title="KH đã sửa tay (khác định mức)">✎</span>
-                                )}
-                              </span>
-                              {benchmarkKg !== null && (
-                                <div style={{ fontSize: 9, color: "#888", fontWeight: 500 }}>
-                                  ĐM:{benchmarkKg.toLocaleString()}
-                                </div>
-                              )}
-                            </div>
+                            ? <span style={{ color: getColor(seg.itemId), fontSize: 11, fontWeight: 800 }}>
+                              {seg.kgPerDay.toLocaleString()}
+                            </span>
                             : <span style={{ color: "#bbb", fontSize: 13, lineHeight: 1 }}>·</span>
                         }
                       </td>

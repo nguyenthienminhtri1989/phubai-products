@@ -18,10 +18,8 @@ interface Segment {
   fromDay: number;
   toDay: number;
   kgPerDay: number;
-  isManualKg: boolean;
   machine: { id: number; name: string; model?: string | null; processId: number };
   item: { id: number; name: string };
-  benchmark?: { empiricalOutputPerDay: number | null } | null;
 }
 
 interface ActualProductionGridProps {
@@ -165,11 +163,9 @@ export default function ActualProductionGrid({
           {source === "KD_DAILY_INPUT" ? "KD Daily Input" : "Nhật ký SX"}
         </Tag>
         <Text type="secondary" style={{ marginLeft: 8 }}>
-          — Màu chữ TH: <span style={{ color: "#52c41a", fontWeight: 600 }}>Xanh ≥ KH</span>,{" "}
+          — Màu ô: <span style={{ color: "#52c41a", fontWeight: 600 }}>Xanh ≥ KH</span>,{" "}
           <span style={{ color: "#faad14", fontWeight: 600 }}>Vàng gần đạt</span>,{" "}
           <span style={{ color: "#ff4d4f", fontWeight: 600 }}>Đỏ thấp hơn 10%+</span>
-          {" "}— <span style={{ color: "#666", fontWeight: 500 }}>ĐM:<i>x</i> = định mức thực nghiệm theo mặt hàng</span>
-          {" "}— <span style={{ color: "#fa8c16", fontWeight: 600 }}>✎ = KH/ngày đã sửa tay (khác ĐM)</span>
         </Text>
       </div>
 
@@ -260,11 +256,6 @@ export default function ActualProductionGrid({
                     const hasData = !!cell;
                     const itemId = cell?.itemId ?? machineSegs.find(s => day >= s.fromDay && day <= s.toDay)?.itemId;
 
-                    const daySegment = machineSegs.find(s => day >= s.fromDay && day <= s.toDay);
-                    // Định mức: lấy từ benchmark.empiricalOutputPerDay (chuẩn theo mặt hàng)
-                    const benchmarkKg = daySegment?.benchmark?.empiricalOutputPerDay ?? null;
-                    // KH của segment (dùng để so sánh màu TH vs KH)
-                    const isDiffFromBenchmark = daySegment && daySegment.isManualKg && benchmarkKg !== null && daySegment.kgPerDay !== benchmarkKg;
                     return (
                       <td key={day} style={{
                         ...tdStyle,
@@ -274,16 +265,7 @@ export default function ActualProductionGrid({
                             ? getBg(itemId, itemColors)
                             : undefined,
                         borderLeft: "1px solid #d0d0d0",
-                      }}
-                        title={
-                          isHoliday ? "Ngày nghỉ" :
-                            !hasData ? "Chưa có dữ liệu thực tế" :
-                              `TH: ${actualKg.toLocaleString()} kg` +
-                              (planKg > 0 ? ` | KH: ${planKg.toLocaleString()} kg/ngày` : "") +
-                              (benchmarkKg !== null ? ` | ĐM: ${benchmarkKg.toLocaleString()} kg/ngày` : "") +
-                              (isDiffFromBenchmark ? " (KH đã sửa tay)" : "")
-                        }
-                      >
+                      }}>
                         {isHoliday
                           ? <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                           : hasData
@@ -294,13 +276,9 @@ export default function ActualProductionGrid({
                               }}>
                                 {actualKg.toLocaleString()}
                               </span>
-                              {/* Hiển thị định mức chuẩn (empirical benchmark) */}
-                              {benchmarkKg !== null && (
-                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
-                                  ĐM:{benchmarkKg.toLocaleString()}
-                                  {isDiffFromBenchmark && (
-                                    <span style={{ color: "#fa8c16", fontSize: 9 }} title="KH đã sửa tay (khác định mức)">✎</span>
-                                  )}
+                              {planKg > 0 && (
+                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>
+                                  ({planKg.toLocaleString()})
                                 </div>
                               )}
                             </div>
