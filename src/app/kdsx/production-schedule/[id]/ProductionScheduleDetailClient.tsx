@@ -497,122 +497,269 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         </Space>
       </div>
 
-      {/* Plan Summary Cards (Kế hoạch) */}
-      <div style={{ marginBottom: 4 }}>
-        <div style={{ fontSize: 11, color: "#888", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>📋 Sản lượng Kế hoạch</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {summary.map(item => (
-            <Card
-              key={item.itemId}
-              size="small"
-              hoverable
-              style={{
-                cursor: "pointer", minWidth: 120,
-                borderColor: highlightItemId === item.itemId ? getBorder(item.itemId) : "#d9d9d9",
-                background: highlightItemId === item.itemId ? getBg(item.itemId) : undefined,
-                borderWidth: highlightItemId === item.itemId ? 2 : 1,
-                boxShadow: highlightItemId === item.itemId ? "0 4px 12px rgba(0,0,0,0.15)" : "0 1px 4px rgba(0,0,0,0.05)",
-                transform: highlightItemId === item.itemId ? "translateY(-2px)" : "none",
-                transition: "all 0.2s ease-in-out",
-              }}
-              onClick={() => setHighlightItemId(prev => prev === item.itemId ? null : item.itemId)}
-            >
-              <div style={{ fontWeight: 700, fontSize: 13, color: getColor(item.itemId) }}>{item.itemName}</div>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>{item.totalTons.toFixed(1)} tấn</div>
-              <div style={{ fontSize: 11, color: "#888" }}>{item.machinesInvolved.length} máy</div>
-            </Card>
-          ))}
-          {summary.length > 0 && (
-            <Card size="small" style={{ minWidth: 120, background: "#001529", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>TỔNG THÁNG</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#52c41a" }}>{(grandTotal / 1000).toFixed(1)} tấn</div>
-              <div style={{ fontSize: 11, color: "#aaa" }}>{schedule.segments.length} segments</div>
-            </Card>
-          )}
-        </div>
-      </div>
+      {/* ===== Summary Comparison Table: KH vs TH ===== */}
+      {(() => {
+        // Build unified column list: all items from summary (plan), union with actual items
+        const planMap = new Map(summary.map(s => [s.itemId, s]));
+        // All item IDs: plan items first, then any actual-only items
+        const allColIds: number[] = [
+          ...summary.map(s => s.itemId),
+          ...actualSummaryByItem.filter(a => !planMap.has(a.itemId)).map(a => a.itemId),
+        ];
+        const actualMap = new Map(actualSummaryByItem.map(a => [a.itemId, a]));
 
-      {/* Actual Summary Cards (Thực hiện) */}
-      <div style={{ marginBottom: 16, padding: "12px 16px", background: "#f6ffed", border: "1px solid #b7eb8f", borderRadius: 8 }}>
-        {/* Header + Date filter */}
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#389e0d", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>
-            <FilterOutlined />
-            📊 Sản lượng Thực tế
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <span style={{ color: "#555" }}>Từ ngày:</span>
-            <InputNumber
-              min={1} max={totalDays} value={actualFilterFrom}
-              size="small" style={{ width: 58 }}
-              onChange={v => setActualFilterFrom(v ?? 1)}
-            />
-            <span style={{ color: "#555" }}>đến ngày:</span>
-            <InputNumber
-              min={1} max={totalDays} value={actualFilterTo}
-              size="small" style={{ width: 58 }}
-              onChange={v => setActualFilterTo(v ?? totalDays)}
-            />
-            <Button
-              size="small" type="link"
-              style={{ padding: "0 4px", fontSize: 11, color: "#389e0d" }}
-              onClick={() => { setActualFilterFrom(1); setActualFilterTo(totalDays); }}
-            >
-              Cả tháng
-            </Button>
-          </div>
-          {!isFullMonth && (
-            <span style={{ fontSize: 11, color: "#fa8c16", fontWeight: 600 }}>
-              (Ngày {filterFrom} → {filterTo} / {schedMonth}/{schedYear})
-            </span>
-          )}
-        </div>
+        // Grand totals
+        const grandPlanKg = grandTotal;
+        const grandActualKg = grandActualTotal;
+        const grandRatio = grandPlanKg > 0 ? (grandActualKg / grandPlanKg) * 100 : null;
 
-        {/* Actual cards by item */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {!actualGridLoaded ? (
-            <Spin size="small" />
-          ) : actualSummaryByItem.length === 0 ? (
-            <span style={{ fontSize: 12, color: "#aaa" }}>Chưa có dữ liệu thực tế</span>
-          ) : (
-            actualSummaryByItem.map(a => (
-              <Card
-                key={a.itemId}
-                size="small"
-                style={{
-                  minWidth: 130,
-                  borderColor: getBorder(a.itemId),
-                  borderWidth: 1.5,
-                  background: getBg(a.itemId),
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                  transition: "all 0.2s ease-in-out",
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 13, color: getColor(a.itemId) }}>{a.itemName}</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#237804" }}>
-                  {a.totalActualTons.toFixed(2)} tấn
+        const CARD_W = 140; // px fixed width per item column
+        const LABEL_W = 80; // px for row-label column
+
+        const rowLabelStyle: React.CSSProperties = {
+          width: LABEL_W, minWidth: LABEL_W, maxWidth: LABEL_W,
+          fontWeight: 700, fontSize: 11, color: "#555",
+          textTransform: "uppercase", letterSpacing: 0.5,
+          padding: "0 8px 0 0", display: "flex", alignItems: "center",
+          flexShrink: 0,
+        };
+        const colStyle = (itemId: number, isTotalCol = false): React.CSSProperties => ({
+          width: CARD_W, minWidth: CARD_W, maxWidth: CARD_W,
+          flexShrink: 0,
+          borderRadius: isTotalCol ? 8 : 6,
+          background: isTotalCol ? "transparent" : getBg(itemId),
+          border: isTotalCol ? "none" : `1.5px solid ${getBorder(itemId)}`,
+          padding: "6px 10px",
+          boxSizing: "border-box",
+        });
+        const totalColStyle: React.CSSProperties = {
+          width: CARD_W, minWidth: CARD_W, maxWidth: CARD_W,
+          flexShrink: 0, borderRadius: 8,
+          padding: "6px 10px", boxSizing: "border-box",
+        };
+
+        // Ratio badge color
+        function ratioBadge(ratio: number | null) {
+          if (ratio === null) return { color: "#aaa", label: "—" };
+          const pct = ratio.toFixed(1) + "%";
+          if (ratio >= 100) return { color: "#389e0d", label: pct };
+          if (ratio >= 90) return { color: "#d46b08", label: pct };
+          return { color: "#cf1322", label: pct };
+        }
+
+        return (
+          <div style={{ marginBottom: 16 }}>
+            {/* Section header + date filter */}
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1d3557", letterSpacing: 0.5 }}>
+                📊 So sánh Sản lượng KH / TH
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                <FilterOutlined style={{ color: "#389e0d" }} />
+                <span style={{ color: "#555" }}>TH từ ngày</span>
+                <InputNumber
+                  min={1} max={totalDays} value={actualFilterFrom}
+                  size="small" style={{ width: 54 }}
+                  onChange={v => setActualFilterFrom(v ?? 1)}
+                />
+                <span style={{ color: "#555" }}>→</span>
+                <InputNumber
+                  min={1} max={totalDays} value={actualFilterTo}
+                  size="small" style={{ width: 54 }}
+                  onChange={v => setActualFilterTo(v ?? totalDays)}
+                />
+                <Button size="small" type="link"
+                  style={{ padding: "0 2px", fontSize: 11, color: "#389e0d" }}
+                  onClick={() => { setActualFilterFrom(1); setActualFilterTo(totalDays); }}
+                >Cả tháng</Button>
+                {!isFullMonth && (
+                  <span style={{ fontSize: 11, color: "#fa8c16", fontWeight: 600 }}>
+                    (Ngày {filterFrom}–{filterTo}/{schedMonth})
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Comparison table */}
+            <div style={{
+              overflowX: "auto",
+              background: "#fff",
+              border: "1.5px solid #d9d9d9",
+              borderRadius: 10,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+              padding: "10px 12px",
+            }}>
+              {/* ---- Row: Item name headers ---- */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "stretch" }}>
+                <div style={{ ...rowLabelStyle, color: "transparent" }}>——</div>
+                {allColIds.map(itemId => {
+                  const name = planMap.get(itemId)?.itemName ?? actualMap.get(itemId)?.itemName ?? `#${itemId}`;
+                  const isHighlighted = highlightItemId === itemId;
+                  return (
+                    <div
+                      key={itemId}
+                      style={{
+                        width: CARD_W, minWidth: CARD_W, maxWidth: CARD_W, flexShrink: 0,
+                        textAlign: "center", fontWeight: 800, fontSize: 13,
+                        color: getColor(itemId),
+                        cursor: "pointer",
+                        padding: "4px 6px",
+                        borderRadius: 6,
+                        background: isHighlighted ? getBg(itemId) : undefined,
+                        border: isHighlighted ? `2px solid ${getBorder(itemId)}` : "2px solid transparent",
+                        transition: "all 0.15s",
+                        userSelect: "none",
+                      }}
+                      onClick={() => setHighlightItemId(prev => prev === itemId ? null : itemId)}
+                      title="Click để highlight dòng sợi"
+                    >
+                      {name}
+                    </div>
+                  );
+                })}
+                {/* Total header */}
+                <div style={{
+                  width: CARD_W, minWidth: CARD_W, maxWidth: CARD_W, flexShrink: 0,
+                  textAlign: "center", fontWeight: 800, fontSize: 13, color: "#fff",
+                  background: "#001529", borderRadius: 6, padding: "4px 6px",
+                }}>
+                  TỔNG
                 </div>
-                <div style={{ fontSize: 11, color: "#555" }}>
-                  {a.totalActualKg.toLocaleString()} kg
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: "#e8e8e8", marginBottom: 6 }} />
+
+              {/* ---- Row: KH (Plan) ---- */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "stretch" }}>
+                <div style={{
+                  ...rowLabelStyle,
+                  background: "#f0f5ff", border: "1px solid #adc6ff",
+                  borderRadius: 6, color: "#1d39c4", padding: "4px 8px",
+                  justifyContent: "center", textAlign: "center",
+                }}>
+                  📋 KH
                 </div>
-              </Card>
-            ))
-          )}
-          {actualGridLoaded && grandActualTotal > 0 && (
-            <Card size="small" style={{ minWidth: 130, background: "#135200", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "#d9f7be" }}>
-                {isFullMonth ? "TỔNG THÁNG (TH)" : `TỔNG ${filterFrom}–${filterTo}`}
+                {allColIds.map(itemId => {
+                  const plan = planMap.get(itemId);
+                  return (
+                    <div key={itemId} style={{ ...colStyle(itemId), textAlign: "center" }}>
+                      {plan ? (
+                        <>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#003a8c" }}>
+                            {plan.totalTons.toFixed(1)} tấn
+                          </div>
+                          <div style={{ fontSize: 10, color: "#555" }}>
+                            {plan.totalKg.toLocaleString()} kg
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: "#ccc", fontSize: 12 }}>—</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Plan total */}
+                <div style={{ ...totalColStyle, background: "#001529", textAlign: "center" }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#52c41a" }}>
+                    {(grandPlanKg / 1000).toFixed(1)} tấn
+                  </div>
+                  <div style={{ fontSize: 10, color: "#aaa" }}>
+                    {grandPlanKg.toLocaleString()} kg
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#95de64" }}>
-                {(grandActualTotal / 1000).toFixed(2)} tấn
+
+              {/* ---- Row: TH (Actual) ---- */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "stretch" }}>
+                <div style={{
+                  ...rowLabelStyle,
+                  background: "#f6ffed", border: "1px solid #b7eb8f",
+                  borderRadius: 6, color: "#237804", padding: "4px 8px",
+                  justifyContent: "center", textAlign: "center",
+                }}>
+                  {!actualGridLoaded ? <Spin size="small" /> : "📊 TH"}
+                </div>
+                {allColIds.map(itemId => {
+                  const act = actualMap.get(itemId);
+                  return (
+                    <div key={itemId} style={{ ...colStyle(itemId), textAlign: "center" }}>
+                      {!actualGridLoaded ? (
+                        <Spin size="small" />
+                      ) : act && act.totalActualKg > 0 ? (
+                        <>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#237804" }}>
+                            {act.totalActualTons.toFixed(2)} tấn
+                          </div>
+                          <div style={{ fontSize: 10, color: "#555" }}>
+                            {act.totalActualKg.toLocaleString()} kg
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: "#ccc", fontSize: 12 }}>—</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Actual total */}
+                <div style={{ ...totalColStyle, background: "#135200", textAlign: "center" }}>
+                  {actualGridLoaded ? (
+                    <>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: "#95de64" }}>
+                        {(grandActualKg / 1000).toFixed(2)} tấn
+                      </div>
+                      <div style={{ fontSize: 10, color: "#b7eb8f" }}>
+                        {grandActualKg.toLocaleString()} kg
+                      </div>
+                    </>
+                  ) : <Spin size="small" />}
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: "#b7eb8f" }}>
-                {grandActualTotal.toLocaleString()} kg
+
+              {/* ---- Row: Tỉ lệ TH/KH ---- */}
+              <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                <div style={{
+                  ...rowLabelStyle,
+                  background: "#fffbe6", border: "1px solid #ffe58f",
+                  borderRadius: 6, color: "#874d00", padding: "4px 8px",
+                  justifyContent: "center", textAlign: "center",
+                }}>
+                  % TH/KH
+                </div>
+                {allColIds.map(itemId => {
+                  const plan = planMap.get(itemId);
+                  const act = actualMap.get(itemId);
+                  const planKg = plan?.totalKg ?? 0;
+                  const actKg = act?.totalActualKg ?? 0;
+                  const ratio = planKg > 0 ? (actKg / planKg) * 100 : null;
+                  const badge = ratioBadge(ratio);
+                  return (
+                    <div key={itemId} style={{
+                      ...colStyle(itemId), textAlign: "center",
+                      background: ratio === null ? "#fafafa" : ratio >= 100 ? "#f6ffed" : ratio >= 90 ? "#fffbe6" : "#fff1f0",
+                      border: `1.5px solid ${ratio === null ? "#e8e8e8" : ratio >= 100 ? "#b7eb8f" : ratio >= 90 ? "#ffe58f" : "#ffa39e"}`,
+                    }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: badge.color }}>
+                        {badge.label}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Grand ratio */}
+                <div style={{
+                  ...totalColStyle,
+                  background: grandRatio === null ? "#2a2a2a" : grandRatio >= 100 ? "#092b00" : grandRatio >= 90 ? "#613400" : "#5c0011",
+                  textAlign: "center",
+                }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: ratioBadge(grandRatio).color }}>
+                    {ratioBadge(grandRatio).label}
+                  </div>
+                </div>
               </div>
-            </Card>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Tabs: Kế hoạch / Thực hiện / So sánh */}
       <Tabs

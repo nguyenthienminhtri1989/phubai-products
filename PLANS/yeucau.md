@@ -1,3 +1,2 @@
-Ở giao diện trang src\app\kdsx\production-schedule\[id]\ProductionScheduleDetailClient.tsx, hiện tại chúng ta đang có các "Summary Cards" thể hiện cho sản lượng các dòng sợi và Tổng sản lượng tất cả các dòng sợi theo Kế hoạch sản xuất ("Plan Production Grid").
-Bây giờ tôi muốn bổ sung thêm một "Summary Cards" nữa để thể hiện cho sản lượng thực tế của tất cả các dòng sợi theo "Actual Production Grid".
-Có ô lọc ngày để tính sản lượng thực tế theo ngày (từ ngày ... đến ngày) và ô tính tổng sản lượng thực tế theo dòng sợi
+Ở giao diện trang src\app\kdsx\production-schedule\[id]\ProductionScheduleDetailClient.tsx, hiện tại sau khi đã bổ sung hàng Card sản lượng thực tế để so sánh với sản lượng theo kế hoạch, thì tôi thấy là:
+Hàng card phía trên là sản lượng theo kế hoạch, hàng card phía dưới là sản lượng thực tế. Hiện tại hai hàng card này đang nằm trên 2 tab khác nhau và card trên không thẳng hàng với card dưới, tên mặt hàng cũng không cùng 1 cột nên hơi khó để nhìn trực quan. Bạn hãy thiết kế lại sao cho 2 hàng card này thẳng hàng và cùng 1 tab để dễ dàng so sánh trực quan hơn.
