@@ -23,10 +23,12 @@ import {
   ReloadOutlined,
   KeyOutlined,
   EditOutlined,
+  BarChartOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/vi";
 import { getItemColor } from "@/utils/itemColors";
+import { useRouter } from "next/navigation";
 
 const { Text, Title } = Typography;
 
@@ -73,6 +75,7 @@ interface ItemOption {
 // Main Page
 // ============================================================
 export default function KdDailyInputPage() {
+  const router = useRouter();
   const [factories, setFactories] = useState<Factory[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [factoryId, setFactoryId] = useState<number | undefined>();
@@ -535,9 +538,17 @@ export default function KdDailyInputPage() {
   return (
     <div style={{ padding: "0 8px" }}>
       {/* Header */}
-      <Title level={4} style={{ marginBottom: 16 }}>
-        Nhập sản lượng ngày — Phòng Kinh doanh
-      </Title>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>
+          Nhập sản lượng ngày — Phòng Kinh doanh
+        </Title>
+        <Button
+          icon={<BarChartOutlined />}
+          onClick={() => router.push("/kd-daily-input/report")}
+        >
+          Xem báo cáo
+        </Button>
+      </div>
 
       {/* Filter bar */}
       <Space wrap style={{ marginBottom: 16 }}>
