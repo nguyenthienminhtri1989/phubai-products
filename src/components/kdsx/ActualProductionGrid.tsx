@@ -251,10 +251,17 @@ export default function ActualProductionGrid({
                   {dayNumbers.map(day => {
                     const isHoliday = holidays.includes(day);
                     const cell = machineGrid[day];
-                    const planKg = getPlanKg(machine.id, day, segments, holidays);
                     const actualKg = cell?.kg ?? 0;
                     const hasData = !!cell;
                     const itemId = cell?.itemId ?? machineSegs.find(s => day >= s.fromDay && day <= s.toDay)?.itemId;
+
+                    // Lấy định mức theo itemId thực tế của ô, không phải theo segment KH của ngày đó
+                    const actualItemId = cell?.itemId;
+                    const matchingSeg = actualItemId
+                      ? segments.find(s => s.machineId === machine.id && s.itemId === actualItemId && day >= s.fromDay && day <= s.toDay)
+                        ?? segments.find(s => s.machineId === machine.id && s.itemId === actualItemId) // fallback: cùng máy + cùng mặt hàng
+                      : segments.find(s => s.machineId === machine.id && day >= s.fromDay && day <= s.toDay);
+                    const planKg = holidays.includes(day) ? 0 : (matchingSeg ? matchingSeg.kgPerDay : 0);
 
                     return (
                       <td key={day} style={{

@@ -1,7 +1,13 @@
-Trong trang định mức năng suất (dashboard/productivity-benchmark) có 1 loại là định mức thực nghiệm, ở đây người ta sẽ nhập luôn giá trị kg/máy/ngày theo từng dòng sợi cụ thể, bảng kế hoạch và bảng thực hiện cũng lấy giá trị này để điền vào ô kế hoạch và ô thực tế.
+File: src/components/kdsx/ActualProductionGrid.tsx
+Sửa phần render ô ngày — định mức phải lấy theo itemId thực tế của ô đó, không phải theo segment KH:
+typescript// CŨ: lấy định mức từ segment KH (theo machineId + day)
+const planKg = getPlanKg(machine.id, day, segments, holidays);
 
-Bảng kế hoạch: trong bảng hiển thị sản lượng dự kiến của mỗi máy theo từng ngày, với mỗi ngày thì có giá trị sản lượng, định mức năng suất và màu sắc của ô, màu sắc của ô được lấy từ màu của mặt hàng mà ngày hôm đó chạy
-
-Bảng thực tế: trong bảng hiển thị sản lượng thực tế của mỗi máy theo từng ngày, với mỗi ngày thì có giá trị sản lượng, định mức năng suất và màu sắc của ô, màu sắc của ô được lấy từ màu của mặt hàng mà ngày hôm đó chạy
-
-Việc lấy giá trị định mức năng suất là đang để tự fill vào ô chứ chưa cần nhập tay, bởi vì chúng ta đã xây dựng bảng định mức năng suất theo tên mặt hàng rồi mà, mỗi máy thì chạy theo 1 số loại mặt hàng nhất định thì chúng ta có thể lấy thông tin này từ định mức năng suất để điền vào ô
+// MỚI: lấy định mức theo itemId thực tế của ô
+const actualItemId = cell?.itemId;
+const matchingSeg = actualItemId
+? segments.find(s => s.machineId === machine.id && s.itemId === actualItemId && day >= s.fromDay && day <= s.toDay)
+?? segments.find(s => s.itemId === actualItemId) // fallback: tìm bất kỳ segment nào cùng itemId trên máy đó
+: segments.find(s => s.machineId === machine.id && day >= s.fromDay && day <= s.toDay);
+const planKg = matchingSeg ? matchingSeg.kgPerDay : 0;
+Giải thích: nếu ô thực tế có itemId = 5 (32CVCM, 800 kg/ngày) thì tìm segment cùng máy + cùng itemId để lấy đúng định mức 800. Không lấy nhầm segment của mặt hàng khác (26COCD, 900 kg/ngày) dù cùng máy cùng ngày.
