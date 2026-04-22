@@ -469,6 +469,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     </div>
   );
 
+  // RENDER PLAN/ACTUAL GRID
   return (
     <div>
       {/* Breadcrumb & Header */}
@@ -483,7 +484,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Button icon={<ArrowLeftOutlined />} onClick={() => router.push("/kdsx/production-schedule")} />
           <Title level={4} style={{ margin: 0 }}>
-            KH SX — {factory.name} — Tháng {schedMonth}/{schedYear}
+            KẾ HOẠCH SẢN XUẤT — {factory.name} — Tháng {schedMonth}/{schedYear}
           </Title>
         </div>
 
@@ -638,7 +639,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                   borderRadius: 6, color: "#1d39c4", padding: "4px 8px",
                   justifyContent: "center", textAlign: "center",
                 }}>
-                  📋 KH
+                  📋 KẾ HOẠCH
                 </div>
                 {allColIds.map(itemId => {
                   const plan = planMap.get(itemId);
@@ -678,7 +679,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                   borderRadius: 6, color: "#237804", padding: "4px 8px",
                   justifyContent: "center", textAlign: "center",
                 }}>
-                  {!actualGridLoaded ? <Spin size="small" /> : "📊 TH"}
+                  {!actualGridLoaded ? <Spin size="small" /> : "📊 THỰC HIỆN"}
                 </div>
                 {allColIds.map(itemId => {
                   const act = actualMap.get(itemId);
