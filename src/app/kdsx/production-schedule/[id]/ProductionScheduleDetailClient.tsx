@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Button, Typography, message, Spin, Breadcrumb, Space,
-  Popconfirm, Card, Row, Col, Modal, Tabs,
+  Popconfirm, Card, Row, Col, Modal, Tabs, InputNumber,
 } from "antd";
 import {
-  ArrowLeftOutlined, SyncOutlined,
+  ArrowLeftOutlined, SyncOutlined, FilterOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import ScheduleSegmentModal from "@/components/kdsx/ScheduleSegmentModal";
-import ActualProductionGrid from "@/components/kdsx/ActualProductionGrid";
+import ActualProductionGrid, { ActualGrid } from "@/components/kdsx/ActualProductionGrid";
 import ScheduleComparisonDashboard from "@/components/kdsx/ScheduleComparisonDashboard";
 
 const { Title, Text } = Typography;
@@ -70,6 +70,12 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [activeTab, setActiveTab] = useState("plan");
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
 
+  // Actual grid state (lifted from ActualProductionGrid)
+  const [actualGrid, setActualGrid] = useState<ActualGrid>({});
+  const [actualGridLoaded, setActualGridLoaded] = useState(false);
+  const [actualFilterFrom, setActualFilterFrom] = useState<number>(1);
+  const [actualFilterTo, setActualFilterTo] = useState<number>(31);
+
   const fetchSchedule = useCallback(async () => {
     try {
       const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}`);
@@ -84,16 +90,36 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     if (res.ok) setSummary(await res.json());
   }, [scheduleId]);
 
+  const fetchActualGrid = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`);
+      if (res.ok) {
+        const data = await res.json();
+        setActualGrid(data.grid ?? {});
+      }
+    } catch { /* ignore */ }
+    setActualGridLoaded(true);
+  }, [scheduleId]);
+
   useEffect(() => {
     Promise.all([
       fetchSchedule(),
       fetchSummary(),
+      fetchActualGrid(),
       fetch("/api/machines").then(r => r.json()).then(d => setMachines(Array.isArray(d) ? d : d.machines ?? [])).catch(() => { }),
       fetch("/api/items").then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : d.items ?? [])).catch(() => { }),
     ]).finally(() => setLoading(false));
-  }, [fetchSchedule, fetchSummary]);
+  }, [fetchSchedule, fetchSummary, fetchActualGrid]);
 
-  const refresh = async () => { await Promise.all([fetchSchedule(), fetchSummary()]); };
+  // Sync actualFilterTo to actual days in month once schedule is loaded
+  useEffect(() => {
+    if (schedule?.yearMonth) {
+      const days = daysInMonthFn(schedule.yearMonth);
+      setActualFilterTo(days);
+    }
+  }, [schedule?.yearMonth]);
+
+  const refresh = async () => { await Promise.all([fetchSchedule(), fetchSummary(), fetchActualGrid()]); };
 
   const handleToggleHoliday = async (day: number) => {
     if (!schedule) return;
@@ -208,6 +234,37 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   ...factoryMachines.slice(0, Math.max(0, 21 - uniqueMachines.length))];
 
   const grandTotal = summary.reduce((s, i) => s + i.totalKg, 0);
+
+  // ---- Actual Summary by Item (filtered by date range) ----
+  // Clamp filter to valid range
+  const filterFrom = Math.max(1, Math.min(actualFilterFrom, totalDays));
+  const filterTo = Math.max(filterFrom, Math.min(actualFilterTo, totalDays));
+
+  // Collect all itemIds from segments
+  const allItemIds = Array.from(new Set(schedule.segments.map(s => s.itemId)));
+  const itemMap = new Map(schedule.segments.map(s => [s.itemId, s.item.name]));
+
+  // For each item, sum actual kg from grid within [filterFrom, filterTo]
+  const actualSummaryByItem = allItemIds.map(itemId => {
+    // find which machines involve this item
+    const machineIds = Array.from(new Set(
+      schedule.segments.filter(s => s.itemId === itemId).map(s => s.machineId)
+    ));
+    let totalActualKg = 0;
+    for (const machineId of machineIds) {
+      const machineGrid = actualGrid[machineId] ?? {};
+      for (let day = filterFrom; day <= filterTo; day++) {
+        if (holidayArr.includes(day)) continue;
+        const cell = machineGrid[day];
+        // Only count if cell belongs to this itemId
+        if (cell && cell.itemId === itemId) totalActualKg += cell.kg;
+      }
+    }
+    return { itemId, itemName: itemMap.get(itemId) ?? `Item ${itemId}`, totalActualKg, totalActualTons: totalActualKg / 1000 };
+  }).filter(a => a.totalActualKg > 0 || actualGridLoaded);
+
+  const grandActualTotal = actualSummaryByItem.reduce((s, a) => s + a.totalActualKg, 0);
+  const isFullMonth = filterFrom === 1 && filterTo === totalDays;
 
   const thStyle: React.CSSProperties = {
     background: "#001529", color: "white", padding: "7px 5px",
@@ -440,36 +497,121 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         </Space>
       </div>
 
-      {/* Summary Cards */}
-      <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {summary.map(item => (
-          <Card
-            key={item.itemId}
-            size="small"
-            hoverable
-            style={{
-              cursor: "pointer", minWidth: 120,
-              borderColor: highlightItemId === item.itemId ? getBorder(item.itemId) : "#d9d9d9",
-              background: highlightItemId === item.itemId ? getBg(item.itemId) : undefined,
-              borderWidth: highlightItemId === item.itemId ? 2 : 1,
-              boxShadow: highlightItemId === item.itemId ? "0 4px 12px rgba(0,0,0,0.15)" : "0 1px 4px rgba(0,0,0,0.05)",
-              transform: highlightItemId === item.itemId ? "translateY(-2px)" : "none",
-              transition: "all 0.2s ease-in-out",
-            }}
-            onClick={() => setHighlightItemId(prev => prev === item.itemId ? null : item.itemId)}
-          >
-            <div style={{ fontWeight: 700, fontSize: 13, color: getColor(item.itemId) }}>{item.itemName}</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{item.totalTons.toFixed(1)} tấn</div>
-            <div style={{ fontSize: 11, color: "#888" }}>{item.machinesInvolved.length} máy</div>
-          </Card>
-        ))}
-        {summary.length > 0 && (
-          <Card size="small" style={{ minWidth: 120, background: "#001529", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>TỔNG THÁNG</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#52c41a" }}>{(grandTotal / 1000).toFixed(1)} tấn</div>
-            <div style={{ fontSize: 11, color: "#aaa" }}>{schedule.segments.length} segments</div>
-          </Card>
-        )}
+      {/* Plan Summary Cards (Kế hoạch) */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: "#888", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>📋 Sản lượng Kế hoạch</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {summary.map(item => (
+            <Card
+              key={item.itemId}
+              size="small"
+              hoverable
+              style={{
+                cursor: "pointer", minWidth: 120,
+                borderColor: highlightItemId === item.itemId ? getBorder(item.itemId) : "#d9d9d9",
+                background: highlightItemId === item.itemId ? getBg(item.itemId) : undefined,
+                borderWidth: highlightItemId === item.itemId ? 2 : 1,
+                boxShadow: highlightItemId === item.itemId ? "0 4px 12px rgba(0,0,0,0.15)" : "0 1px 4px rgba(0,0,0,0.05)",
+                transform: highlightItemId === item.itemId ? "translateY(-2px)" : "none",
+                transition: "all 0.2s ease-in-out",
+              }}
+              onClick={() => setHighlightItemId(prev => prev === item.itemId ? null : item.itemId)}
+            >
+              <div style={{ fontWeight: 700, fontSize: 13, color: getColor(item.itemId) }}>{item.itemName}</div>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>{item.totalTons.toFixed(1)} tấn</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{item.machinesInvolved.length} máy</div>
+            </Card>
+          ))}
+          {summary.length > 0 && (
+            <Card size="small" style={{ minWidth: 120, background: "#001529", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>TỔNG THÁNG</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#52c41a" }}>{(grandTotal / 1000).toFixed(1)} tấn</div>
+              <div style={{ fontSize: 11, color: "#aaa" }}>{schedule.segments.length} segments</div>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Actual Summary Cards (Thực hiện) */}
+      <div style={{ marginBottom: 16, padding: "12px 16px", background: "#f6ffed", border: "1px solid #b7eb8f", borderRadius: 8 }}>
+        {/* Header + Date filter */}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#389e0d", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            <FilterOutlined />
+            📊 Sản lượng Thực tế
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <span style={{ color: "#555" }}>Từ ngày:</span>
+            <InputNumber
+              min={1} max={totalDays} value={actualFilterFrom}
+              size="small" style={{ width: 58 }}
+              onChange={v => setActualFilterFrom(v ?? 1)}
+            />
+            <span style={{ color: "#555" }}>đến ngày:</span>
+            <InputNumber
+              min={1} max={totalDays} value={actualFilterTo}
+              size="small" style={{ width: 58 }}
+              onChange={v => setActualFilterTo(v ?? totalDays)}
+            />
+            <Button
+              size="small" type="link"
+              style={{ padding: "0 4px", fontSize: 11, color: "#389e0d" }}
+              onClick={() => { setActualFilterFrom(1); setActualFilterTo(totalDays); }}
+            >
+              Cả tháng
+            </Button>
+          </div>
+          {!isFullMonth && (
+            <span style={{ fontSize: 11, color: "#fa8c16", fontWeight: 600 }}>
+              (Ngày {filterFrom} → {filterTo} / {schedMonth}/{schedYear})
+            </span>
+          )}
+        </div>
+
+        {/* Actual cards by item */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!actualGridLoaded ? (
+            <Spin size="small" />
+          ) : actualSummaryByItem.length === 0 ? (
+            <span style={{ fontSize: 12, color: "#aaa" }}>Chưa có dữ liệu thực tế</span>
+          ) : (
+            actualSummaryByItem.map(a => (
+              <Card
+                key={a.itemId}
+                size="small"
+                style={{
+                  minWidth: 130,
+                  borderColor: getBorder(a.itemId),
+                  borderWidth: 1.5,
+                  background: getBg(a.itemId),
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                  transition: "all 0.2s ease-in-out",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 13, color: getColor(a.itemId) }}>{a.itemName}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#237804" }}>
+                  {a.totalActualTons.toFixed(2)} tấn
+                </div>
+                <div style={{ fontSize: 11, color: "#555" }}>
+                  {a.totalActualKg.toLocaleString()} kg
+                </div>
+              </Card>
+            ))
+          )}
+          {actualGridLoaded && grandActualTotal > 0 && (
+            <Card size="small" style={{ minWidth: 130, background: "#135200", cursor: "default", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#d9f7be" }}>
+                {isFullMonth ? "TỔNG THÁNG (TH)" : `TỔNG ${filterFrom}–${filterTo}`}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#95de64" }}>
+                {(grandActualTotal / 1000).toFixed(2)} tấn
+              </div>
+              <div style={{ fontSize: 11, color: "#b7eb8f" }}>
+                {grandActualTotal.toLocaleString()} kg
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
 
       {/* Tabs: Kế hoạch / Thực hiện / So sánh */}
@@ -493,6 +635,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                 totalDays={totalDays}
                 itemColors={itemColors}
                 yearMonth={yearMonth}
+                externalGrid={actualGridLoaded ? actualGrid : undefined}
               />
             ),
           },

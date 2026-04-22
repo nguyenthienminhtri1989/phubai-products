@@ -3,6 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { Spin, Typography, Tag } from "antd";
 
+export interface ActualGrid {
+  [machineId: number]: {
+    [day: number]: { itemId: number; kg: number };
+  };
+}
+
 const { Text } = Typography;
 
 interface Segment {
@@ -23,13 +29,13 @@ interface ActualProductionGridProps {
   totalDays: number;
   itemColors: Record<string, string>;
   yearMonth: string;
+  /** Nếu được truyền từ parent, dùng grid này thay vì tự fetch */
+  externalGrid?: ActualGrid;
+  /** Callback để trả grid đã fetch lên parent */
+  onGridLoaded?: (grid: ActualGrid, source: string) => void;
 }
 
-interface ActualGrid {
-  [machineId: number]: {
-    [day: number]: { itemId: number; kg: number };
-  };
-}
+
 
 function getColor(itemId: number, itemColors: Record<string, string>): string {
   if (itemColors[String(itemId)]) return itemColors[String(itemId)];
@@ -70,37 +76,50 @@ export default function ActualProductionGrid({
   totalDays,
   itemColors,
   yearMonth,
+  externalGrid,
+  onGridLoaded,
 }: ActualProductionGridProps) {
-  const [grid, setGrid] = useState<ActualGrid>({});
+  const [internalGrid, setInternalGrid] = useState<ActualGrid>({});
   const [source, setSource] = useState<string>("KD_DAILY_INPUT");
   const [loadedScheduleId, setLoadedScheduleId] = useState<number | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
 
-  // Derive loading: chưa load xong khi loadedScheduleId chưa khớp với scheduleId hiện tại
-  const loading = loadedScheduleId !== scheduleId;
+  // Dùng externalGrid nếu có, ngược lại dùng internalGrid
+  const grid = externalGrid ?? internalGrid;
+
+  // Derive loading: nếu có externalGrid thì không cần loading riêng;
+  // nếu tự fetch thì chờ loadedScheduleId khớp
+  const loading = !externalGrid && loadedScheduleId !== scheduleId;
 
   const [schedYear, schedMonth] = yearMonth.split("-").map(Number);
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
 
   useEffect(() => {
+    // Nếu đã có externalGrid từ parent, không tự fetch nữa
+    if (externalGrid !== undefined) return;
+
     let cancelled = false;
 
     fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
       .then(r => r.json())
       .then(data => {
         if (cancelled) return;
-        setGrid(data.grid ?? {});
-        setSource(data.source ?? "KD_DAILY_INPUT");
+        const fetchedGrid = data.grid ?? {};
+        const fetchedSource = data.source ?? "KD_DAILY_INPUT";
+        setInternalGrid(fetchedGrid);
+        setSource(fetchedSource);
         setLoadedScheduleId(scheduleId);
+        onGridLoaded?.(fetchedGrid, fetchedSource);
       })
       .catch(() => {
         if (cancelled) return;
-        setGrid({});
+        setInternalGrid({});
         setLoadedScheduleId(scheduleId);
+        onGridLoaded?.({}, "KD_DAILY_INPUT");
       });
 
     return () => { cancelled = true; };
-  }, [scheduleId]);
+  }, [scheduleId, externalGrid]);
 
   if (loading) return <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>;
 
