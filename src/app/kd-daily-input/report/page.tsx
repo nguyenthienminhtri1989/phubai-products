@@ -52,6 +52,21 @@ function fmtKg(kg: number) {
   return kg.toLocaleString("vi-VN") + " kg";
 }
 
+/**
+ * So sánh tên máy theo thứ tự số (natural sort).
+ * Trích xuất số ở cuối chuỗi tên máy (ính hướng chính), 
+ * nếu không có số thì so sánh chuỗi bình thường.
+ */
+function naturalSortMachineName(a: string, b: string): number {
+  // Tính số cuối chuỗi (ví dụ: "Máy ống QPRO số 12" → 12)
+  const numA = parseInt(a.match(/(\d+)\s*$/)?.[1] ?? "", 10);
+  const numB = parseInt(b.match(/(\d+)\s*$/)?.[1] ?? "", 10);
+  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+  if (!isNaN(numA)) return -1;
+  if (!isNaN(numB)) return 1;
+  return a.localeCompare(b, "vi");
+}
+
 // ============================================================
 // Main Page
 // ============================================================
@@ -139,11 +154,11 @@ export default function KdDailyInputReportPage() {
         if (Array.isArray(dayData)) results.push(...dayData);
       });
 
-      // Sort by date desc, then machine asc
+      // Sort: ngày giảm dần, rồi tên máy tăng dần (natural sort)
       results.sort((a, b) => {
         const dCmp = b.recordDate.localeCompare(a.recordDate);
         if (dCmp !== 0) return dCmp;
-        return a.machine.name.localeCompare(b.machine.name);
+        return naturalSortMachineName(a.machine.name, b.machine.name);
       });
 
       setRecords(results);
@@ -253,7 +268,8 @@ export default function KdDailyInputReportPage() {
       dataIndex: ["machine", "name"],
       width: 110,
       render: (v: string) => <Text strong>{v}</Text>,
-      sorter: (a: KdRecord, b: KdRecord) => a.machine.name.localeCompare(b.machine.name),
+      sorter: (a: KdRecord, b: KdRecord) => naturalSortMachineName(a.machine.name, b.machine.name),
+      defaultSortOrder: undefined,
     },
     {
       title: "Mặt hàng",
