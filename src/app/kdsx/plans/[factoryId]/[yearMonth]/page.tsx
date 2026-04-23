@@ -184,19 +184,24 @@ export default function PlanDetailPage({
   const [recalculating, setRecalculating] = useState(false);
 
   const fetchActual = useCallback(async () => {
-    const res = await fetch(`/api/kdsx/monthly-actuals?factoryId=${factoryId}&yearMonth=${yearMonth}`);
-    if (!res.ok) return;
-    const list: Actual[] = await res.json();
-    if (list.length === 0) { setActual(null); return; }
-    const detailRes = await fetch(`/api/kdsx/monthly-actuals/${list[0].id}`);
-    if (detailRes.ok) setActual(await detailRes.json());
+    try {
+      const res = await fetch(`/api/kdsx/monthly-actuals?factoryId=${factoryId}&yearMonth=${yearMonth}`);
+      if (!res.ok) return;
+      const list = await res.json();
+      if (!Array.isArray(list) || list.length === 0) { setActual(null); return; }
+      const detailRes = await fetch(`/api/kdsx/monthly-actuals/${list[0].id}`);
+      if (detailRes.ok) setActual(await detailRes.json());
+      else setActual(null);
+    } catch {
+      setActual(null);
+    }
   }, [factoryId, yearMonth]);
 
   const fetchPlan = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/kdsx/monthly-plans?factoryId=${factoryId}&yearMonth=${yearMonth}`);
-      if (!res.ok) return;
+      if (!res.ok) { setPlan(null); return; }
       const plans: Plan[] = await res.json();
       if (plans.length === 0) {
         setPlan(null);
@@ -204,6 +209,7 @@ export default function PlanDetailPage({
       }
       const detailRes = await fetch(`/api/kdsx/monthly-plans/${plans[0].id}`);
       if (detailRes.ok) setPlan(await detailRes.json());
+      else setPlan(null);
 
       const paramRes = await fetch(`/api/kdsx/input-params?factoryId=${factoryId}&yearMonth=${yearMonth}`);
       if (paramRes.ok) {
@@ -211,6 +217,8 @@ export default function PlanDetailPage({
         setHasParam(!!param);
         if (param) paramForm.setFieldsValue(param);
       }
+    } catch {
+      setPlan(null);
     } finally {
       setLoading(false);
     }
@@ -681,21 +689,34 @@ export default function PlanDetailPage({
           <Title level={3} style={{ margin: 0 }}>
             T{mo}/{yr} — {plan.factory.name}
           </Title>
-          <Space style={{ marginTop: 4 }}>
+          <Space style={{ marginTop: 4 }} align="center">
             <Tag color={STATUS_COLOR[plan.status]}>{STATUS_LABEL[plan.status]}</Tag>
+            <span style={{ fontSize: 12, color: "#888" }}>Đang xem:</span>
             <Tag.CheckableTag
               checked={viewMode === "KH"}
               onChange={() => setViewMode("KH")}
-              style={{ border: "1px solid #d9d9d9", borderRadius: 4 }}
+              style={{
+                border: viewMode === "KH" ? "2px solid #1677ff" : "1px solid #d9d9d9",
+                borderRadius: 6,
+                fontWeight: viewMode === "KH" ? 600 : 400,
+                background: viewMode === "KH" ? "#e6f4ff" : undefined,
+                color: viewMode === "KH" ? "#1677ff" : undefined,
+              }}
             >
-              📋 Kế hoạch
+              📋 Kế hoạch (KH)
             </Tag.CheckableTag>
             <Tag.CheckableTag
               checked={viewMode === "TH"}
               onChange={() => setViewMode("TH")}
-              style={{ border: "1px solid #d9d9d9", borderRadius: 4 }}
+              style={{
+                border: viewMode === "TH" ? "2px solid #52c41a" : "1px solid #d9d9d9",
+                borderRadius: 6,
+                fontWeight: viewMode === "TH" ? 600 : 400,
+                background: viewMode === "TH" ? "#f6ffed" : undefined,
+                color: viewMode === "TH" ? "#52c41a" : undefined,
+              }}
             >
-              ✅ Thực hiện
+              ✅ Thực hiện (TH)
             </Tag.CheckableTag>
           </Space>
         </div>
