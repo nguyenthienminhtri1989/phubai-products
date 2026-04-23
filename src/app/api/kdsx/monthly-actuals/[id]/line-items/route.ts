@@ -7,6 +7,10 @@ import {
 } from "@/lib/kdsx/calculator";
 import { SnapshotType } from "@prisma/client";
 
+/**
+ * POST /api/kdsx/monthly-actuals/[id]/line-items
+ * Thêm HĐ phát sinh (isAdHoc = true) vào MonthlyActual
+ */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -21,121 +25,58 @@ export async function POST(
   }
 
   const { id } = await params;
-  const planId = Number(id);
-  const plan = await prisma.monthlyPlan.findUnique({ where: { id: planId } });
-  if (!plan) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const actual = await prisma.monthlyActual.findUnique({
+    where: { id: Number(id) },
+  });
+  if (!actual)
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json();
   const {
     itemId,
     salesOrderItemId,
+    qty,
     unitPriceUsd,
     note,
     cottonMaterialTypeId,
     cottonPriceUsd,
     peMaterialTypeId,
     pePriceUsd,
-    isAutoQty,
   } = body;
 
-  let qty = body.qty;
-
-  if (!itemId || unitPriceUsd === undefined) {
+  if (!itemId || qty === undefined || unitPriceUsd === undefined) {
     return NextResponse.json(
-      { error: "Thiếu itemId hoặc unitPriceUsd" },
+      { error: "Thiếu itemId, qty hoặc unitPriceUsd" },
       { status: 400 },
     );
   }
 
-  // Lấy thông số tháng (chỉ cần exchangeRate)
   const inputParam = await prisma.monthlyInputParam.findUnique({
     where: {
       factoryId_yearMonth: {
-        factoryId: plan.factoryId,
-        yearMonth: plan.yearMonth,
+        factoryId: actual.factoryId,
+        yearMonth: actual.yearMonth,
       },
     },
   });
   if (!inputParam) {
     return NextResponse.json(
-      { error: "Chưa có thông số tháng. Hãy nhập thông số trước." },
+      { error: "Chưa có thông số tháng" },
       { status: 400 },
     );
   }
 
-  // =====================================================================
-  // isAutoQty: Tự tính SL = Tổng SL mặt hàng từ KH-SL − các HĐ khác
-  // =====================================================================
-  if (isAutoQty) {
-    const schedule = await prisma.productionSchedule.findUnique({
-      where: {
-        factoryId_yearMonth: {
-          factoryId: plan.factoryId,
-          yearMonth: plan.yearMonth,
-        },
-      },
-      include: { segments: true },
-    });
-
-    const holidays: number[] = (schedule?.holidays as number[]) ?? [];
-    const totalItemKg =
-      schedule?.segments
-        .filter((s) => s.itemId === Number(itemId))
-        .reduce((sum, seg) => {
-          const days = seg.toDay - seg.fromDay + 1;
-          const holsInRange = holidays.filter(
-            (h) => h >= seg.fromDay && h <= seg.toDay,
-          ).length;
-          return sum + seg.kgPerDay * (days - holsInRange);
-        }, 0) ?? 0;
-
-    // Trừ SL các HĐ khác cùng mặt hàng trong plan này
-    const otherQty = await prisma.planLineItem.aggregate({
-      where: {
-        planId,
-        itemId: Number(itemId),
-        isAutoQty: false,
-        // Khi tạo mới thì không có lineItemId để exclude
-      },
-      _sum: { qty: true },
-    });
-
-    const autoQty = Math.max(0, totalItemKg - (otherQty._sum.qty ?? 0));
-
-    if (totalItemKg > 0 && autoQty === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Tổng SL các HĐ khác đã đủ hoặc vượt quá SL kế hoạch mặt hàng này.",
-        },
-        { status: 400 },
-      );
-    }
-    qty = autoQty;
-  }
-
-  if (qty === undefined || qty === null) {
-    return NextResponse.json({ error: "Thiếu qty" }, { status: 400 });
-  }
-
-  // Lấy định mức mới nhất cho item
   const rate = await prisma.rawMaterialRate.findFirst({
-    where: {
-      itemId: Number(itemId),
-      effectiveTo: null,
-    },
+    where: { itemId: Number(itemId), effectiveTo: null },
     orderBy: { effectiveFrom: "desc" },
   });
 
-  // Lấy sellingCostRate từ SalesOrderItem (không phải RawMaterialRate)
   let sellingCostRate = 0;
   if (salesOrderItemId) {
     const soi = await prisma.salesOrderItem.findUnique({
       where: { id: Number(salesOrderItemId) },
     });
     sellingCostRate = soi?.sellingCostRate ?? 0;
-  } else {
-    sellingCostRate = body.sellingCostRate ?? 0;
   }
 
   const cottonPrice = Number(cottonPriceUsd) || 0;
@@ -161,15 +102,13 @@ export async function POST(
     },
   });
 
-  const lineItem = await prisma.planLineItem.create({
+  const lineItem = await prisma.actualLineItem.create({
     data: {
-      planId,
+      actualId: actual.id,
       itemId: Number(itemId),
       salesOrderItemId: salesOrderItemId ? Number(salesOrderItemId) : null,
       qty: Number(qty),
       unitPriceUsd: Number(unitPriceUsd),
-      isAutoQty: Boolean(isAutoQty),
-      // Snapshot giá NVL
       cottonMaterialTypeId: cottonMaterialTypeId
         ? Number(cottonMaterialTypeId)
         : null,
@@ -178,6 +117,8 @@ export async function POST(
       peMaterialTypeId: peMaterialTypeId ? Number(peMaterialTypeId) : null,
       pePriceUsd: pePrice || null,
       peRatio: peRatioValue || null,
+      isAdHoc: true,
+      isAutoQty: false,
       note: note || null,
       ...calcResult,
     },
@@ -189,7 +130,11 @@ export async function POST(
     },
   });
 
-  await refreshSummarySnapshot(plan.factoryId, plan.yearMonth, SnapshotType.KH);
+  await refreshSummarySnapshot(
+    actual.factoryId,
+    actual.yearMonth,
+    SnapshotType.TH,
+  );
 
   return NextResponse.json(lineItem, { status: 201 });
 }

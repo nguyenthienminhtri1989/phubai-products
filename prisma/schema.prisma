@@ -970,6 +970,8 @@ model PlanLineItem {
   wasteRecoveryVnd Float? // Phế thu hồi (VNĐ) — giá trị dương, trừ vào chi phí
   grossProfitVnd   Float? // Lợi nhuận gộp (VNĐ)
 
+  isAutoQty Boolean @default(false) // true = tự tính SL còn lại = tổng SL mặt hàng − các HĐ khác
+
   note String?
 
   @@index([planId])
@@ -1048,6 +1050,9 @@ model ActualLineItem {
   gcDoubleTwistVnd Float?
   wasteRecoveryVnd Float?
   grossProfitVnd   Float?
+
+  isAutoQty Boolean @default(false) // true = SL tự tính từ KH, không nhập tay
+  isAdHoc   Boolean @default(false)  // true = HĐ phát sinh, không có trong KH
 
   note String?
 

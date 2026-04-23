@@ -70,7 +70,36 @@ interface PlanLineItem {
   gcDoubleTwistVnd: number | null;
   wasteRecoveryVnd: number | null;
   grossProfitVnd: number | null;
+  isAutoQty: boolean;
   note: string | null;
+}
+interface ActualLineItem {
+  id: number;
+  itemId: number;
+  item: Item;
+  salesOrderItemId: number | null;
+  salesOrderItem: SalesOrderItem | null;
+  qty: number;
+  unitPriceUsd: number;
+  revenueVnd: number | null;
+  cottonCostVnd: number | null;
+  peCostVnd: number | null;
+  sellingCostVnd: number | null;
+  gcDoubleTwistVnd: number | null;
+  wasteRecoveryVnd: number | null;
+  grossProfitVnd: number | null;
+  isAutoQty: boolean;
+  isAdHoc: boolean;
+  note: string | null;
+}
+interface Actual {
+  id: number;
+  factoryId: number;
+  factory: { id: number; name: string };
+  yearMonth: string;
+  note: string | null;
+  lineItems: ActualLineItem[];
+  fixedCosts: FixedCostEntry[];
 }
 interface FixedCostEntry {
   id: number;
@@ -114,11 +143,18 @@ export default function PlanDetailPage({
   const isManager = (session?.user as any)?.accessLevel === "MANAGER";
 
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [actual, setActual] = useState<Actual | null>(null);
+  const [viewMode, setViewMode] = useState<"KH" | "TH">("KH");
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [salesOrderItems, setSalesOrderItems] = useState<SalesOrderItem[]>([]);
   const [lineItemModal, setLineItemModal] = useState(false);
   const [editingLineItem, setEditingLineItem] = useState<PlanLineItem | null>(null);
+  const [adHocModal, setAdHocModal] = useState(false);
+  const [adHocForm] = Form.useForm();
+  const [savingAdHoc, setSavingAdHoc] = useState(false);
+  const [isAutoQty, setIsAutoQty] = useState(false);
   const [paramModal, setParamModal] = useState(false);
   const [paramForm] = Form.useForm();
   const [lineItemForm] = Form.useForm();
@@ -129,7 +165,6 @@ export default function PlanDetailPage({
   // NVL state
   const [cottonTypes, setCottonTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
   const [peTypes, setPeTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
-
 
   // Submit checklist modal
   const [submitCheckModal, setSubmitCheckModal] = useState(false);
@@ -147,6 +182,15 @@ export default function PlanDetailPage({
 
   // Recalculate
   const [recalculating, setRecalculating] = useState(false);
+
+  const fetchActual = useCallback(async () => {
+    const res = await fetch(`/api/kdsx/monthly-actuals?factoryId=${factoryId}&yearMonth=${yearMonth}`);
+    if (!res.ok) return;
+    const list: Actual[] = await res.json();
+    if (list.length === 0) { setActual(null); return; }
+    const detailRes = await fetch(`/api/kdsx/monthly-actuals/${list[0].id}`);
+    if (detailRes.ok) setActual(await detailRes.json());
+  }, [factoryId, yearMonth]);
 
   const fetchPlan = useCallback(async () => {
     setLoading(true);
@@ -192,8 +236,8 @@ export default function PlanDetailPage({
 
   useEffect(() => {
     fetchPlan();
+    fetchActual();
     fetchItems();
-    // Load giá NVL theo tháng
     fetch(`/api/kdsx/material-prices/by-month?yearMonth=${yearMonth}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
@@ -202,7 +246,7 @@ export default function PlanDetailPage({
           setPeTypes(data.pe ?? []);
         }
       });
-  }, [fetchPlan, fetchItems, yearMonth]);
+  }, [fetchPlan, fetchActual, fetchItems, yearMonth]);
 
 
   // Tính tổng
@@ -409,6 +453,78 @@ export default function PlanDetailPage({
     }
   }
 
+  async function handleSync() {
+    if (!actual) {
+      message.warning("Chưa có Thực hiện tháng này. Hệ thống sẽ tự tạo khi sync.");
+    }
+    setSyncing(true);
+    try {
+      // Nếu chưa có actual, tạo mới trước
+      let actualId = actual?.id;
+      if (!actualId) {
+        const createRes = await fetch("/api/kdsx/monthly-actuals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ factoryId: Number(factoryId), yearMonth }),
+        });
+        if (!createRes.ok) {
+          const err = await createRes.json();
+          message.error(err.error || "Không thể tạo Thực hiện tháng");
+          return;
+        }
+        const created = await createRes.json();
+        actualId = created.id;
+      }
+      const res = await fetch(`/api/kdsx/monthly-actuals/${actualId}/sync`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        message.success(`Đã đồng bộ ${data.syncedItems} mặt hàng`);
+        fetchActual();
+      } else {
+        const err = await res.json();
+        message.error(err.error || "Lỗi đồng bộ");
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleDeleteAdHoc(lineItemId: number) {
+    if (!actual) return;
+    const res = await fetch(`/api/kdsx/monthly-actuals/${actual.id}/line-items/${lineItemId}`, { method: "DELETE" });
+    if (res.ok) {
+      message.success("Đã xóa HĐ phát sinh");
+      fetchActual();
+    } else {
+      const err = await res.json();
+      message.error(err.error || "Không thể xóa");
+    }
+  }
+
+  async function handleSaveAdHoc() {
+    if (!actual) return;
+    try {
+      const values = await adHocForm.validateFields();
+      setSavingAdHoc(true);
+      const res = await fetch(`/api/kdsx/monthly-actuals/${actual.id}/line-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (res.ok) {
+        message.success("Đã thêm HĐ phát sinh");
+        setAdHocModal(false);
+        adHocForm.resetFields();
+        fetchActual();
+      } else {
+        const err = await res.json();
+        message.error(err.error || "Lỗi lưu");
+      }
+    } finally {
+      setSavingAdHoc(false);
+    }
+  }
+
   function openAddLineItem() {
     if (!hasParam) {
       message.warning("Hãy nhập thông số tháng trước khi thêm dòng sợi");
@@ -416,6 +532,7 @@ export default function PlanDetailPage({
     }
     setEditingLineItem(null);
     setIsDP(false);
+    setIsAutoQty(false);
     lineItemForm.resetFields();
     setLineItemModal(true);
   }
@@ -424,9 +541,11 @@ export default function PlanDetailPage({
     setEditingLineItem(li);
     const dp = !li.salesOrderItemId;
     setIsDP(dp);
+    setIsAutoQty(li.isAutoQty);
     lineItemForm.setFieldsValue({
       itemId: li.itemId,
       isDP: dp,
+      isAutoQty: li.isAutoQty,
       salesOrderItemId: li.salesOrderItemId ?? undefined,
       qty: li.qty,
       unitPriceUsd: li.unitPriceUsd,
@@ -451,7 +570,15 @@ export default function PlanDetailPage({
           ? r.salesOrderItem?.order.orderNo ?? "-"
           : <Tag>Dự phòng</Tag>,
     },
-    { title: "SL (kg)", dataIndex: "qty", key: "qty", render: (v: number) => v.toLocaleString() },
+    {
+      title: "SL (kg)", dataIndex: "qty", key: "qty",
+      render: (v: number, r: PlanLineItem) => (
+        <Space size={4}>
+          <span>{v.toLocaleString()}</span>
+          {r.isAutoQty && <Tag color="blue" style={{ fontSize: 10, padding: "0 4px" }}>AUTO</Tag>}
+        </Space>
+      ),
+    },
     { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
     { title: "Doanh thu (đ)", key: "rev", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.revenueVnd) },
     { title: "CP Bông (đ)", key: "cotton", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.cottonCostVnd) },
@@ -484,6 +611,50 @@ export default function PlanDetailPage({
     },
   ];
 
+  // Cột bảng TH
+  const actualColumns = [
+    { title: "STT", key: "stt", width: 50, render: (_: unknown, __: unknown, idx: number) => idx + 1 },
+    { title: "Loại sợi", key: "item", render: (_: unknown, r: ActualLineItem) => r.item.name },
+    {
+      title: "HĐ",
+      key: "order",
+      render: (_: unknown, r: ActualLineItem) => (
+        <Space size={4}>
+          {r.salesOrderItemId ? r.salesOrderItem?.order.orderNo ?? "-" : <Tag>Dự phòng</Tag>}
+          {r.isAdHoc && <Tag color="orange">Phát sinh</Tag>}
+          {r.isAutoQty && <Tag color="blue" style={{ fontSize: 10 }}>AUTO</Tag>}
+        </Space>
+      ),
+    },
+    { title: "SL TH (kg)", dataIndex: "qty", key: "qty", render: (v: number) => v.toLocaleString() },
+    { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
+    { title: "DT TH (đ)", key: "rev", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.revenueVnd) },
+    { title: "CP Bông (đ)", key: "cotton", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.cottonCostVnd) },
+    { title: "CP PE (đ)", key: "pe", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.peCostVnd) },
+    { title: "CP BH (đ)", key: "sell", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.sellingCostVnd) },
+    { title: "Phế thu hồi (đ)", key: "waste", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.wasteRecoveryVnd) },
+    {
+      title: "LN gộp TH (đ)",
+      key: "profit",
+      render: (_: unknown, r: ActualLineItem) => (
+        <Text type={(r.grossProfitVnd ?? 0) >= 0 ? "success" : "danger"}>
+          {fmtVnd(r.grossProfitVnd)}
+        </Text>
+      ),
+    },
+    {
+      title: "",
+      key: "action",
+      width: 60,
+      render: (_: unknown, row: ActualLineItem) =>
+        row.isAdHoc ? (
+          <Popconfirm title="Xóa HĐ phát sinh này?" onConfirm={() => handleDeleteAdHoc(row.id)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        ) : null,
+    },
+  ];
+
   const [yr, mo] = yearMonth.split("-");
 
   if (loading) return <div style={{ textAlign: "center", padding: 80 }}><Spin size="large" /></div>;
@@ -508,11 +679,25 @@ export default function PlanDetailPage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <Title level={3} style={{ margin: 0 }}>
-            Kế hoạch T{mo}/{yr} — {plan.factory.name}
+            T{mo}/{yr} — {plan.factory.name}
           </Title>
-          <Tag color={STATUS_COLOR[plan.status]} style={{ marginTop: 4 }}>
-            {STATUS_LABEL[plan.status]}
-          </Tag>
+          <Space style={{ marginTop: 4 }}>
+            <Tag color={STATUS_COLOR[plan.status]}>{STATUS_LABEL[plan.status]}</Tag>
+            <Tag.CheckableTag
+              checked={viewMode === "KH"}
+              onChange={() => setViewMode("KH")}
+              style={{ border: "1px solid #d9d9d9", borderRadius: 4 }}
+            >
+              📋 Kế hoạch
+            </Tag.CheckableTag>
+            <Tag.CheckableTag
+              checked={viewMode === "TH"}
+              onChange={() => setViewMode("TH")}
+              style={{ border: "1px solid #d9d9d9", borderRadius: 4 }}
+            >
+              ✅ Thực hiện
+            </Tag.CheckableTag>
+          </Space>
         </div>
         <Space>
           <Button icon={<SettingOutlined />} onClick={() => setParamModal(true)}>
@@ -597,8 +782,8 @@ export default function PlanDetailPage({
         items={[
           {
             key: "lines",
-            label: "Dòng sợi",
-            children: (
+            label: viewMode === "KH" ? "KH — Dòng sợi" : "TH — Doanh thu thực hiện",
+            children: viewMode === "KH" ? (
               <div>
                 {canEdit && (
                   <Button
@@ -617,15 +802,62 @@ export default function PlanDetailPage({
                   pagination={false}
                   bordered
                   size="small"
-                  scroll={{ x: 1200 }}
+                  scroll={{ x: 1300 }}
                 />
+              </div>
+            ) : (
+              <div>
+                <Space style={{ marginBottom: 12 }}>
+                  <Button
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    loading={syncing}
+                    onClick={handleSync}
+                  >
+                    Đồng bộ SL thực tế
+                  </Button>
+                  {actual && (
+                    <Button
+                      icon={<PlusOutlined />}
+                      onClick={() => { adHocForm.resetFields(); setAdHocModal(true); }}
+                    >
+                      Thêm HĐ phát sinh
+                    </Button>
+                  )}
+                  {!actual && (
+                    <Alert type="info" message="Chưa có dữ liệu TH. Nhấn Đồng bộ để tạo." showIcon style={{ padding: "2px 10px" }} />
+                  )}
+                </Space>
+                {actual && (
+                  <>
+                    <Table
+                      dataSource={actual.lineItems}
+                      columns={actualColumns}
+                      rowKey="id"
+                      pagination={false}
+                      bordered
+                      size="small"
+                      scroll={{ x: 1300 }}
+                    />
+                    {/* Tổng kết TH nhanh */}
+                    <div style={{ marginTop: 12, padding: "10px 16px", background: "#f6ffed", borderRadius: 6, border: "1px solid #b7eb8f" }}>
+                      <Space size={32}>
+                        <span>🏭 SL TH: <strong>{actual.lineItems.reduce((s, li) => s + li.qty, 0).toLocaleString("vi-VN")} kg</strong></span>
+                        <span style={{ color: "#3f8600" }}>💰 DT TH: <strong>{fmtVnd(actual.lineItems.reduce((s, li) => s + (li.revenueVnd ?? 0), 0))}</strong></span>
+                        <span style={{ color: actual.lineItems.reduce((s, li) => s + (li.grossProfitVnd ?? 0), 0) >= 0 ? "#3f8600" : "#cf1322" }}>
+                          📈 LN gộp TH: <strong>{fmtVnd(actual.lineItems.reduce((s, li) => s + (li.grossProfitVnd ?? 0), 0))}</strong>
+                        </span>
+                      </Space>
+                    </div>
+                  </>
+                )}
               </div>
             ),
           },
           {
             key: "fixed",
-            label: "Chi phí cố định",
-            children: (
+            label: viewMode === "KH" ? "KH — Chi phí cố định" : "TH — Chi phí cố định",
+            children: viewMode === "KH" ? (
               <FixedCostTable
                 monthlyPlanId={plan.id}
                 yearMonth={plan.yearMonth}
@@ -633,6 +865,18 @@ export default function PlanDetailPage({
                 readonly={!canEdit}
                 onSaved={fetchPlan}
               />
+            ) : (
+              actual ? (
+                <FixedCostTable
+                  monthlyActualId={actual.id}
+                  yearMonth={actual.yearMonth}
+                  factoryId={actual.factoryId}
+                  readonly={false}
+                  onSaved={fetchActual}
+                />
+              ) : (
+                <Alert type="info" message="Chưa có dữ liệu TH. Hãy đồng bộ SL thực tế trước." showIcon />
+              )
             ),
           },
           {
@@ -765,12 +1009,12 @@ export default function PlanDetailPage({
       </Modal>
 
 
-      {/* Modal thêm/sửa dòng sợi */}
+      {/* Modal thêm/sửa dòng sợi KH */}
       <Modal
         title={editingLineItem ? "Sửa dòng sợi" : "Thêm dòng sợi"}
         open={lineItemModal}
         onOk={handleSaveLineItem}
-        onCancel={() => { setLineItemModal(false); setIsDP(false); }}
+        onCancel={() => { setLineItemModal(false); setIsDP(false); setIsAutoQty(false); }}
         confirmLoading={saving}
         okText="Lưu & Tính toán"
         cancelText="Hủy"
@@ -800,6 +1044,16 @@ export default function PlanDetailPage({
               Dự phòng (DP) — không gắn với hợp đồng cụ thể
             </Checkbox>
           </Form.Item>
+          <Form.Item name="isAutoQty" valuePropName="checked" style={{ marginBottom: 8 }}>
+            <Checkbox
+              onChange={(e) => {
+                setIsAutoQty(e.target.checked);
+                if (e.target.checked) lineItemForm.setFieldValue("qty", undefined);
+              }}
+            >
+              Tự tính SL = Tổng SL mặt hàng − các HĐ khác
+            </Checkbox>
+          </Form.Item>
           <Form.Item
             name="salesOrderItemId"
             label="Hợp đồng"
@@ -819,8 +1073,8 @@ export default function PlanDetailPage({
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="qty" label="Số lượng (kg)" rules={[{ required: true }]}>
-                <InputNumber min={0} style={{ width: "100%" }} />
+              <Form.Item name="qty" label="Số lượng (kg)" rules={[{ required: !isAutoQty, message: "Nhập SL hoặc dùng Tự tính" }]}>
+                <InputNumber min={0} style={{ width: "100%" }} disabled={isAutoQty} placeholder={isAutoQty ? "Tự tính từ lịch SX" : ""} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1020,6 +1274,80 @@ export default function PlanDetailPage({
             Cần ít nhất 10 ký tự
           </div>
         )}
+      </Modal>
+
+      {/* Modal thêm HĐ phát sinh TH */}
+      <Modal
+        title="Thêm HĐ phát sinh (Thực hiện)"
+        open={adHocModal}
+        onOk={handleSaveAdHoc}
+        onCancel={() => { setAdHocModal(false); adHocForm.resetFields(); }}
+        confirmLoading={savingAdHoc}
+        okText="Lưu & Tính toán"
+        cancelText="Hủy"
+        width={600}
+      >
+        <Alert
+          type="warning"
+          message="HĐ phát sinh chỉ xuất hiện trong TH, không ảnh hưởng KH"
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={adHocForm} layout="vertical">
+          <Form.Item name="itemId" label="Loại sợi" rules={[{ required: true }]}>
+            <Select
+              options={items.map((i) => ({ label: i.name, value: i.id }))}
+              showSearch optionFilterProp="label" placeholder="Chọn loại sợi"
+            />
+          </Form.Item>
+          <Form.Item name="salesOrderItemId" label="Hợp đồng (tùy chọn)">
+            <Select
+              options={salesOrderItems.map((oi) => ({
+                label: `${oi.order.orderNo} — ${items.find((i) => i.id === oi.itemId)?.name ?? oi.itemId} — ${oi.unitPrice} USD/kg`,
+                value: oi.id,
+              }))}
+              showSearch optionFilterProp="label" placeholder="Chọn HĐ hoặc để trống (Dự phòng)" allowClear
+            />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="qty" label="Số lượng (kg)" rules={[{ required: true }]}>
+                <InputNumber min={0} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="unitPriceUsd" label="Đơn giá (USD/kg)" rules={[{ required: true }]}>
+                <InputNumber min={0} step={0.001} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          {cottonTypes.length > 0 && (
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="cottonMaterialTypeId" label="Loại bông">
+                  <Select
+                    options={cottonTypes.map((t) => ({
+                      label: t.priceUsd ? `${t.name} — ${t.priceUsd} USD/kg` : `${t.name} — Chưa có giá`,
+                      value: t.id, disabled: !t.priceUsd,
+                    }))}
+                    allowClear placeholder="Chọn loại bông"
+                    onChange={(val) => {
+                      const found = cottonTypes.find((t) => t.id === val);
+                      adHocForm.setFieldValue("cottonPriceUsd", found?.priceUsd ?? undefined);
+                    }}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="cottonPriceUsd" label="Giá bông (USD/kg)">
+                  <InputNumber min={0} step={0.001} precision={3} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+          <Form.Item name="note" label="Ghi chú">
+            <Input placeholder="Lý do phát sinh HĐ này..." />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );
