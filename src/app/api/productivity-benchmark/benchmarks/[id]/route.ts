@@ -42,8 +42,14 @@ export async function PUT(
     include: { version: true },
   });
   if (!existing) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
+
   if (existing.version.isActive) {
-    return NextResponse.json({ error: "Không thể sửa phiên bản đang active" }, { status: 400 });
+    const usedInSchedule = await prisma.scheduleSegment.findFirst({
+      where: { benchmarkId: existing.id },
+    });
+    if (usedInSchedule) {
+      return NextResponse.json({ error: "Không thể sửa — benchmark đã được dùng trong KH SX tháng" }, { status: 400 });
+    }
   }
 
   const body = await req.json();
@@ -125,8 +131,14 @@ export async function DELETE(
     include: { version: true },
   });
   if (!existing) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
+
   if (existing.version.isActive) {
-    return NextResponse.json({ error: "Không thể xóa dòng trong phiên bản đang active" }, { status: 400 });
+    const usedInSchedule = await prisma.scheduleSegment.findFirst({
+      where: { benchmarkId: existing.id },
+    });
+    if (usedInSchedule) {
+      return NextResponse.json({ error: "Không thể xóa — benchmark đã được dùng trong KH SX tháng" }, { status: 400 });
+    }
   }
 
   await prisma.productivityBenchmark.delete({ where: { id: parseInt(id) } });

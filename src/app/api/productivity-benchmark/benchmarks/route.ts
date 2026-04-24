@@ -52,11 +52,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc (phiên bản, mặt hàng, công đoạn, loại máy)" }, { status: 400 });
   }
 
-  // Kiểm tra phiên bản đang active thì không cho thêm
   const version = await prisma.benchmarkVersion.findUnique({ where: { id: parseInt(versionId) } });
   if (!version) return NextResponse.json({ error: "Không tìm thấy phiên bản" }, { status: 404 });
+
+  // Version active: chỉ cho thêm nếu combo (versionId, itemId, processId, machineModel) chưa tồn tại
   if (version.isActive) {
-    return NextResponse.json({ error: "Không thể sửa phiên bản đang active. Hãy nhân bản trước." }, { status: 400 });
+    const existing = await prisma.productivityBenchmark.findFirst({
+      where: {
+        versionId: parseInt(versionId),
+        itemId: parseInt(itemId),
+        processId: parseInt(processId),
+        machineModel,
+      },
+    });
+    if (existing) {
+      return NextResponse.json({ error: "Combo mặt hàng + công đoạn + loại máy đã tồn tại trong phiên bản này. Không thể thêm trùng." }, { status: 400 });
+    }
   }
 
   const type = benchmarkType === "EMPIRICAL" ? "EMPIRICAL" : "THEORY";

@@ -66,6 +66,7 @@ export default function ActualProductionGrid({
   const [source, setSource] = useState<string>("KD_DAILY_INPUT");
   const [loadedScheduleId, setLoadedScheduleId] = useState<number | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [apiMachines, setApiMachines] = useState<{ id: number; name: string; model?: string | null; processId: number }[]>([]);
 
   const grid = externalGrid ?? internalGrid;
   const loading = !externalGrid && loadedScheduleId !== scheduleId;
@@ -82,8 +83,10 @@ export default function ActualProductionGrid({
         if (cancelled) return;
         const fetchedGrid = data.grid ?? {};
         const fetchedSource = data.source ?? "KD_DAILY_INPUT";
+        const fetchedMachines = data.machines ?? [];
         setInternalGrid(fetchedGrid);
         setSource(fetchedSource);
+        setApiMachines(fetchedMachines);
         setLoadedScheduleId(scheduleId);
         onGridLoaded?.(fetchedGrid, fetchedSource);
       })
@@ -110,12 +113,15 @@ export default function ActualProductionGrid({
     machineRowSpan[seg.machineId] = (machineRowSpan[seg.machineId] ?? 0) + 1;
   }
 
-  // Tổng TH theo ngày (toàn bộ máy)
-  const uniqueMachineIds = [...new Set(segments.map(s => s.machineId))];
+  // Tổng TH theo ngày — gộp máy từ KH và từ grid thực tế
+  const allMachineIds = [...new Set([
+    ...segments.map(s => s.machineId),
+    ...Object.keys(grid).map(Number),
+  ])];
   const totalActualByDay = dayNumbers.map(day => {
     if (holidays.includes(day)) return 0;
     let total = 0;
-    for (const mid of uniqueMachineIds) {
+    for (const mid of allMachineIds) {
       const cell = grid[mid]?.[day];
       if (cell) total += cell.kg;
     }

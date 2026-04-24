@@ -20,16 +20,11 @@ export async function GET(
   const endDate = new Date(year, month, 0); // last day of month
 
   // Lấy danh sách máy từ segments
-  const machineIds = [...new Set(schedule.segments.map((s) => s.machineId))];
+  const segmentMachineIds = [...new Set(schedule.segments.map((s) => s.machineId))];
 
-  if (machineIds.length === 0) {
-    return NextResponse.json({ grid: {}, source: "NONE" });
-  }
-
-  // Lấy sản lượng thực tế từ KdDailyInput
+  // Lấy sản lượng thực tế từ KdDailyInput (tất cả máy trong tháng, không giới hạn theo segments)
   const actuals = await prisma.kdDailyInput.findMany({
     where: {
-      machineId: { in: machineIds },
       recordDate: { gte: startDate, lte: endDate },
     },
     select: {
@@ -40,7 +35,6 @@ export async function GET(
     },
   });
 
-  // Chỉ dùng KdDailyInput (production_logs sẽ được tích hợp sau nếu cần)
   const data = actuals.map((a) => ({
     machineId: a.machineId,
     itemId: a.itemId,
@@ -63,5 +57,20 @@ export async function GET(
     grid[row.machineId][day].kg += row.outputKg;
   }
 
-  return NextResponse.json({ grid, source });
+  if (segmentMachineIds.length === 0 && Object.keys(grid).length === 0) {
+    return NextResponse.json({ grid: {}, source: "NONE", machines: [] });
+  }
+
+  // Gộp tất cả machineId từ segments và từ dữ liệu thực tế
+  const allMachineIds = [...new Set([
+    ...segmentMachineIds,
+    ...Object.keys(grid).map(Number),
+  ])];
+
+  const machines = await prisma.machine.findMany({
+    where: { id: { in: allMachineIds } },
+    select: { id: true, name: true, model: true, processId: true },
+  });
+
+  return NextResponse.json({ grid, source, machines });
 }
