@@ -301,12 +301,13 @@ export default function SalesOrdersPage() {
             <Form.Item name="orderNo" label="Số hợp đồng" rules={[{ required: true }]} style={{ flex: 1 }}>
               <Input placeholder="VD: 431PB25" />
             </Form.Item>
-            <Form.Item name="customerId" label="Khách hàng" style={{ flex: 2 }}>
+            <Form.Item name="customerId" label="Khách hàng (không bắt buộc)" style={{ flex: 2 }}>
               <Select
                 options={customers.map((c) => ({ label: c.name, value: c.id }))}
                 showSearch
+                allowClear
                 optionFilterProp="label"
-                placeholder="Chọn khách hàng"
+                placeholder="Chọn khách hàng (tuỳ chọn)"
                 popupMatchSelectWidth={false}
               />
             </Form.Item>
