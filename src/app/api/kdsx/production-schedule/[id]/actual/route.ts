@@ -72,5 +72,12 @@ export async function GET(
     select: { id: true, name: true, model: true, processId: true },
   });
 
-  return NextResponse.json({ grid, source, machines });
+  // Lấy tên item cho tất cả itemId có trong grid thực tế
+  const allItemIds = [...new Set(data.map((d) => d.itemId))];
+  const items = await prisma.item.findMany({
+    where: { id: { in: allItemIds } },
+    select: { id: true, name: true },
+  });
+
+  return NextResponse.json({ grid, source, machines, items });
 }

@@ -30,6 +30,7 @@ interface ActualProductionGridProps {
   itemColors: Record<string, string>;
   yearMonth: string;
   externalGrid?: ActualGrid;
+  externalItems?: { id: number; name: string }[];
   onGridLoaded?: (grid: ActualGrid, source: string) => void;
 }
 
@@ -60,6 +61,7 @@ export default function ActualProductionGrid({
   itemColors,
   yearMonth,
   externalGrid,
+  externalItems,
   onGridLoaded,
 }: ActualProductionGridProps) {
   const [internalGrid, setInternalGrid] = useState<ActualGrid>({});
@@ -67,6 +69,7 @@ export default function ActualProductionGrid({
   const [loadedScheduleId, setLoadedScheduleId] = useState<number | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [apiMachines, setApiMachines] = useState<{ id: number; name: string; model?: string | null; processId: number }[]>([]);
+  const [apiItems, setApiItems] = useState<{ id: number; name: string }[]>([]);
 
   const grid = externalGrid ?? internalGrid;
   const loading = !externalGrid && loadedScheduleId !== scheduleId;
@@ -84,9 +87,11 @@ export default function ActualProductionGrid({
         const fetchedGrid = data.grid ?? {};
         const fetchedSource = data.source ?? "KD_DAILY_INPUT";
         const fetchedMachines = data.machines ?? [];
+        const fetchedItems = data.items ?? [];
         setInternalGrid(fetchedGrid);
         setSource(fetchedSource);
         setApiMachines(fetchedMachines);
+        setApiItems(fetchedItems);
         setLoadedScheduleId(scheduleId);
         onGridLoaded?.(fetchedGrid, fetchedSource);
       })
@@ -101,15 +106,75 @@ export default function ActualProductionGrid({
 
   if (loading) return <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>;
 
+  // Merge apiItems (từ fetch nội bộ) với externalItems (từ parent) — ưu tiên externalItems
+  const resolvedItems: { id: number; name: string }[] = [
+    ...apiItems,
+    ...(externalItems ?? []).filter(ei => !apiItems.some(ai => ai.id === ei.id)),
+  ];
+
   // Sắp xếp: theo machineId asc, rồi fromDay asc — mỗi segment = 1 dòng
   const sortedSegs = [...segments].sort((a, b) =>
     a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
   );
 
-  // Tính rowSpan cho cột "Máy"
+  // Tạo virtual segments cho máy/mặt hàng có SL thực tế nhưng không có segment KH
+  const virtualSegs: Segment[] = [];
+  for (const machineIdStr of Object.keys(grid)) {
+    const machineId = parseInt(machineIdStr);
+    const machineGrid = grid[machineId];
+    if (!machineGrid) continue;
+
+    // Tìm tất cả itemId thực tế của máy này
+    const actualItemIds = new Set<number>();
+    for (const dayData of Object.values(machineGrid)) {
+      actualItemIds.add(dayData.itemId);
+    }
+
+    for (const itemId of actualItemIds) {
+      // Kiểm tra đã có segment KH cho combo (machineId, itemId) chưa
+      const hasSegment = segments.some(s => s.machineId === machineId && s.itemId === itemId);
+      if (hasSegment) continue;
+
+      // Tìm thông tin máy từ apiMachines hoặc segments
+      const machineInfo = apiMachines.find(m => m.id === machineId)
+        ?? segments.find(s => s.machineId === machineId)?.machine
+        ?? { id: machineId, name: `Máy ${machineId}`, model: null, processId: 0 };
+
+      // Tìm ngày min/max có SL thực tế cho item này
+      let minDay = totalDays, maxDay = 1;
+      for (const [dayStr, dayData] of Object.entries(machineGrid)) {
+        if (dayData.itemId === itemId) {
+          const d = parseInt(dayStr);
+          if (d < minDay) minDay = d;
+          if (d > maxDay) maxDay = d;
+        }
+      }
+
+      // Lấy tên item từ resolvedItems
+      const itemInfo = resolvedItems.find(i => i.id === itemId) ?? { id: itemId, name: `Item #${itemId}` };
+
+      virtualSegs.push({
+        id: -(machineId * 1000 + itemId), // id âm để phân biệt với segment KH
+        machineId,
+        itemId,
+        fromDay: minDay,
+        toDay: maxDay,
+        kgPerDay: 0, // không có định mức KH
+        machine: machineInfo,
+        item: itemInfo,
+      });
+    }
+  }
+
+  // Gộp KH segments + virtual segments, sort lại
+  const allSegs = [...sortedSegs, ...virtualSegs].sort((a, b) =>
+    a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
+  );
+
+  // Tính rowSpan cho cột "Máy" (dùng allSegs)
   const machineRowSpan: Record<number, number> = {};
   const machineFirstSeen: Record<number, boolean> = {};
-  for (const seg of sortedSegs) {
+  for (const seg of allSegs) {
     machineRowSpan[seg.machineId] = (machineRowSpan[seg.machineId] ?? 0) + 1;
   }
 
@@ -184,7 +249,7 @@ export default function ActualProductionGrid({
             </tr>
           </thead>
           <tbody>
-            {sortedSegs.map((seg, rowIdx) => {
+            {allSegs.map((seg, rowIdx) => {
               const rowKey = `${seg.machineId}-${seg.itemId}-${seg.id}`;
               const isFirstOfMachine = !machineFirstSeen[seg.machineId];
               if (isFirstOfMachine) machineFirstSeen[seg.machineId] = true;
