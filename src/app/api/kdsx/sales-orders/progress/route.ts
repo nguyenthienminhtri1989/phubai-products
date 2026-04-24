@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
       return {
         id: order.id,
         orderNo: order.orderNo,
-        customerName: order.customer.name,
+        customerName: order.customer?.name ?? null,
         deliveryDate: order.deliveryDate.toISOString().split("T")[0],
         status: order.status,
         daysUntilDeadline,
