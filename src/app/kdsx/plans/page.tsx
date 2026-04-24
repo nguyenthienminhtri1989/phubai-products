@@ -67,7 +67,7 @@ export default function PlansPage() {
   const [unapproving, setUnapproving] = useState(false);
 
   const monthOptions = Array.from({ length: 24 }, (_, i) => {
-    const m = dayjs().subtract(i, "month");
+    const m = dayjs().add(12 - i, "month"); // 12 tháng tương lai → hiện tại → 11 tháng quá khứ
     return { label: m.format("MM/YYYY"), value: m.format("YYYY-MM") };
   });
 
