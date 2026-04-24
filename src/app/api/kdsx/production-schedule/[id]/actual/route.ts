@@ -40,37 +40,14 @@ export async function GET(
     },
   });
 
-  // Nếu KdDailyInput trống, fallback sang ProductionLog
-  let data: {
-    machineId: number;
-    itemId: number;
-    recordDate: Date;
-    outputKg: number;
-  }[] = actuals.map((a) => ({
+  // Chỉ dùng KdDailyInput (production_logs sẽ được tích hợp sau nếu cần)
+  const data = actuals.map((a) => ({
     machineId: a.machineId,
     itemId: a.itemId,
     recordDate: a.recordDate,
     outputKg: a.outputKg,
   }));
-  let source = "KD_DAILY_INPUT";
-
-  if (actuals.length === 0) {
-    const logs = await prisma.productionLog.groupBy({
-      by: ["machineId", "itemId", "recordDate"],
-      where: {
-        machineId: { in: machineIds },
-        recordDate: { gte: startDate, lte: endDate },
-      },
-      _sum: { finalOutput: true },
-    });
-    data = logs.map((l) => ({
-      machineId: l.machineId,
-      itemId: l.itemId,
-      recordDate: l.recordDate,
-      outputKg: l._sum.finalOutput ?? 0,
-    }));
-    source = "PRODUCTION_LOG";
-  }
+  const source = "KD_DAILY_INPUT";
 
   // Format: { machineId: { day: { itemId, kg } } }
   const grid: Record<

@@ -151,9 +151,7 @@ export default function ActualProductionGrid({
       {/* Source badge */}
       <div style={{ marginBottom: 8, fontSize: 12 }}>
         <Text type="secondary">Nguồn dữ liệu: </Text>
-        <Tag color={source === "KD_DAILY_INPUT" ? "blue" : "orange"}>
-          {source === "KD_DAILY_INPUT" ? "KD Daily Input" : "Nhật ký SX"}
-        </Tag>
+        <Tag color="blue">KD Daily Input</Tag>
         <Text type="secondary" style={{ marginLeft: 8 }}>
           — Màu ô: <span style={{ color: "#52c41a", fontWeight: 600 }}>Xanh ≥ KH</span>,{" "}
           <span style={{ color: "#faad14", fontWeight: 600 }}>Vàng gần đạt</span>,{" "}
