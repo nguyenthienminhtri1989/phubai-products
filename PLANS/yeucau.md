@@ -1,79 +1,79 @@
+File: src/app/api/kdsx/production-schedule/[id]/actual/route.ts
+Grid hiện tại chỉ lưu 1 itemId per (machineId, day). Khi máy chạy 2 mặt hàng trong 1 ngày, data bị mất. Sửa cấu trúc grid:
+typescript// CŨ: 1 cell per (machineId, day) → mất data khi đổi MH giữa ngày
+const grid: Record<number, Record<number, { itemId: number; kg: number }>> = {};
+
+// MỚI: nhiều cells per (machineId, day), key bằng itemId
+const grid: Record<number, Record<number, Record<number, number>>> = {};
+// grid[machineId][day][itemId] = kg
+
+for (const row of data) {
+const day = new Date(row.recordDate).getDate();
+if (!grid[row.machineId]) grid[row.machineId] = {};
+if (!grid[row.machineId][day]) grid[row.machineId][day] = {};
+grid[row.machineId][day][row.itemId] = (grid[row.machineId][day][row.itemId] ?? 0) + row.outputKg;
+}
 File: src/components/kdsx/ActualProductionGrid.tsx
-Sau dòng const sortedSegs = [...], thêm logic tạo "virtual segments" cho máy có SL thực tế nhưng không có trong KH:
-typescriptconst sortedSegs = [...segments].sort((a, b) =>
-a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
-);
-
-// Tạo virtual segments cho máy/mặt hàng có SL thực tế nhưng không có segment KH
-const virtualSegs: Segment[] = [];
-for (const machineIdStr of Object.keys(grid)) {
-const machineId = parseInt(machineIdStr);
-const machineGrid = grid[machineId];
-if (!machineGrid) continue;
-
-// Tìm tất cả itemId thực tế của máy này
-const actualItemIds = new Set<number>();
-for (const dayData of Object.values(machineGrid)) {
-actualItemIds.add(dayData.itemId);
-}
-
-for (const itemId of actualItemIds) {
-// Kiểm tra đã có segment KH cho combo (machineId, itemId) chưa
-const hasSegment = segments.some(s => s.machineId === machineId && s.itemId === itemId);
-if (hasSegment) continue;
-
-    // Tìm thông tin máy từ apiMachines hoặc segments
-    const machineInfo = apiMachines.find(m => m.id === machineId)
-      ?? segments.find(s => s.machineId === machineId)?.machine
-      ?? { id: machineId, name: `Máy ${machineId}`, model: null, processId: 0 };
-
-    // Tìm ngày min/max có SL thực tế cho item này
-    let minDay = totalDays, maxDay = 1;
-    for (const [dayStr, dayData] of Object.entries(machineGrid)) {
-      if (dayData.itemId === itemId) {
-        const d = parseInt(dayStr);
-        if (d < minDay) minDay = d;
-        if (d > maxDay) maxDay = d;
-      }
-    }
-
-    virtualSegs.push({
-      id: -(machineId * 1000 + itemId), // id âm để phân biệt
-      machineId,
-      itemId,
-      fromDay: minDay,
-      toDay: maxDay,
-      kgPerDay: 0, // không có định mức KH
-      machine: machineInfo,
-      item: { id: itemId, name: `Item #${itemId}` }, // tên sẽ lấy từ API
-    });
-
-}
-}
-
-// Gộp và sort lại
-const allSegs = [...sortedSegs, ...virtualSegs].sort((a, b) =>
-a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
-);
-Sau đó thay sortedSegs bằng allSegs trong phần render:
+Cập nhật interface và logic render theo cấu trúc mới:
 typescript// CŨ:
-{sortedSegs.map((seg, rowIdx) => { ... })}
+export interface ActualGrid {
+[machineId: number]: {
+[day: number]: { itemId: number; kg: number };
+};
+}
 
 // MỚI:
-{allSegs.map((seg, rowIdx) => { ... })}
-Cũng cần cập nhật machineRowSpan và machineFirstSeen để dùng allSegs thay vì sortedSegs.
-Tuy nhiên, virtual segments thiếu item.name. Cần sửa API actual để trả thêm items:
-File: src/app/api/kdsx/production-schedule/[id]/actual/route.ts
-Thêm trả về danh sách items:
-typescript// Sau khi build grid, lấy tất cả itemId
-const allItemIds = [...new Set(data.map(d => d.itemId))];
-const items = await prisma.item.findMany({
-where: { id: { in: allItemIds } },
-select: { id: true, name: true },
-});
+export interface ActualGrid {
+[machineId: number]: {
+[day: number]: { [itemId: number]: number }; // itemId → kg
+};
+}
+Trong phần render ô ngày:
+typescript// CŨ:
+const cell = machineGrid[day];
+const cellMatchesSeg = cell && cell.itemId === seg.itemId;
+const actualKg = cellMatchesSeg ? cell.kg : 0;
+const hasData = !!cellMatchesSeg;
 
-return NextResponse.json({ grid, source, machines, items }); // thêm items
-Trong component, lưu apiItems tương tự apiMachines, rồi dùng khi tạo virtual segment:
-typescriptitem: apiItems.find(i => i.id === itemId) ?? { id: itemId, name: `Item #${itemId}` },
+// MỚI:
+const dayData = machineGrid[day]; // { [itemId]: kg }
+const actualKg = dayData?.[seg.itemId] ?? 0;
+const hasData = actualKg > 0;
+Trong segTotalActual:
+typescript// CŨ:
+function segTotalActual(seg: Segment): number {
+const machineGrid = grid[seg.machineId] ?? {};
+let total = 0;
+for (const day of dayNumbers) {
+if (holidays.includes(day)) continue;
+const cell = machineGrid[day];
+if (cell && cell.itemId === seg.itemId) total += cell.kg;
+}
+return total;
+}
 
-Tóm tắt: sửa 2 files, logic chính là tạo "virtual segments" từ dữ liệu thực tế để grid TH hiển thị đầy đủ kể cả máy/mặt hàng không có trong KH.
+// MỚI:
+function segTotalActual(seg: Segment): number {
+const machineGrid = grid[seg.machineId] ?? {};
+let total = 0;
+for (const day of dayNumbers) {
+if (holidays.includes(day)) continue;
+total += machineGrid[day]?.[seg.itemId] ?? 0;
+}
+return total;
+}
+Trong totalActualByDay:
+typescript// CŨ:
+const cell = grid[mid]?.[day];
+if (cell) total += cell.kg;
+
+// MỚI:
+const dayData = grid[mid]?.[day];
+if (dayData) {
+for (const kg of Object.values(dayData)) {
+total += kg;
+}
+}
+Virtual segments (nếu có) cũng cần cập nhật tương tự.
+
+Tóm tắt: cấu trúc grid cũ chỉ lưu 1 itemId per ô → mất data khi máy đổi MH trong ngày. Đổi sang grid[machineId][day][itemId] = kg giải quyết hoàn toàn.

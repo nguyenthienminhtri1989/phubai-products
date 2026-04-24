@@ -43,18 +43,13 @@ export async function GET(
   }));
   const source = "KD_DAILY_INPUT";
 
-  // Format: { machineId: { day: { itemId, kg } } }
-  const grid: Record<
-    number,
-    Record<number, { itemId: number; kg: number }>
-  > = {};
+  // Format mới: grid[machineId][day][itemId] = kg — hỗ trợ máy chạy nhiều mặt hàng trong 1 ngày
+  const grid: Record<number, Record<number, Record<number, number>>> = {};
   for (const row of data) {
     const day = new Date(row.recordDate).getDate();
     if (!grid[row.machineId]) grid[row.machineId] = {};
-    if (!grid[row.machineId][day]) {
-      grid[row.machineId][day] = { itemId: row.itemId, kg: 0 };
-    }
-    grid[row.machineId][day].kg += row.outputKg;
+    if (!grid[row.machineId][day]) grid[row.machineId][day] = {};
+    grid[row.machineId][day][row.itemId] = (grid[row.machineId][day][row.itemId] ?? 0) + row.outputKg;
   }
 
   if (segmentMachineIds.length === 0 && Object.keys(grid).length === 0) {

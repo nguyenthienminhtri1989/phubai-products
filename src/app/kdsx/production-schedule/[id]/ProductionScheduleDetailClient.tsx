@@ -257,9 +257,9 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       const machineGrid = actualGrid[machineId] ?? {};
       for (let day = filterFrom; day <= filterTo; day++) {
         if (holidayArr.includes(day)) continue;
-        const cell = machineGrid[day];
-        // Only count if cell belongs to this itemId
-        if (cell && cell.itemId === itemId) totalActualKg += cell.kg;
+        const dayData = machineGrid[day];
+        // Cấu trúc mới: dayData = { [itemId]: kg }
+        if (dayData && dayData[itemId] !== undefined) totalActualKg += dayData[itemId];
       }
     }
     return { itemId, itemName: itemMap.get(itemId) ?? `Item ${itemId}`, totalActualKg, totalActualTons: totalActualKg / 1000 };

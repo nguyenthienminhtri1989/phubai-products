@@ -5,7 +5,7 @@ import { Spin, Typography, Tag } from "antd";
 
 export interface ActualGrid {
   [machineId: number]: {
-    [day: number]: { itemId: number; kg: number };
+    [day: number]: { [itemId: number]: number }; // itemId → kg
   };
 }
 
@@ -124,10 +124,12 @@ export default function ActualProductionGrid({
     const machineGrid = grid[machineId];
     if (!machineGrid) continue;
 
-    // Tìm tất cả itemId thực tế của máy này
+    // Tìm tất cả itemId thực tế của máy này (cấu trúc mới: dayData = { [itemId]: kg })
     const actualItemIds = new Set<number>();
     for (const dayData of Object.values(machineGrid)) {
-      actualItemIds.add(dayData.itemId);
+      for (const itemIdStr of Object.keys(dayData)) {
+        actualItemIds.add(Number(itemIdStr));
+      }
     }
 
     for (const itemId of actualItemIds) {
@@ -140,10 +142,10 @@ export default function ActualProductionGrid({
         ?? segments.find(s => s.machineId === machineId)?.machine
         ?? { id: machineId, name: `Máy ${machineId}`, model: null, processId: 0 };
 
-      // Tìm ngày min/max có SL thực tế cho item này
+      // Tìm ngày min/max có SL thực tế cho item này (cấu trúc mới)
       let minDay = totalDays, maxDay = 1;
       for (const [dayStr, dayData] of Object.entries(machineGrid)) {
-        if (dayData.itemId === itemId) {
+        if (dayData[itemId] !== undefined) {
           const d = parseInt(dayStr);
           if (d < minDay) minDay = d;
           if (d > maxDay) maxDay = d;
@@ -187,8 +189,12 @@ export default function ActualProductionGrid({
     if (holidays.includes(day)) return 0;
     let total = 0;
     for (const mid of allMachineIds) {
-      const cell = grid[mid]?.[day];
-      if (cell) total += cell.kg;
+      const dayData = grid[mid]?.[day];
+      if (dayData) {
+        for (const kg of Object.values(dayData)) {
+          total += kg;
+        }
+      }
     }
     return total;
   });
@@ -200,8 +206,7 @@ export default function ActualProductionGrid({
     let total = 0;
     for (const day of dayNumbers) {
       if (holidays.includes(day)) continue;
-      const cell = machineGrid[day];
-      if (cell && cell.itemId === seg.itemId) total += cell.kg;
+      total += machineGrid[day]?.[seg.itemId] ?? 0;
     }
     return total;
   }
@@ -299,10 +304,9 @@ export default function ActualProductionGrid({
                   {dayNumbers.map(day => {
                     const isHoliday = holidays.includes(day);
                     const inRange = day >= seg.fromDay && day <= seg.toDay;
-                    const cell = machineGrid[day];
-                    const cellMatchesSeg = cell && cell.itemId === seg.itemId;
-                    const actualKg = cellMatchesSeg ? cell.kg : 0;
-                    const hasData = !!cellMatchesSeg;
+                    const dayData = machineGrid[day]; // { [itemId]: kg }
+                    const actualKg = dayData?.[seg.itemId] ?? 0;
+                    const hasData = actualKg > 0;
                     const planKg = isHoliday ? 0 : (inRange ? seg.kgPerDay : 0);
 
                     if (isHoliday) {
