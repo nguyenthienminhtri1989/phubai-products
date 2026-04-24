@@ -41,8 +41,8 @@ interface SalesOrderItem {
 interface SalesOrder {
   id: number;
   orderNo: string;
-  customerId: number;
-  customer: Customer;
+  customerId: number | null;
+  customer: Customer | null;
   factoryId: number;
   factory: Factory;
   signedDate: string | null;
@@ -181,7 +181,7 @@ export default function SalesOrdersPage() {
 
   const columns = [
     { title: "Số HĐ", dataIndex: "orderNo", key: "orderNo", render: (v: string) => <strong>{v}</strong> },
-    { title: "Khách hàng", key: "customer", render: (_: unknown, r: SalesOrder) => r.customer.name },
+    { title: "Khách hàng", key: "customer", render: (_: unknown, r: SalesOrder) => r.customer?.name ?? <span style={{ color: "#999" }}>Chưa xác định</span> },
     { title: "Nhà máy", key: "factory", render: (_: unknown, r: SalesOrder) => r.factory.name },
     {
       title: "Deadline",
@@ -301,7 +301,7 @@ export default function SalesOrdersPage() {
             <Form.Item name="orderNo" label="Số hợp đồng" rules={[{ required: true }]} style={{ flex: 1 }}>
               <Input placeholder="VD: 431PB25" />
             </Form.Item>
-            <Form.Item name="customerId" label="Khách hàng" rules={[{ required: true }]} style={{ flex: 2 }}>
+            <Form.Item name="customerId" label="Khách hàng" style={{ flex: 2 }}>
               <Select
                 options={customers.map((c) => ({ label: c.name, value: c.id }))}
                 showSearch

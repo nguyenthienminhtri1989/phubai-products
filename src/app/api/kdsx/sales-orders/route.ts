@@ -67,15 +67,15 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, items } = body;
-  if (!orderNo || !customerId || !factoryId) {
-    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, customerId, factoryId)" }, { status: 400 });
+  if (!orderNo || !factoryId) {
+    return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, factoryId)" }, { status: 400 });
   }
 
   try {
     const order = await prisma.salesOrder.create({
       data: {
         orderNo,
-        customerId: Number(customerId),
+        customerId: customerId ? Number(customerId) : null,
         factoryId: Number(factoryId),
         signedDate: signedDate ? new Date(signedDate) : null,
         deliveryDate: deliveryDate ? new Date(deliveryDate) : new Date("2099-12-31"),

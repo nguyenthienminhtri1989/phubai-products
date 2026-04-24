@@ -783,8 +783,8 @@ model SalesOrder {
   id      Int    @id @default(autoincrement())
   orderNo String @unique // Số HĐ: "431PB25", "05PB26", "14/HĐMB-PB26"
 
-  customerId Int
-  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId Int?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
   factoryId Int
   factory   Factory @relation(fields: [factoryId], references: [id])

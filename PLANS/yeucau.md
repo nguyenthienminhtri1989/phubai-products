@@ -1,1 +1,1 @@
-hãy đảm bảo rằng nguồn dữ liệu sản lượng được dùng để fill cho bảng thực hiện src\components\kdsx\ActualProductionGrid.tsx được lấy từ bảng kd_daily_input, chứ chưa lấy từ bảng production_logs (sau này mới lấy từ bảng production_logs nếu cần
+# trang kdsx/sales-orders/

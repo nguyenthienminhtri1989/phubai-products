@@ -104,7 +104,7 @@ export async function PUT(
     where: { id: Number(id) },
     data: {
       orderNo,
-      customerId: customerId ? Number(customerId) : undefined,
+      customerId: customerId !== undefined ? (customerId ? Number(customerId) : null) : undefined,
       factoryId: factoryId ? Number(factoryId) : undefined,
       signedDate: signedDate ? new Date(signedDate) : null,
       deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
