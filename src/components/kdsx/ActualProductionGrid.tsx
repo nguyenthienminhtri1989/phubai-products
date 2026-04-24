@@ -112,104 +112,76 @@ export default function ActualProductionGrid({
     ...(externalItems ?? []).filter(ei => !apiItems.some(ai => ai.id === ei.id)),
   ];
 
-  // Sắp xếp: theo machineId asc, rồi fromDay asc — mỗi segment = 1 dòng
-  const sortedSegs = [...segments].sort((a, b) =>
-    a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
-  );
+  // ── Build GridRow hoàn toàn từ grid data (kd_daily_inputs) ──
+  // Mỗi dòng = 1 combo (machineId, itemId) có SL thực tế > 0
+  interface GridRow {
+    machineId: number;
+    itemId: number;
+    machineName: string;
+    machineModel: string | null;
+    itemName: string;
+    firstDay: number;
+    lastDay: number;
+  }
 
-  // Tạo virtual segments cho máy/mặt hàng có SL thực tế nhưng không có segment KH
-  const virtualSegs: Segment[] = [];
-  for (const machineIdStr of Object.keys(grid)) {
+  const rowMap = new Map<string, GridRow>();
+  for (const [machineIdStr, machineGridRaw] of Object.entries(grid)) {
     const machineId = parseInt(machineIdStr);
-    const machineGrid = grid[machineId];
-    if (!machineGrid) continue;
-
-    // Tìm tất cả itemId thực tế của máy này (cấu trúc mới: dayData = { [itemId]: kg })
-    const actualItemIds = new Set<number>();
-    for (const dayData of Object.values(machineGrid)) {
-      for (const itemIdStr of Object.keys(dayData)) {
-        actualItemIds.add(Number(itemIdStr));
-      }
-    }
-
-    for (const itemId of actualItemIds) {
-      // Kiểm tra đã có segment KH cho combo (machineId, itemId) chưa
-      const hasSegment = segments.some(s => s.machineId === machineId && s.itemId === itemId);
-      if (hasSegment) continue;
-
-      // Tìm thông tin máy từ apiMachines hoặc segments
-      const machineInfo = apiMachines.find(m => m.id === machineId)
-        ?? segments.find(s => s.machineId === machineId)?.machine
-        ?? { id: machineId, name: `Máy ${machineId}`, model: null, processId: 0 };
-
-      // Tìm ngày min/max có SL thực tế cho item này (cấu trúc mới)
-      let minDay = totalDays, maxDay = 1;
-      for (const [dayStr, dayData] of Object.entries(machineGrid)) {
-        if (dayData[itemId] !== undefined) {
-          const d = parseInt(dayStr);
-          if (d < minDay) minDay = d;
-          if (d > maxDay) maxDay = d;
+    const machineGrid = machineGridRaw as Record<number, Record<number, number>>;
+    for (const [dayStr, dayDataRaw] of Object.entries(machineGrid)) {
+      const day = parseInt(dayStr);
+      const dayData = dayDataRaw as Record<number, number>;
+      for (const [itemIdStr, kg] of Object.entries(dayData)) {
+        const itemId = parseInt(itemIdStr);
+        if ((kg as number) <= 0) continue;
+        const key = `${machineId}-${itemId}`;
+        if (!rowMap.has(key)) {
+          const machine = apiMachines.find(m => m.id === machineId)
+            ?? segments.find(s => s.machineId === machineId)?.machine;
+          const item = resolvedItems.find(i => i.id === itemId);
+          rowMap.set(key, {
+            machineId,
+            itemId,
+            machineName: machine?.name ?? `Máy ${machineId}`,
+            machineModel: machine?.model ?? null,
+            itemName: item?.name ?? `Item #${itemId}`,
+            firstDay: day,
+            lastDay: day,
+          });
+        } else {
+          const row = rowMap.get(key)!;
+          if (day < row.firstDay) row.firstDay = day;
+          if (day > row.lastDay) row.lastDay = day;
         }
       }
-
-      // Lấy tên item từ resolvedItems
-      const itemInfo = resolvedItems.find(i => i.id === itemId) ?? { id: itemId, name: `Item #${itemId}` };
-
-      virtualSegs.push({
-        id: -(machineId * 1000 + itemId), // id âm để phân biệt với segment KH
-        machineId,
-        itemId,
-        fromDay: minDay,
-        toDay: maxDay,
-        kgPerDay: 0, // không có định mức KH
-        machine: machineInfo,
-        item: itemInfo,
-      });
     }
   }
 
-  // Gộp KH segments + virtual segments, sort lại
-  const allSegs = [...sortedSegs, ...virtualSegs].sort((a, b) =>
-    a.machineId !== b.machineId ? a.machineId - b.machineId : a.fromDay - b.fromDay
+  const gridRows = Array.from(rowMap.values()).sort((a, b) =>
+    a.machineId !== b.machineId ? a.machineId - b.machineId : a.firstDay - b.firstDay
   );
 
-  // Tính rowSpan cho cột "Máy" (dùng allSegs)
+  // Tính rowSpan cho cột Máy
   const machineRowSpan: Record<number, number> = {};
   const machineFirstSeen: Record<number, boolean> = {};
-  for (const seg of allSegs) {
-    machineRowSpan[seg.machineId] = (machineRowSpan[seg.machineId] ?? 0) + 1;
+  for (const row of gridRows) {
+    machineRowSpan[row.machineId] = (machineRowSpan[row.machineId] ?? 0) + 1;
   }
 
-  // Tổng TH theo ngày — gộp máy từ KH và từ grid thực tế
-  const allMachineIds = [...new Set([
-    ...segments.map(s => s.machineId),
-    ...Object.keys(grid).map(Number),
-  ])];
+  // Hàng TỔNG/NGÀY — tổng tất cả máy, tất cả mặt hàng trong ngày
+  const allMachineIds = [...new Set(Object.keys(grid).map(Number))];
   const totalActualByDay = dayNumbers.map(day => {
     if (holidays.includes(day)) return 0;
     let total = 0;
     for (const mid of allMachineIds) {
       const dayData = grid[mid]?.[day];
       if (dayData) {
-        for (const kg of Object.values(dayData)) {
-          total += kg;
-        }
+        for (const kg of Object.values(dayData)) total += kg;
       }
     }
     return total;
   });
   const grandActualTotal = totalActualByDay.reduce((s, v) => s + v, 0);
-
-  // Tổng TH riêng cho từng segment (máy + mặt hàng)
-  function segTotalActual(seg: Segment): number {
-    const machineGrid = grid[seg.machineId] ?? {};
-    let total = 0;
-    for (const day of dayNumbers) {
-      if (holidays.includes(day)) continue;
-      total += machineGrid[day]?.[seg.itemId] ?? 0;
-    }
-    return total;
-  }
 
   const thStyle: React.CSSProperties = {
     background: "#001529", color: "white", padding: "7px 5px",
@@ -232,145 +204,154 @@ export default function ActualProductionGrid({
           — Màu ô: <span style={{ color: "#52c41a", fontWeight: 600 }}>Xanh ≥ KH</span>,{" "}
           <span style={{ color: "#faad14", fontWeight: 600 }}>Vàng gần đạt</span>,{" "}
           <span style={{ color: "#ff4d4f", fontWeight: 600 }}>Đỏ thấp hơn 10%+</span>
+          <span style={{ color: "#595959", marginLeft: 8 }}>(Không có định mức KH → màu xám)</span>
         </Text>
       </div>
 
-      <div style={{ overflowX: "auto", border: "2px solid #b0b0b0", borderRadius: 6, boxShadow: "0 1px 6px rgba(0,0,0,0.1)" }}>
-        <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
-          <thead>
-            <tr>
-              <th style={{ ...thStyle, minWidth: 80, position: "sticky", left: 0, zIndex: 3, textAlign: "left", paddingLeft: 8 }}>Máy</th>
-              <th style={{ ...thStyle, minWidth: 110, position: "sticky", left: 80, zIndex: 3 }}>Mặt hàng</th>
-              {dayNumbers.map(day => {
-                const isHoliday = holidays.includes(day);
-                return (
-                  <th key={day} style={{ ...thStyle, minWidth: 38, background: isHoliday ? "#cf1322" : "#001529" }}>
-                    {day}<br />
-                    <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>{schedMonth}/{String(schedYear).slice(2)}</span>
-                  </th>
-                );
-              })}
-              <th style={{ ...thStyle, minWidth: 70, background: "#1d3557" }}>TỔNG</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allSegs.map((seg, rowIdx) => {
-              const rowKey = `${seg.machineId}-${seg.itemId}-${seg.id}`;
-              const isFirstOfMachine = !machineFirstSeen[seg.machineId];
-              if (isFirstOfMachine) machineFirstSeen[seg.machineId] = true;
-              const span = machineRowSpan[seg.machineId];
-              const isSelected = selectedKey === rowKey;
-              const rowBg = isSelected ? "#fffbe6" : rowIdx % 2 === 0 ? "#fff" : "#fafafa";
-              const machineGrid = grid[seg.machineId] ?? {};
-              const segTotal = segTotalActual(seg);
-              const itemColor = getColor(seg.itemId, itemColors);
+      {gridRows.length === 0 ? (
+        <div style={{ padding: 32, textAlign: "center", color: "#aaa", fontSize: 13 }}>
+          Chưa có dữ liệu sản lượng thực tế trong tháng này.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", border: "2px solid #b0b0b0", borderRadius: 6, boxShadow: "0 1px 6px rgba(0,0,0,0.1)" }}>
+          <table style={{ borderCollapse: "collapse", minWidth: 900, width: "max-content" }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, minWidth: 80, position: "sticky", left: 0, zIndex: 3, textAlign: "left", paddingLeft: 8 }}>Máy</th>
+                <th style={{ ...thStyle, minWidth: 110, position: "sticky", left: 80, zIndex: 3 }}>Mặt hàng</th>
+                {dayNumbers.map(day => {
+                  const isHoliday = holidays.includes(day);
+                  return (
+                    <th key={day} style={{ ...thStyle, minWidth: 38, background: isHoliday ? "#cf1322" : "#001529" }}>
+                      {day}<br />
+                      <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.7 }}>{schedMonth}/{String(schedYear).slice(2)}</span>
+                    </th>
+                  );
+                })}
+                <th style={{ ...thStyle, minWidth: 70, background: "#1d3557" }}>TỔNG</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gridRows.map((row, rowIdx) => {
+                const rowKey = `${row.machineId}-${row.itemId}`;
+                const isFirstOfMachine = !machineFirstSeen[row.machineId];
+                if (isFirstOfMachine) machineFirstSeen[row.machineId] = true;
+                const span = machineRowSpan[row.machineId];
+                const isSelected = selectedKey === rowKey;
+                const rowBg = isSelected ? "#fffbe6" : rowIdx % 2 === 0 ? "#fff" : "#fafafa";
+                const machineGrid = grid[row.machineId] ?? {};
+                const itemColor = getColor(row.itemId, itemColors);
 
-              return (
-                <tr
-                  key={rowKey}
-                  style={{ background: rowBg, cursor: "pointer", outline: isSelected ? "2px solid #faad14" : undefined, outlineOffset: "-2px" }}
-                  onClick={() => setSelectedKey(prev => prev === rowKey ? null : rowKey)}
-                >
-                  {/* Cột Máy — rowSpan, chỉ render ở dòng đầu tiên của máy */}
-                  {isFirstOfMachine && (
-                    <td
-                      rowSpan={span}
-                      style={{
+                // Tổng TH của dòng này
+                let rowTotal = 0;
+                for (const day of dayNumbers) {
+                  if (!holidays.includes(day)) rowTotal += machineGrid[day]?.[row.itemId] ?? 0;
+                }
+
+                // Tra định mức KH — chỉ tham khảo, không quyết định dòng hiển thị
+                const matchingSeg = segments.find(s => s.machineId === row.machineId && s.itemId === row.itemId);
+
+                return (
+                  <tr
+                    key={rowKey}
+                    style={{ background: rowBg, cursor: "pointer", outline: isSelected ? "2px solid #faad14" : undefined, outlineOffset: "-2px" }}
+                    onClick={() => setSelectedKey(prev => prev === rowKey ? null : rowKey)}
+                  >
+                    {/* Cột Máy — rowSpan, chỉ render dòng đầu của máy */}
+                    {isFirstOfMachine && (
+                      <td rowSpan={span} style={{
                         ...tdStyle, textAlign: "left", paddingLeft: 8,
                         position: "sticky", left: 0, zIndex: 1,
                         background: "#f5f5f5", minWidth: 80, fontWeight: 700,
                         borderRight: "2px solid #b0b0b0", verticalAlign: "middle",
-                      }}
-                    >
-                      {seg.machine.name}
-                      {seg.machine.model && (
-                        <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{seg.machine.model}</div>
-                      )}
-                    </td>
-                  )}
-
-                  {/* Cột Mặt hàng */}
-                  <td style={{
-                    ...tdStyle,
-                    position: "sticky", left: 80, zIndex: 1,
-                    background: isSelected ? "#fffbe6" : getBg(seg.itemId, itemColors),
-                    minWidth: 110, borderRight: "2px solid #b0b0b0",
-                  }}>
-                    <div style={{ fontSize: 12, color: itemColor, fontWeight: 700 }}>{seg.item.name}</div>
-                    <div style={{ fontSize: 10, color: "#888" }}>({seg.fromDay}–{seg.toDay})</div>
-                  </td>
-
-                  {/* Ô ngày */}
-                  {dayNumbers.map(day => {
-                    const isHoliday = holidays.includes(day);
-                    const inRange = day >= seg.fromDay && day <= seg.toDay;
-                    const dayData = machineGrid[day]; // { [itemId]: kg }
-                    const actualKg = dayData?.[seg.itemId] ?? 0;
-                    const hasData = actualKg > 0;
-                    const planKg = isHoliday ? 0 : (inRange ? seg.kgPerDay : 0);
-
-                    if (isHoliday) {
-                      return (
-                        <td key={day} style={{ ...tdStyle, background: inRange ? "#ffebe8" : "#f0f0f0", borderLeft: "1px solid #d0d0d0" }}>
-                          <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
-                        </td>
-                      );
-                    }
-
-                    if (!inRange) {
-                      return (
-                        <td key={day} style={{ ...tdStyle, background: "#f5f5f5", borderLeft: "1px solid #e0e0e0" }}>
-                          <span style={{ color: "#d9d9d9", fontSize: 13 }}>·</span>
-                        </td>
-                      );
-                    }
-
-                    return (
-                      <td key={day} style={{ ...tdStyle, background: hasData ? getBg(seg.itemId, itemColors) : undefined, borderLeft: "1px solid #d0d0d0" }}>
-                        {hasData ? (
-                          <div>
-                            <span style={{ color: compareColor(actualKg, planKg), fontSize: 11, fontWeight: 800 }}>
-                              {actualKg.toLocaleString()}
-                            </span>
-                            {planKg > 0 && (
-                              <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>({planKg.toLocaleString()})</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: "#bbb", fontSize: 13, lineHeight: 1 }}>·</span>
+                      }}>
+                        {row.machineName}
+                        {row.machineModel && (
+                          <div style={{ fontSize: 10, color: "#888", fontWeight: 400 }}>{row.machineModel}</div>
                         )}
                       </td>
-                    );
-                  })}
+                    )}
 
-                  {/* Tổng TH của segment (máy × mặt hàng) */}
-                  <td style={{ ...tdStyle, background: "#dbeeff", fontWeight: 800, fontSize: 13, color: "#0050b3", borderLeft: "2px solid #b0b0b0" }}>
-                    {segTotal > 0 ? `${segTotal.toLocaleString()} kg` : <span style={{ color: "#bbb" }}>—</span>}
-                  </td>
-                </tr>
-              );
-            })}
+                    {/* Cột Mặt hàng */}
+                    <td style={{
+                      ...tdStyle, position: "sticky", left: 80, zIndex: 1,
+                      background: isSelected ? "#fffbe6" : getBg(row.itemId, itemColors),
+                      minWidth: 110, borderRight: "2px solid #b0b0b0",
+                    }}>
+                      <div style={{ fontSize: 12, color: itemColor, fontWeight: 700 }}>{row.itemName}</div>
+                      <div style={{ fontSize: 10, color: "#888" }}>({row.firstDay}–{row.lastDay})</div>
+                    </td>
 
-            {/* Hàng tổng cuối */}
-            <tr style={{ background: "#001529" }}>
-              <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#001529", textAlign: "left", paddingLeft: 8 }}>TỔNG TH</td>
-              <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#001529" }}>kg/ngày</td>
-              {totalActualByDay.map((kg, i) => {
-                const day = i + 1;
-                const isHoliday = holidays.includes(day);
-                return (
-                  <td key={day} style={{ ...tdStyle, fontWeight: 600, fontSize: 10, background: isHoliday ? "#434343" : "#1d3557", color: isHoliday ? "#888" : "#52c41a" }}>
-                    {isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·"}
-                  </td>
+                    {/* Ô ngày */}
+                    {dayNumbers.map(day => {
+                      const isHoliday = holidays.includes(day);
+                      const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
+                      const hasData = actualKg > 0;
+                      const planKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
+                        ? matchingSeg.kgPerDay : 0;
+
+                      if (isHoliday) {
+                        return (
+                          <td key={day} style={{ ...tdStyle, background: "#ffebe8", borderLeft: "1px solid #d0d0d0" }}>
+                            <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
+                          </td>
+                        );
+                      }
+
+                      return (
+                        <td key={day} style={{
+                          ...tdStyle,
+                          background: hasData ? getBg(row.itemId, itemColors) : undefined,
+                          borderLeft: "1px solid #d0d0d0",
+                        }}>
+                          {hasData ? (
+                            <div>
+                              <span style={{
+                                color: planKg > 0 ? compareColor(actualKg, planKg) : "#595959",
+                                fontSize: 11, fontWeight: 800,
+                              }}>
+                                {actualKg.toLocaleString()}
+                              </span>
+                              {planKg > 0 && (
+                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>({planKg.toLocaleString()})</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: "#d9d9d9", fontSize: 13 }}>·</span>
+                          )}
+                        </td>
+                      );
+                    })}
+
+                    {/* Cột TỔNG */}
+                    <td style={{ ...tdStyle, background: "#dbeeff", fontWeight: 800, fontSize: 13, color: "#0050b3", borderLeft: "2px solid #b0b0b0" }}>
+                      {rowTotal > 0 ? `${rowTotal.toLocaleString()} kg` : <span style={{ color: "#bbb" }}>—</span>}
+                    </td>
+                  </tr>
                 );
               })}
-              <td style={{ ...tdStyle, background: "#1d3557", color: "#52c41a", fontWeight: 800, fontSize: 13 }}>
-                {grandActualTotal.toLocaleString()} kg
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+
+              {/* Hàng tổng cuối */}
+              <tr style={{ background: "#001529" }}>
+                <td style={{ ...tdStyle, color: "white", fontWeight: 700, position: "sticky", left: 0, zIndex: 1, background: "#001529", textAlign: "left", paddingLeft: 8 }}>TỔNG TH</td>
+                <td style={{ ...tdStyle, color: "white", position: "sticky", left: 80, zIndex: 1, background: "#001529" }}>kg/ngày</td>
+                {totalActualByDay.map((kg, i) => {
+                  const day = i + 1;
+                  const isHoliday = holidays.includes(day);
+                  return (
+                    <td key={day} style={{ ...tdStyle, fontWeight: 600, fontSize: 10, background: isHoliday ? "#434343" : "#1d3557", color: isHoliday ? "#888" : "#52c41a" }}>
+                      {isHoliday ? "—" : kg > 0 ? `${kg.toLocaleString()} kg` : "·"}
+                    </td>
+                  );
+                })}
+                <td style={{ ...tdStyle, background: "#1d3557", color: "#52c41a", fontWeight: 800, fontSize: 13 }}>
+                  {grandActualTotal.toLocaleString()} kg
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
