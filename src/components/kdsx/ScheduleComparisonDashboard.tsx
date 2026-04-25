@@ -38,7 +38,7 @@ interface ScheduleComparisonDashboardProps {
 
 interface ActualGrid {
   [machineId: number]: {
-    [day: number]: { itemId: number; kg: number };
+    [day: number]: { [itemId: number]: number };
   };
 }
 
@@ -87,9 +87,11 @@ export default function ScheduleComparisonDashboard({
   for (const machineId in grid) {
     const machGrid = grid[Number(machineId)];
     for (const day in machGrid) {
-      const cell = machGrid[Number(day)];
-      if (!thByItem[cell.itemId]) thByItem[cell.itemId] = 0;
-      thByItem[cell.itemId] += cell.kg;
+      const dayData = machGrid[Number(day)];
+      for (const [itemIdStr, kg] of Object.entries(dayData)) {
+        const itemId = parseInt(itemIdStr);
+        thByItem[itemId] = (thByItem[itemId] ?? 0) + kg;
+      }
     }
   }
 
@@ -118,10 +120,14 @@ export default function ScheduleComparisonDashboard({
       }
     }
     // TH ngày này
-    for (const machineId in grid) {
-      const cell = grid[Number(machineId)]?.[day];
-      if (cell && !holidays.includes(day)) {
-        thCumul += cell.kg;
+    if (!holidays.includes(day)) {
+      for (const machineId in grid) {
+        const dayData = grid[Number(machineId)]?.[day];
+        if (dayData) {
+          for (const kg of Object.values(dayData)) {
+            thCumul += kg;
+          }
+        }
       }
     }
     return {

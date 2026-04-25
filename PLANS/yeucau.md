@@ -1,80 +1,96 @@
-# File sửa: src/app/api/kdsx/production-schedule/[id]/actual/route.ts
+Tìm ra lỗi rồi! Dashboard đang dùng **cấu trúc grid CŨ** `{ itemId: number; kg: number }` nhưng API đã trả về **cấu trúc MỚI** `{ [itemId]: kg }`.
 
-Thêm trả về bảng định mức benchmark cho tất cả combo (machineId, itemId) có trong grid:
+Nhìn vào code:
 
-// Sau khi build grid, lấy benchmark cho tất cả combo máy + mặt hàng
-const combos = new Set<string>();
-for (const row of data) {
-combos.add(`${row.machineId}-${row.itemId}`);
+```typescript
+// Interface sai — vẫn dùng cấu trúc cũ:
+interface ActualGrid {
+  [machineId: number]: {
+    [day: number]: { itemId: number; kg: number }; // ← SAI
+  };
 }
 
-// Lấy thông tin máy (cần processId + model để tra benchmark)
-const machineDetails = await prisma.machine.findMany({
-where: { id: { in: allMachineIds } },
-select: { id: true, name: true, model: true, processId: true },
-});
+// Phần tính tổng TH cũng sai:
+const cell = machGrid[Number(day)];
+thByItem[cell.itemId] += cell.kg; // ← cell giờ là { [itemId]: kg }, không có .itemId
+```
 
-// Tìm benchmark version active cho factory này
-const activeVersion = await prisma.benchmarkVersion.findFirst({
-where: {
-factoryId: schedule.factoryId,
-isActive: true,
-},
-orderBy: { effectiveFrom: "desc" },
-});
+Đưa cho Claude Code:
 
-// Build map: "machineId-itemId" → kgPerDay (empiricalOutputPerDay)
-const benchmarkMap: Record<string, number> = {};
+---
 
-if (activeVersion) {
-for (const combo of combos) {
-const [machineIdStr, itemIdStr] = combo.split("-");
-const machineId = parseInt(machineIdStr);
-const itemId = parseInt(itemIdStr);
-const machine = machineDetails.find(m => m.id === machineId);
-if (!machine?.model) continue;
+**File: `src/components/kdsx/ScheduleComparisonDashboard.tsx`**
 
-    const benchmark = await prisma.productivityBenchmark.findFirst({
-      where: {
-        versionId: activeVersion.id,
-        itemId,
-        processId: machine.processId,
-        machineModel: machine.model,
-        benchmarkType: "EMPIRICAL",
-      },
-    });
+**Sửa 1 — Interface ActualGrid:**
 
-    if (benchmark?.empiricalOutputPerDay) {
-      benchmarkMap[combo] = benchmark.empiricalOutputPerDay;
-    }
-
-}
-}
-
-return NextResponse.json({ grid, source, machines, items, benchmarkMap });
-
-# File sửa: src/components/kdsx/ActualProductionGrid.tsx
-
-Nhận benchmarkMap từ API và dùng nó thay vì segments:
-
-// Thêm state
-const [benchmarkMap, setBenchmarkMap] = useState<Record<string, number>>({});
-
-// Trong useEffect fetch, thêm:
-setBenchmarkMap(data.benchmarkMap ?? {});
-
-// Trong phần render ô ngày, thay logic tra định mức:
-
+```typescript
 // CŨ:
-const matchingSeg = segments.find(s => s.machineId === row.machineId && s.itemId === row.itemId);
-// ...
-const planKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
-? matchingSeg.kgPerDay : 0;
+interface ActualGrid {
+  [machineId: number]: {
+    [day: number]: { itemId: number; kg: number };
+  };
+}
 
-// MỚI: ưu tiên benchmarkMap, fallback sang segment KH
-const bmKey = `${row.machineId}-${row.itemId}`;
-const benchmarkKg = benchmarkMap[bmKey] ?? 0;
-const matchingSeg = segments.find(s => s.machineId === row.machineId && s.itemId === row.itemId);
-const segKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
-? matchingSeg.kgPerDay : 0;
-const planKg = benchmarkKg || segKg; // ưu tiên benchmark, fallback segment
+// MỚI:
+interface ActualGrid {
+  [machineId: number]: {
+    [day: number]: { [itemId: number]: number };
+  };
+}
+```
+
+**Sửa 2 — Tính tổng TH theo itemId (khoảng dòng 85-92):**
+
+```typescript
+// CŨ:
+const thByItem: Record<number, number> = {};
+for (const machineId in grid) {
+  const machGrid = grid[Number(machineId)];
+  for (const day in machGrid) {
+    const cell = machGrid[Number(day)];
+    if (!thByItem[cell.itemId]) thByItem[cell.itemId] = 0;
+    thByItem[cell.itemId] += cell.kg;
+  }
+}
+
+// MỚI:
+const thByItem: Record<number, number> = {};
+for (const machineId in grid) {
+  const machGrid = grid[Number(machineId)];
+  for (const day in machGrid) {
+    const dayData = machGrid[Number(day)];
+    for (const [itemIdStr, kg] of Object.entries(dayData)) {
+      const itemId = parseInt(itemIdStr);
+      thByItem[itemId] = (thByItem[itemId] ?? 0) + kg;
+    }
+  }
+}
+```
+
+**Sửa 3 — Line chart tích lũy TH (khoảng dòng 110-115):**
+
+```typescript
+// CŨ:
+for (const machineId in grid) {
+  const cell = grid[Number(machineId)]?.[day];
+  if (cell && !holidays.includes(day)) {
+    thCumul += cell.kg;
+  }
+}
+
+// MỚI:
+if (!holidays.includes(day)) {
+  for (const machineId in grid) {
+    const dayData = grid[Number(machineId)]?.[day];
+    if (dayData) {
+      for (const kg of Object.values(dayData)) {
+        thCumul += kg;
+      }
+    }
+  }
+}
+```
+
+---
+
+Tóm tắt: 3 chỗ trong file đang đọc grid theo cấu trúc cũ `{ itemId, kg }` → sửa sang cấu trúc mới `{ [itemId]: kg }`. Chỉ sửa 1 file này.

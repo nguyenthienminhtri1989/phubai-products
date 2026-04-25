@@ -2041,3 +2041,27 @@ src/components/kdsx/ActualProductionGrid.tsx               — Thêm state benchmar
 - N?u máy không có model s? b? qua, không t?m benchmark
 
 ---
+
+---
+
+## SCHEDULE COMPARISON DASHBOARD — Fix c?u trúc ActualGrid
+
+**Status:** ? Completed 2026-04-25
+
+### What was built
+S?a bug dashboard dùng c?u trúc grid c? { itemId, kg } không týõng thích v?i API ð? tr? v? c?u trúc m?i { [itemId]: kg }.
+
+### Files created/modified
+```
+src/components/kdsx/ScheduleComparisonDashboard.tsx  — S?a interface ActualGrid + 2 v?ng l?p tính t?ng TH
+```
+
+### Key business logic implemented
+- Interface ActualGrid s?a [day: number]: { itemId: number; kg: number } ? [day: number]: { [itemId: number]: number }
+- V?ng l?p 	hByItem: dùng Object.entries(dayData) ð? iterate theo itemId
+- V?ng l?p 	hCumul (line chart): dùng Object.values(dayData) ð? c?ng t?ng kg ngày, ki?m tra holiday trý?c
+
+### Known limitations
+- Không có thay ð?i schema hay API
+
+---
