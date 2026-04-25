@@ -70,6 +70,7 @@ export default function ActualProductionGrid({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [apiMachines, setApiMachines] = useState<{ id: number; name: string; model?: string | null; processId: number }[]>([]);
   const [apiItems, setApiItems] = useState<{ id: number; name: string }[]>([]);
+  const [benchmarkMap, setBenchmarkMap] = useState<Record<string, number>>({});
 
   const grid = externalGrid ?? internalGrid;
   const loading = !externalGrid && loadedScheduleId !== scheduleId;
@@ -92,6 +93,7 @@ export default function ActualProductionGrid({
         setSource(fetchedSource);
         setApiMachines(fetchedMachines);
         setApiItems(fetchedItems);
+        setBenchmarkMap(data.benchmarkMap ?? {});
         setLoadedScheduleId(scheduleId);
         onGridLoaded?.(fetchedGrid, fetchedSource);
       })
@@ -287,8 +289,11 @@ export default function ActualProductionGrid({
                       const isHoliday = holidays.includes(day);
                       const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
                       const hasData = actualKg > 0;
-                      const planKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
+                      const bmKey = `${row.machineId}-${row.itemId}`;
+                      const benchmarkKg = benchmarkMap[bmKey] ?? 0;
+                      const segKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
                         ? matchingSeg.kgPerDay : 0;
+                      const planKg = benchmarkKg || segKg; // ưu tiên benchmark EMPIRICAL, fallback segment KH
 
                       if (isHoliday) {
                         return (

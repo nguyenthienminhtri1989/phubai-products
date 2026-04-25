@@ -2010,3 +2010,34 @@ prisma/fix-data.js                                           â† ThÃªm page regi
 ---
 
 _Cáº­p nháº­t láº§n cuá»‘i: 2026-04-21 â€” ThÃªm Material Price Management System_
+
+---
+
+## ACTUAL PRODUCTION GRID — Benchmark Map t? EMPIRICAL
+
+**Status:** ? Completed 2026-04-25
+
+### What was built
+API /actual tr? thêm enchmarkMap — b?ng ğ?nh m?c EMPIRICAL kgPerDay cho t?ng combo (machineId, itemId) có trong grid th?c t?. Component ActualProductionGrid ıu tiên dùng enchmarkMap ğ? so màu TH vs KH, fallback sang segment KH n?u không có benchmark.
+
+### Files created/modified
+```
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thêm query BenchmarkVersion active + ProductivityBenchmark EMPIRICAL; tr? benchmarkMap trong JSON
+src/components/kdsx/ActualProductionGrid.tsx               — Thêm state benchmarkMap; ğ?c t? API; dùng benchmarkKg || segKg làm planKg
+```
+
+### Key business logic implemented
+- enchmarkMap["machineId-itemId"] = empiricalOutputPerDay t? ProductivityBenchmark (benchmarkType=EMPIRICAL, versionId=activeVersion c?a factory)
+- İu tiên benchmark EMPIRICAL, fallback v? kgPerDay c?a segment KH n?u không có benchmark
+- compareColor(actual, plan): xanh ? KH, vàng ? 90% KH, ğ? < 90% KH, xám n?u plan=0
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/kdsx/production-schedule/[id]/actual | Tr? grid + benchmarkMap (EMPIRICAL) + machines + items |
+
+### Known limitations
+- Benchmark ch? l?y version isActive=true ğ?u tiên (effectiveFrom desc)
+- N?u máy không có model s? b? qua, không t?m benchmark
+
+---

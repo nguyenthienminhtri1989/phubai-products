@@ -74,5 +74,45 @@ export async function GET(
     select: { id: true, name: true },
   });
 
-  return NextResponse.json({ grid, source, machines, items });
+  // ── Build benchmarkMap cho tất cả combo (machineId, itemId) trong grid ──
+  const combos = new Set<string>();
+  for (const row of data) {
+    combos.add(`${row.machineId}-${row.itemId}`);
+  }
+
+  const activeVersion = await prisma.benchmarkVersion.findFirst({
+    where: {
+      factoryId: schedule.factoryId,
+      isActive: true,
+    },
+    orderBy: { effectiveFrom: "desc" },
+  });
+
+  const benchmarkMap: Record<string, number> = {};
+
+  if (activeVersion) {
+    for (const combo of combos) {
+      const [machineIdStr, itemIdStr] = combo.split("-");
+      const machineId = parseInt(machineIdStr);
+      const itemId = parseInt(itemIdStr);
+      const machine = machines.find((m) => m.id === machineId);
+      if (!machine?.model) continue;
+
+      const benchmark = await prisma.productivityBenchmark.findFirst({
+        where: {
+          versionId: activeVersion.id,
+          itemId,
+          processId: machine.processId,
+          machineModel: machine.model,
+          benchmarkType: "EMPIRICAL",
+        },
+      });
+
+      if (benchmark?.empiricalOutputPerDay) {
+        benchmarkMap[combo] = benchmark.empiricalOutputPerDay;
+      }
+    }
+  }
+
+  return NextResponse.json({ grid, source, machines, items, benchmarkMap });
 }
