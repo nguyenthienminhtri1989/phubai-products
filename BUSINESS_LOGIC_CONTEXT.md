@@ -2065,3 +2065,29 @@ src/components/kdsx/ScheduleComparisonDashboard.tsx  — S?a interface ActualGrid 
 - Không có thay ð?i schema hay API
 
 ---
+
+---
+
+## HE THONG PHAN QUYEN — Fix stale JWT va logic fallback sai
+
+**Status:** Completed 2026-04-28
+
+### What was built
+Fix bug khien user co role PROCESS_LEAD duoc phan quyen trang /machines qua trang admin permissions nhung van bi chac ra "Khong co quyen truy cap". Root cause la 2 loi: (1) JWT pagePermissions chi duoc load 1 lan luc login, sau khi admin cap quyen user phai logout/login lai; (2) logic fallback trong machines/page.tsx hardcode ["ADMIN","FACTORY_MANAGER"] bo qua PROCESS_LEAD.
+
+### Files created/modified
+src/auth.ts                              — JWT callback gio refresh pagePermissions tu DB moi lan token duoc tai su dung, khong phai chi luc login
+src/auth.config.ts                       — Xoa jwt/session callbacks trung lap, chi giu authorized() cho Edge middleware
+src/app/machines/page.tsx                — Thay hardcode role list bang getRoleDefaultPerm() tu permissions.ts, dam bao nhat quan voi ma tran quyen toan he thong
+
+### Key business logic implemented
+- JWT callback trong auth.ts gio co 2 nhanh: neu co user (lan dang nhap dau) -> bake data; neu token.id (tai su dung) -> fetch pagePermissions moi tu DB
+- machines/page.tsx dung getRoleDefaultPerm(role, "SAN XUAT") lam fallback khi chua co PagePermission record trong DB
+- auth.config.ts chi giu authorized() vi chay trong Edge runtime (khong co Prisma), jwt/session callbacks phai dat trong auth.ts
+- PROCESS_LEAD co viewGroups = ["SAN XUAT", ...] nen mac dinh duoc phep xem trang /machines
+
+### API endpoints
+Khong thay doi API
+
+### Known limitations
+- JWT refresh pagePermissions moi lan session duoc doc (moi request co useSession) co the gay N+1 query neu nhieu user online. Co the optimize bang cache Redis sau.

@@ -59,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // 1. Chuyển dữ liệu từ authorize (user) sang token
     async jwt({ token, user }) {
+      // Lần đầu đăng nhập — bake dữ liệu từ authorize() vào token
       if (user) {
         token.id = user.id;
         token.username = (user as any).username;
@@ -67,7 +68,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.processIds = (user as any).processIds;
         token.fullName = (user as any).fullName;
         token.pagePermissions = (user as any).pagePermissions;
+        return token;
       }
+
+      // Các lần sau (token tái sử dụng) — refresh pagePermissions từ DB
+      // để phản ánh ngay khi admin thay đổi quyền mà không cần logout/login
+      if (token.id) {
+        try {
+          const userId = parseInt(token.id as string);
+          const dbPerms = await prisma.pagePermission.findMany({
+            where: { userId },
+            include: { page: { select: { pageKey: true } } },
+          });
+          token.pagePermissions = dbPerms.map((pp) => ({
+            pageKey: pp.page.pageKey,
+            canView: pp.canView,
+            canEdit: pp.canEdit,
+          }));
+        } catch {
+          // Nếu DB lỗi, giữ nguyên pagePermissions cũ trong token
+        }
+      }
+
       return token;
     },
     // 2. Chuyển dữ liệu từ token sang session (để dùng ở phía Client và API)
@@ -82,6 +104,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).pagePermissions = token.pagePermissions;
         // Backward compatibility — AdminLayout dùng session.user.role
         (session.user as any).role = token.userRole;
+        (session.user as any).accessLevel = "MANAGER";
+        (session.user as any).department = "FACTORY";
+        (session.user as any).extraModules = [];
       }
       return session;
     },

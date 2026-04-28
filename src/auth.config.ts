@@ -6,7 +6,8 @@ export const authConfig = {
     signIn: "/login", // Dẫn về trang đăng nhập của bạn
   },
   callbacks: {
-    // 1. Logic bảo vệ route (Middleware dùng cái này)
+    // authorized() chạy trong Middleware (Edge runtime) — chỉ kiểm tra login/logout
+    // KHÔNG đặt jwt/session ở đây vì auth.config.ts không có Prisma (Edge-safe)
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith("/");
@@ -20,39 +21,6 @@ export const authConfig = {
         return Response.redirect(new URL("/", nextUrl));
       }
       return true;
-    },
-    // 2. Tùy biến JWT để lưu thêm thông tin
-    jwt({ token, user, trigger, session }) {
-      if (user) {
-        token.userRole = (user as any).userRole;
-        token.factoryId = (user as any).factoryId;
-        token.processIds = (user as any).processIds;
-        token.username = (user as any).username;
-        token.fullName = (user as any).fullName;
-        token.pagePermissions = (user as any).pagePermissions;
-      }
-      if (trigger === "update" && session) {
-        return { ...token, ...session.user };
-      }
-      return token;
-    },
-    // 3. Tùy biến Session để Client đọc được
-    session({ session, token }) {
-      if (session.user && token) {
-        session.user.id = token.sub as string;
-        (session.user as any).userRole = token.userRole as string;
-        (session.user as any).factoryId = token.factoryId;
-        (session.user as any).processIds = token.processIds as number[];
-        (session.user as any).username = token.username as string;
-        (session.user as any).fullName = token.fullName as string;
-        (session.user as any).pagePermissions = token.pagePermissions;
-        // Backward compatibility
-        (session.user as any).role = token.userRole as string;
-        (session.user as any).accessLevel = "MANAGER"; // Default for backward compat
-        (session.user as any).department = "FACTORY";
-        (session.user as any).extraModules = [];
-      }
-      return session;
     },
   },
   providers: [], // Để trống, sẽ nạp ở auth.ts

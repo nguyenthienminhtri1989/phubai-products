@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Table, Card, Button, Input, Select, Tag, Space, Modal, Form, message, InputNumber, Switch, Popconfirm, Row, Col } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined, SearchOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
+import { getRoleDefaultPerm, type UserRole } from "@/lib/permissions";
 
 // Định nghĩa kiểu
 interface MachineData {
@@ -50,13 +51,15 @@ export default function MachinesPage() {
         (session?.user as any)?.pagePermissions || [];
 
     const isAdmin = userRole === "ADMIN";
-    // Quyền xem trang: ADMIN, hoặc có page-permission canView, hoặc role mặc định có quyền
-    const pagePerm = pagePermissions.find((p) => p.pageKey === "sx.machines"); // pageKey theo AdminLayout
-    const hasViewByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
-    const canViewPage = isAdmin || (pagePerm?.canView ?? hasViewByRole);
-    // Quyền sửa: ADMIN, hoặc có page-permission canEdit, hoặc role mặc định có quyền
-    const hasEditByRole = ["ADMIN", "FACTORY_MANAGER"].includes(userRole || "");
-    const canEditPage = isAdmin || (pagePerm?.canEdit ?? hasEditByRole);
+
+    // Trang "sx.machines" thuộc nhóm "SẢN XUẤT"
+    // Ưu tiên: 1) ADMIN bypass, 2) PagePermission override từ DB, 3) Role default
+    const PAGE_KEY = "sx.machines";
+    const PAGE_GROUP = "SẢN XUẤT";
+    const pagePerm = pagePermissions.find((p) => p.pageKey === PAGE_KEY);
+    const roleDefault = getRoleDefaultPerm((userRole || "VIEWER") as UserRole, PAGE_GROUP);
+    const canViewPage = isAdmin || (pagePerm ? pagePerm.canView : roleDefault.canView);
+    const canEditPage = isAdmin || (pagePerm ? pagePerm.canEdit : roleDefault.canEdit);
 
     const canEdit = (m: MachineData) =>
         isAdmin ||
