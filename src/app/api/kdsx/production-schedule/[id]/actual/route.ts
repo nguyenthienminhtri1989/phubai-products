@@ -25,9 +25,11 @@ export async function GET(
   ];
 
   // Lấy sản lượng thực tế từ ProductionLog, gộp 3 ca/ngày thành 1 tổng
+  // Chỉ lấy máy có trong segments KH để tránh kéo dữ liệu thừa
   const logs = await prisma.productionLog.groupBy({
     by: ["machineId", "itemId", "recordDate"],
     where: {
+      machineId: { in: segmentMachineIds },
       recordDate: { gte: startDate, lte: endDate },
     },
     _sum: { finalOutput: true },
