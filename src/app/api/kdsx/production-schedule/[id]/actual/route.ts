@@ -20,28 +20,26 @@ export async function GET(
   const endDate = new Date(year, month, 0); // last day of month
 
   // Lấy danh sách máy từ segments
-  const segmentMachineIds = [...new Set(schedule.segments.map((s) => s.machineId))];
+  const segmentMachineIds = [
+    ...new Set(schedule.segments.map((s) => s.machineId)),
+  ];
 
-  // Lấy sản lượng thực tế từ KdDailyInput (tất cả máy trong tháng, không giới hạn theo segments)
-  const actuals = await prisma.kdDailyInput.findMany({
+  // Lấy sản lượng thực tế từ ProductionLog, gộp 3 ca/ngày thành 1 tổng
+  const logs = await prisma.productionLog.groupBy({
+    by: ["machineId", "itemId", "recordDate"],
     where: {
       recordDate: { gte: startDate, lte: endDate },
     },
-    select: {
-      machineId: true,
-      itemId: true,
-      recordDate: true,
-      outputKg: true,
-    },
+    _sum: { finalOutput: true },
   });
 
-  const data = actuals.map((a) => ({
-    machineId: a.machineId,
-    itemId: a.itemId,
-    recordDate: a.recordDate,
-    outputKg: a.outputKg,
+  const data = logs.map((l) => ({
+    machineId: l.machineId,
+    itemId: l.itemId,
+    recordDate: l.recordDate,
+    outputKg: l._sum.finalOutput ?? 0,
   }));
-  const source = "KD_DAILY_INPUT";
+  const source = "PRODUCTION_LOG";
 
   // Format mới: grid[machineId][day][itemId] = kg — hỗ trợ máy chạy nhiều mặt hàng trong 1 ngày
   const grid: Record<number, Record<number, Record<number, number>>> = {};
@@ -49,7 +47,8 @@ export async function GET(
     const day = new Date(row.recordDate).getDate();
     if (!grid[row.machineId]) grid[row.machineId] = {};
     if (!grid[row.machineId][day]) grid[row.machineId][day] = {};
-    grid[row.machineId][day][row.itemId] = (grid[row.machineId][day][row.itemId] ?? 0) + row.outputKg;
+    grid[row.machineId][day][row.itemId] =
+      (grid[row.machineId][day][row.itemId] ?? 0) + row.outputKg;
   }
 
   if (segmentMachineIds.length === 0 && Object.keys(grid).length === 0) {
@@ -57,10 +56,9 @@ export async function GET(
   }
 
   // Gộp tất cả machineId từ segments và từ dữ liệu thực tế
-  const allMachineIds = [...new Set([
-    ...segmentMachineIds,
-    ...Object.keys(grid).map(Number),
-  ])];
+  const allMachineIds = [
+    ...new Set([...segmentMachineIds, ...Object.keys(grid).map(Number)]),
+  ];
 
   const machines = await prisma.machine.findMany({
     where: { id: { in: allMachineIds } },

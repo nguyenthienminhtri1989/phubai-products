@@ -2091,3 +2091,31 @@ Khong thay doi API
 
 ### Known limitations
 - JWT refresh pagePermissions moi lan session duoc doc (moi request co useSession) co the gay N+1 query neu nhieu user online. Co the optimize bang cache Redis sau.
+
+---
+
+## KDSX — Chuy?n ngu?n d? li?u th?c t? sang ProductionLog
+
+**Status:** ? Completed 2026-05-01
+
+### What was built
+Thay th? ngu?n d? li?u th?c t? trong API actual grid t? KdDailyInput sang ProductionLog. Query m?i dùng groupBy trên (machineId, itemId, recordDate) và SUM(finalOutput) ð? t?ng h?p 3 ca trong ngày thành m?t giá tr? duy nh?t. Ph?n c?n l?i c?a file (build grid, machines, items, benchmarkMap) gi? nguyên v? data v?n cùng format { machineId, itemId, recordDate, outputKg }.
+
+### Files created/modified
+```
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thay KdDailyInput.findMany() b?ng ProductionLog.groupBy() + SUM(finalOutput), source ð?i thành "PRODUCTION_LOG"
+```
+
+### Key business logic implemented
+- ProductionLog.groupBy(["machineId", "itemId", "recordDate"]) g?p 3 ca (shift) trong cùng 1 ngày thành t?ng inalOutput
+- outputKg = l._sum.finalOutput ?? 0 — giá tr? null ðý?c x? l? v? 0
+- source = "PRODUCTION_LOG" — frontend có th? phân bi?t ngu?n d? li?u
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/kdsx/production-schedule/[id]/actual | Tr? v? grid th?c t? l?y t? ProductionLog thay v? KdDailyInput |
+
+### Known limitations
+- Không l?c theo machineId t? segments — l?y t?t c? máy có record trong tháng
+- Chýa có filter theo factoryId trong ProductionLog query

@@ -1,96 +1,42 @@
-Tìm ra lỗi rồi! Dashboard đang dùng **cấu trúc grid CŨ** `{ itemId: number; kg: number }` nhưng API đã trả về **cấu trúc MỚI** `{ [itemId]: kg }`.
+Hãy đọc file: src/app/api/kdsx/production-schedule/[id]/actual/route.ts
 
-Nhìn vào code:
+- Thay phần query KdDailyInput bằng ProductionLog, group by (machineId, itemId, recordDate) và SUM(finalOutput):
+  // CŨ: lấy từ KdDailyInput
+  const actuals = await prisma.kdDailyInput.findMany({
+  where: {
+  recordDate: { gte: startDate, lte: endDate },
+  },
+  select: {
+  machineId: true,
+  itemId: true,
+  recordDate: true,
+  outputKg: true,
+  },
+  });
 
-```typescript
-// Interface sai — vẫn dùng cấu trúc cũ:
-interface ActualGrid {
-  [machineId: number]: {
-    [day: number]: { itemId: number; kg: number }; // ← SAI
-  };
-}
+const data = actuals.map((a) => ({
+machineId: a.machineId,
+itemId: a.itemId,
+recordDate: a.recordDate,
+outputKg: a.outputKg,
+}));
+const source = "KD_DAILY_INPUT";
 
-// Phần tính tổng TH cũng sai:
-const cell = machGrid[Number(day)];
-thByItem[cell.itemId] += cell.kg; // ← cell giờ là { [itemId]: kg }, không có .itemId
-```
+// MỚI: lấy từ ProductionLog, gộp 3 ca/ngày
+const logs = await prisma.productionLog.groupBy({
+by: ["machineId", "itemId", "recordDate"],
+where: {
+recordDate: { gte: startDate, lte: endDate },
+},
+\_sum: { finalOutput: true },
+});
 
-Đưa cho Claude Code:
+const data = logs.map((l) => ({
+machineId: l.machineId,
+itemId: l.itemId,
+recordDate: l.recordDate,
+outputKg: l.\_sum.finalOutput ?? 0,
+}));
+const source = "PRODUCTION_LOG";
 
----
-
-**File: `src/components/kdsx/ScheduleComparisonDashboard.tsx`**
-
-**Sửa 1 — Interface ActualGrid:**
-
-```typescript
-// CŨ:
-interface ActualGrid {
-  [machineId: number]: {
-    [day: number]: { itemId: number; kg: number };
-  };
-}
-
-// MỚI:
-interface ActualGrid {
-  [machineId: number]: {
-    [day: number]: { [itemId: number]: number };
-  };
-}
-```
-
-**Sửa 2 — Tính tổng TH theo itemId (khoảng dòng 85-92):**
-
-```typescript
-// CŨ:
-const thByItem: Record<number, number> = {};
-for (const machineId in grid) {
-  const machGrid = grid[Number(machineId)];
-  for (const day in machGrid) {
-    const cell = machGrid[Number(day)];
-    if (!thByItem[cell.itemId]) thByItem[cell.itemId] = 0;
-    thByItem[cell.itemId] += cell.kg;
-  }
-}
-
-// MỚI:
-const thByItem: Record<number, number> = {};
-for (const machineId in grid) {
-  const machGrid = grid[Number(machineId)];
-  for (const day in machGrid) {
-    const dayData = machGrid[Number(day)];
-    for (const [itemIdStr, kg] of Object.entries(dayData)) {
-      const itemId = parseInt(itemIdStr);
-      thByItem[itemId] = (thByItem[itemId] ?? 0) + kg;
-    }
-  }
-}
-```
-
-**Sửa 3 — Line chart tích lũy TH (khoảng dòng 110-115):**
-
-```typescript
-// CŨ:
-for (const machineId in grid) {
-  const cell = grid[Number(machineId)]?.[day];
-  if (cell && !holidays.includes(day)) {
-    thCumul += cell.kg;
-  }
-}
-
-// MỚI:
-if (!holidays.includes(day)) {
-  for (const machineId in grid) {
-    const dayData = grid[Number(machineId)]?.[day];
-    if (dayData) {
-      for (const kg of Object.values(dayData)) {
-        thCumul += kg;
-      }
-    }
-  }
-}
-```
-
----
-
-Tóm tắt: 3 chỗ trong file đang đọc grid theo cấu trúc cũ `{ itemId, kg }` → sửa sang cấu trúc mới `{ [itemId]: kg }`. Chỉ sửa 1 file này.
+Phần còn lại của file (build grid, machines, items, benchmarkMap) giữ nguyên — không cần sửa vì data vẫn cùng format { machineId, itemId, recordDate, outputKg }.
