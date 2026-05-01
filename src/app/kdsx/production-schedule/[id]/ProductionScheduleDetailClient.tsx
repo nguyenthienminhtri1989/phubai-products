@@ -74,6 +74,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [actualGrid, setActualGrid] = useState<ActualGrid>({});
   const [actualGridLoaded, setActualGridLoaded] = useState(false);
   const [actualItems, setActualItems] = useState<{ id: number; name: string }[]>([]);
+  const [actualBenchmarkMap, setActualBenchmarkMap] = useState<Record<string, number>>({});
   const [actualFilterFrom, setActualFilterFrom] = useState<number>(1);
   const [actualFilterTo, setActualFilterTo] = useState<number>(31);
 
@@ -98,6 +99,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         const data = await res.json();
         setActualGrid(data.grid ?? {});
         setActualItems(data.items ?? []);
+        setActualBenchmarkMap(data.benchmarkMap ?? {}); // THÊM
       }
     } catch { /* ignore */ }
     setActualGridLoaded(true);
@@ -787,6 +789,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                 yearMonth={yearMonth}
                 externalGrid={actualGridLoaded ? actualGrid : undefined}
                 externalItems={actualItems}
+                externalBenchmarkMap={actualBenchmarkMap}
               />
             ),
           },

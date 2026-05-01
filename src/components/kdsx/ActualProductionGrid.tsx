@@ -31,6 +31,7 @@ interface ActualProductionGridProps {
   yearMonth: string;
   externalGrid?: ActualGrid;
   externalItems?: { id: number; name: string }[];
+  externalBenchmarkMap?: Record<string, number>;
   onGridLoaded?: (grid: ActualGrid, source: string) => void;
 }
 
@@ -46,11 +47,12 @@ function getColor(itemId: number, itemColors: Record<string, string>): string {
 function getBg(itemId: number, itemColors: Record<string, string>): string {
   return getColor(itemId, itemColors) + "33";
 }
+
 function compareColor(actual: number, plan: number): string {
   if (plan === 0) return "#595959";
-  if (actual >= plan) return "#52c41a";
-  if (actual >= plan * 0.9) return "#faad14";
-  return "#ff4d4f";
+  if (actual >= plan) return "#52c41a";          // ≥100%
+  if (actual >= plan * 0.95) return "#faad14";  // 95% – 99%
+  return "#ff4d4f";                             // <95%
 }
 
 export default function ActualProductionGrid({
@@ -62,6 +64,7 @@ export default function ActualProductionGrid({
   yearMonth,
   externalGrid,
   externalItems,
+  externalBenchmarkMap,
   onGridLoaded,
 }: ActualProductionGridProps) {
   const [internalGrid, setInternalGrid] = useState<ActualGrid>({});
@@ -73,6 +76,7 @@ export default function ActualProductionGrid({
   const [benchmarkMap, setBenchmarkMap] = useState<Record<string, number>>({});
 
   const grid = externalGrid ?? internalGrid;
+  const resolvedBenchmarkMap = externalBenchmarkMap ?? benchmarkMap;
   const loading = !externalGrid && loadedScheduleId !== scheduleId;
 
   const [schedYear, schedMonth] = yearMonth.split("-").map(Number);
@@ -290,7 +294,7 @@ export default function ActualProductionGrid({
                       const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
                       const hasData = actualKg > 0;
                       const bmKey = `${row.machineId}-${row.itemId}`;
-                      const benchmarkKg = benchmarkMap[bmKey] ?? 0;
+                      const benchmarkKg = resolvedBenchmarkMap[bmKey] ?? 0;
                       const segKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
                         ? matchingSeg.kgPerDay : 0;
                       const planKg = benchmarkKg || segKg; // ưu tiên benchmark EMPIRICAL, fallback segment KH
