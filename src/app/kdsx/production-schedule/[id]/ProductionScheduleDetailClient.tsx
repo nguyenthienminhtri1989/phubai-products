@@ -105,23 +105,54 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     setActualGridLoaded(true);
   }, [scheduleId]);
 
+  // Initial data load — inline fetches so React Compiler can see setState only
+  // happens in async .then() callbacks, never synchronously inside the effect body.
+  // useCallback functions (fetchSchedule etc.) are kept for manual refresh() calls.
   useEffect(() => {
+    setLoading(true);
     Promise.all([
-      fetchSchedule(),
-      fetchSummary(),
-      fetchActualGrid(),
-      fetch("/api/machines").then(r => r.json()).then(d => setMachines(Array.isArray(d) ? d : d.machines ?? [])).catch(() => { }),
-      fetch("/api/items").then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : d.items ?? [])).catch(() => { }),
+      // schedule
+      fetch(`/api/kdsx/production-schedule/${scheduleId}`)
+        .then(r => { if (!r.ok) { message.error("Không tìm thấy kế hoạch"); } return r.ok ? r.json() : null; })
+        .then(data => {
+          if (data) {
+            setSchedule(data);
+            // set actualFilterTo to actual days in month (user can still override via InputNumber)
+            setActualFilterTo(daysInMonthFn(data.yearMonth));
+          }
+        })
+        .catch(() => message.error("Lỗi tải dữ liệu")),
+      fetch(`/api/kdsx/production-schedule/${scheduleId}/summary`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setSummary(data); })
+        .catch(() => {}),
+      // actual grid
+      fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setActualGrid(data.grid ?? {});
+            setActualItems(data.items ?? []);
+            setActualBenchmarkMap(data.benchmarkMap ?? {});
+          }
+          setActualGridLoaded(true);
+        })
+        .catch(() => { setActualGridLoaded(true); }),
+      // machines
+      fetch("/api/machines")
+        .then(r => r.json())
+        .then(d => setMachines(Array.isArray(d) ? d : d.machines ?? []))
+        .catch(() => {}),
+      // items
+      fetch("/api/items")
+        .then(r => r.json())
+        .then(d => setItems(Array.isArray(d) ? d : d.items ?? []))
+        .catch(() => {}),
     ]).finally(() => setLoading(false));
-  }, [fetchSchedule, fetchSummary, fetchActualGrid]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleId]); // scheduleId is a stable primitive — no callback deps needed
 
-  // Sync actualFilterTo to actual days in month once schedule is loaded
-  useEffect(() => {
-    if (schedule?.yearMonth) {
-      const days = daysInMonthFn(schedule.yearMonth);
-      setActualFilterTo(days);
-    }
-  }, [schedule?.yearMonth]);
+  // actualFilterTo is now derived directly from schedule.yearMonth (see above) — no effect needed
 
   const refresh = async () => { await Promise.all([fetchSchedule(), fetchSummary(), fetchActualGrid()]); };
 

@@ -16,8 +16,9 @@ export async function GET(
 
   const { yearMonth } = schedule;
   const [year, month] = yearMonth.split("-").map(Number);
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0); // last day of month
+  const lastDay = new Date(year, month, 0).getDate();
+  const startDate = new Date(`${yearMonth}-01T00:00:00.000Z`);
+  const endDate = new Date(`${yearMonth}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`);
 
   // Lấy danh sách máy từ segments
   const segmentMachineIds = [
@@ -46,7 +47,7 @@ export async function GET(
   // Format mới: grid[machineId][day][itemId] = kg — hỗ trợ máy chạy nhiều mặt hàng trong 1 ngày
   const grid: Record<number, Record<number, Record<number, number>>> = {};
   for (const row of data) {
-    const day = new Date(row.recordDate).getDate();
+    const day = new Date(row.recordDate).getUTCDate();
     if (!grid[row.machineId]) grid[row.machineId] = {};
     if (!grid[row.machineId][day]) grid[row.machineId][day] = {};
     grid[row.machineId][day][row.itemId] =
