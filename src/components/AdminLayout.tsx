@@ -127,6 +127,7 @@ const ALL_PAGES: PageDef[] = [
   // HỆ THỐNG
   { pageKey: "system.users", pageGroup: "HỆ THỐNG", path: "/users", label: "Quản lý Tài khoản", icon: <UserOutlined /> },
   { pageKey: "system.permissions", pageGroup: "HỆ THỐNG", path: "/admin/permissions", label: "Phân quyền", icon: <LockOutlined /> },
+  { pageKey: "system.page-registry", pageGroup: "HỆ THỐNG", path: "/admin/page-registry", label: "Danh sách Trang", icon: <AppstoreOutlined /> },
   { pageKey: "system.backup", pageGroup: "HỆ THỐNG", path: "/admin/backup", label: "Sao lưu & Phục hồi", icon: <CloudSyncOutlined /> },
   { pageKey: "system.feedback", pageGroup: "HỆ THỐNG", path: "/feedback", label: "Góp ý & Đề xuất", icon: <CommentOutlined /> },
 ];
@@ -224,7 +225,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-system",
     label: "HỆ THỐNG",
     icon: <SafetyCertificateOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["system.users", "system.permissions", "system.backup", "system.feedback"],
+    pageKeys: ["system.users", "system.permissions", "system.page-registry", "system.backup", "system.feedback"],
   },
 ];
 
@@ -348,7 +349,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       if (group.key === "group-system") {
         groupChildren = groupChildren.filter((child) => {
           // Quản lý Tài khoản, Phân quyền, Sao lưu chỉ cho ADMIN
-          const adminOnlyPaths = ["/users", "/admin/permissions", "/admin/backup"];
+          const adminOnlyPaths = ["/users", "/admin/permissions", "/admin/page-registry", "/admin/backup"];
           if (adminOnlyPaths.includes(child.key) && !isAdmin) return false;
           return true;
         });

@@ -2119,3 +2119,36 @@ src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thay KdDailyInput.f
 ### Known limitations
 - Không l?c theo machineId t? segments — l?y t?t c? máy có record trong tháng
 - Chýa có filter theo factoryId trong ProductionLog query
+
+---
+
+## ADMIN — Page Registry Management UI
+
+**Status:** ? Completed 2026-05-03
+
+### What was built
+Giao di?n qu?n l? danh sách trang (Page Registry) cho Admin, cho phép thêm/s?a/xoá các trang vào h? th?ng phân quy?n tr?c ti?p t? UI mà không c?n ch?y script seed. API ðý?c m? r?ng v?i ð?y ð? CRUD.
+
+### Files created/modified
+```
+src/app/api/page-registry/route.ts    — M? r?ng thêm POST (create/upsert), PUT (update by id), DELETE (delete by id)
+src/app/admin/page-registry/page.tsx  — Giao di?n CRUD danh sách trang v?i b?ng, form modal, filter theo nhóm
+```
+
+### Key business logic implemented
+- POST dùng upsert theo pageKey — tránh trùng l?p
+- pageKey ðý?c validate ch? ch?a [a-z0-9._-], t? ð?ng sinh t? path khi t?o m?i
+- DELETE c?nh báo s? xoá toàn b? PagePermission liên quan (cascade do Prisma schema)
+- Ch? ADMIN m?i có th? truy c?p t?t c? endpoints và trang này
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/page-registry | L?y danh sách t?t c? trang |
+| POST | /api/page-registry | T?o/upsert trang theo pageKey |
+| PUT | /api/page-registry | C?p nh?t trang theo id |
+| DELETE | /api/page-registry?id=xxx | Xoá trang theo id |
+
+### Known limitations
+- Chýa có xác nh?n n?u xoá trang v?n c?n user ðý?c c?p quy?n truy c?p
+- Chýa h? tr? thêm pageGroup m?i ð?ng (danh sách group hi?n t?i hard-code trong UI)
