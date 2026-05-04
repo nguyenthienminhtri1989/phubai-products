@@ -3,40 +3,49 @@ name: Deploy ERP to SPB Server
 on:
   push:
     branches:
-      - main # (Thay bằng 'master' nếu nhánh chính của bạn tên là master)
+      - main # Đảm bảo đúng tên nhánh của bạn
 
 jobs:
   build-and-deploy:
-    runs-on: self-hosted # Bắt buộc phải là self-hosted để chạy trên máy chủ của bạn
+    runs-on: self-hosted
 
     steps:
-      # BƯỚC MỚI: Dừng ứng dụng để giải phóng các file bị khóa
-      - name: 0. Surgical Strike (Stop only ERP)
-        shell: cmd
+      # BƯỚC 0: Dừng app và giải phóng cổng 3001 (Chỉ ERP bị ảnh hưởng)
+      - name: 0. Stop PHUBAI-ERP (Release File Locks)
+        continue-on-error: true
+        shell: pwsh
         run: |
-          "C:\Users\Admin\AppData\Roaming\npm\pm2.cmd" stop phubai-erp 2>nul || echo Ready
-          for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3001') do taskkill /f /pid %%a 2>nul || exit 0
+          $pm2 = "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd"
+          if (Test-Path $pm2) { & $pm2 stop phubai-erp }
+          # Tìm và giết đúng PID đang chiếm cổng 3001 để tránh lỗi EPERM trên file .node
+          $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
+          if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
 
-      - name: 1. Tải code mới nhất từ GitHub về máy chủ
+      # BƯỚC 1: Tải code mới
+      - name: 1. Checkout code
         uses: actions/checkout@v4
 
-        # BƯỚC MỚI: Tạo file .env từ Secret
-      - name: Create .env file
+      # BƯỚC 2: Tạo file .env (QUAN TRỌNG: Phải làm TRƯỚC khi Build)
+      - name: 2. Create .env file from Secrets
         shell: pwsh
         env:
           ENV_DATA: ${{ secrets.ENV_FILE }}
         run: |
           $env:ENV_DATA | Out-File -FilePath .env -Encoding utf8
 
-      # - name: 2. Cài đặt các thư viện mới (nếu có)
-      #   run: npm install
+      # BƯỚC 3: Cài đặt thư viện (Không được bỏ qua nếu có thư viện mới)
+      - name: 3. Install dependencies
+        run: npm install
 
-      # - name: 3. Cập nhật Prisma Client
-      #   run: npx prisma generate
+      # BƯỚC 4: Generate Prisma (Bắt buộc để code nhận diện Database schema)
+      - name: 4. Prisma Generate
+        run: npx prisma generate
 
-      - name: 4. Build dự án Next.js
+      # BƯỚC 5: Build Next.js (Lúc này đã có .env nên sẽ không bị lỗi Client-side exception)
+      - name: 5. Build Next.js
         run: npm run build
 
-      - name: 5. Khởi động lại PM2
+      # BƯỚC 6: Khởi động lại bằng Ecosystem
+      - name: 6. Restart PM2 with Ecosystem
         run: |
-          & C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd startOrReload ecosystem.config.js --update-env
+          & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --update-env
