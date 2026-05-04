@@ -209,7 +209,7 @@ export default function ActualProductionGrid({
         <Text type="secondary" style={{ marginLeft: 8 }}>
           — Màu ô: <span style={{ color: "#52c41a", fontWeight: 600 }}>Xanh ≥ KH</span>,{" "}
           <span style={{ color: "#faad14", fontWeight: 600 }}>Vàng gần đạt</span>,{" "}
-          <span style={{ color: "#ff4d4f", fontWeight: 600 }}>Đỏ thấp hơn 10%+</span>
+          <span style={{ color: "#ff4d4f", fontWeight: 600 }}>Đỏ thấp hơn 5%+</span>
           <span style={{ color: "#595959", marginLeft: 8 }}>(Không có định mức KH → màu xám)</span>
         </Text>
       </div>
