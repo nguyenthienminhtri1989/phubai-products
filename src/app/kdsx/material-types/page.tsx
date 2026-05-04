@@ -301,7 +301,8 @@ export default function MaterialTypesPage() {
                 <Select
                   options={[
                     { label: "🌾 COTTON — Bông các loại", value: "COTTON" },
-                    { label: "🔵 PE — Polyester, Viscose, Xơ tổng hợp", value: "PE" },
+                    { label: "🔵 PE — Polyester, Xơ tổng hợp", value: "PE" },
+                    { label: "🔵 Viscose, Xơ tổng hợp", value: "VISCOSE" },
                   ]}
                 />
               </Form.Item>
