@@ -97,15 +97,13 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "kdsx.dashboard", pageGroup: "KINH DOANH", path: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
   { pageKey: "kdsx.customers", pageGroup: "KINH DOANH", path: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
   { pageKey: "kdsx.sales-orders", pageGroup: "KINH DOANH", path: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
-  { pageKey: "kdsx.production-schedule", pageGroup: "KINH DOANH", path: "/kdsx/production-schedule", label: "Kế hoạch SX tháng", icon: <CalendarOutlined /> },
+  { pageKey: "kdsx.production-schedule", pageGroup: "KINH DOANH", path: "/kdsx/production-schedule", label: "Kế hoạch & Thực hiện", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.order-progress", pageGroup: "KINH DOANH", path: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
   { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
   { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
-  { pageKey: "kdsx.raw-material-rates", pageGroup: "KINH DOANH", path: "/kdsx/raw-material-rates", label: "Định mức NVL", icon: <ExperimentOutlined /> },
-  { pageKey: "kdsx.material-types", pageGroup: "KINH DOANH", path: "/kdsx/material-types", label: "Danh mục NVL", icon: <ExperimentOutlined /> },
-  { pageKey: "kdsx.material-prices", pageGroup: "KINH DOANH", path: "/kdsx/material-prices", label: "Giá NVL theo tháng", icon: <DollarOutlined /> },
+
   // MOBILE
   { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
   { pageKey: "mobile.report", pageGroup: "MOBILE", path: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
@@ -120,6 +118,9 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "catalog.items", pageGroup: "DANH MỤC", path: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
   { pageKey: "catalog.shifts", pageGroup: "DANH MỤC", path: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
   { pageKey: "catalog.stop-cats", pageGroup: "DANH MỤC", path: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
+  { pageKey: "kdsx.raw-material-rates", pageGroup: "DANH MỤC", path: "/kdsx/raw-material-rates", label: "Định mức NVL", icon: <ExperimentOutlined /> },
+  { pageKey: "kdsx.material-types", pageGroup: "DANH MỤC", path: "/kdsx/material-types", label: "Danh mục NVL", icon: <ExperimentOutlined /> },
+  { pageKey: "kdsx.material-prices", pageGroup: "DANH MỤC", path: "/kdsx/material-prices", label: "Giá NVL theo tháng", icon: <DollarOutlined /> },
   // DANH MỤC ĐIỆN NĂNG
   { pageKey: "catalog.energy-type", pageGroup: "DANH MỤC", path: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
   { pageKey: "catalog.meter-group", pageGroup: "DANH MỤC", path: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
@@ -193,7 +194,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     pageKeys: [
       "kdsx.dashboard", "kdsx.customers", "kdsx.sales-orders", "kdsx.production-schedule", "kdsx.order-progress",
       "kdsx.plans", "kdsx.actuals", "kdsx.sales-tracking", "kdsx.daily-input",
-      "kdsx.raw-material-rates", "kdsx.material-types", "kdsx.material-prices",
     ],
   },
   {
@@ -206,19 +206,10 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-catalog",
     label: "DANH MỤC",
     icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
-    subGroups: [
-      {
-        key: "sub-cat-sx",
-        label: "DM Sản xuất",
-        icon: <DatabaseOutlined />,
-        pageKeys: ["catalog.factories", "catalog.processes", "catalog.items", "catalog.shifts", "catalog.stop-cats"],
-      },
-      {
-        key: "sub-cat-energy",
-        label: "DM Điện năng",
-        icon: <ThunderboltOutlined />,
-        pageKeys: ["catalog.energy-type", "catalog.meter-group", "catalog.meters"],
-      },
+    pageKeys: [
+      "catalog.factories", "catalog.processes", "catalog.items", "catalog.shifts", "catalog.stop-cats",
+      "kdsx.raw-material-rates", "kdsx.material-types", "kdsx.material-prices",
+      "catalog.energy-type", "catalog.meter-group", "catalog.meters",
     ],
   },
   {
