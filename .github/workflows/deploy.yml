@@ -1,0 +1,26 @@
+name: Deploy ERP to SPB Server
+
+on:
+  push:
+    branches:
+      - main # (Thay bằng 'master' nếu nhánh chính của bạn tên là master)
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted # Bắt buộc phải là self-hosted để chạy trên máy chủ của bạn
+
+    steps:
+      - name: 1. Tải code mới nhất từ GitHub về máy chủ
+        uses: actions/checkout@v4
+
+      - name: 2. Cài đặt các thư viện mới (nếu có)
+        run: npm install
+
+      - name: 3. Cập nhật Prisma Client
+        run: npx prisma generate
+
+      - name: 4. Build dự án Next.js
+        run: npm run build
+
+      - name: 5. Khởi động lại PM2
+        run: pm2 reload all
