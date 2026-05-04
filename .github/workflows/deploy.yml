@@ -23,4 +23,5 @@ jobs:
         run: npm run build
 
       - name: 5. Khởi động lại PM2
-        run: pm2 reload all
+        run: |
+          & C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd startOrReload ecosystem.config.js --update-env
