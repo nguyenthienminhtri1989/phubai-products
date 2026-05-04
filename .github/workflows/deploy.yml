@@ -22,9 +22,11 @@ jobs:
 
         # BƯỚC MỚI: Tạo file .env từ Secret
       - name: Create .env file
-        shell: cmd
+        shell: pwsh
+        env:
+          ENV_DATA: ${{ secrets.ENV_FILE }}
         run: |
-          echo "${{ secrets.ENV_FILE }}" > .env
+          $env:ENV_DATA | Out-File -FilePath .env -Encoding utf8
 
       # - name: 2. Cài đặt các thư viện mới (nếu có)
       #   run: npm install
