@@ -125,7 +125,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       fetch(`/api/kdsx/production-schedule/${scheduleId}/summary`)
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data) setSummary(data); })
-        .catch(() => {}),
+        .catch(() => { }),
       // actual grid
       fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
         .then(r => r.ok ? r.json() : null)
@@ -142,14 +142,14 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       fetch("/api/machines")
         .then(r => r.json())
         .then(d => setMachines(Array.isArray(d) ? d : d.machines ?? []))
-        .catch(() => {}),
+        .catch(() => { }),
       // items
       fetch("/api/items")
         .then(r => r.json())
         .then(d => setItems(Array.isArray(d) ? d : d.items ?? []))
-        .catch(() => {}),
+        .catch(() => { }),
     ]).finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [scheduleId]); // scheduleId is a stable primitive — no callback deps needed
 
   // actualFilterTo is now derived directly from schedule.yearMonth (see above) — no effect needed
@@ -261,12 +261,8 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     new Map(schedule.segments.map(s => [s.machineId, s.machine])).values()
   ).sort((a, b) => a.id - b.id);
 
-  // Thêm các máy thuộc factory mà chưa có segment
-  const factoryMachines = machines.filter(m => {
-    return !uniqueMachines.find(um => um.id === m.id);
-  });
-  const allMachines = [...uniqueMachines.map(m => ({ id: m.id, name: m.name, model: m.model ?? null, processId: m.processId })),
-  ...factoryMachines.slice(0, Math.max(0, 21 - uniqueMachines.length))];
+  // Chỉ hiển thị máy đã có segment trong KH
+  const allMachines = uniqueMachines.map(m => ({ id: m.id, name: m.name, model: m.model ?? null, processId: m.processId }));
 
   const grandTotal = summary.reduce((s, i) => s + i.totalKg, 0);
 
