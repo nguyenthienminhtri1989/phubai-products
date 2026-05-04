@@ -10,6 +10,11 @@ jobs:
     runs-on: self-hosted # Bắt buộc phải là self-hosted để chạy trên máy chủ của bạn
 
     steps:
+      # BƯỚC MỚI: Dừng ứng dụng để giải phóng các file bị khóa
+      - name: 0. Stop PM2 to release file locks
+        run: |
+          & "C:\Users\Admin\AppData\Roaming\npm\pm2.cmd" stop phubai-erp || true
+        # Chú thích: "|| true" để nếu app chưa chạy thì nó cũng không báo lỗi workflow
       - name: 1. Tải code mới nhất từ GitHub về máy chủ
         uses: actions/checkout@v4
 
