@@ -14,8 +14,11 @@ jobs:
         continue-on-error: true
         shell: powershell
         run: |
+          # CHỈ dừng đích danh ứng dụng phubai-erp
           $pm2 = "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd"
           if (Test-Path $pm2) { & $pm2 stop phubai-erp }
+
+          # CHỈ tiêu diệt tiến trình đang chạy trên cổng 3001
           $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
           if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
 
@@ -40,4 +43,5 @@ jobs:
 
       - name: 6. Restart PM2 with Ecosystem
         run: |
-          & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --update-env
+          # Thêm cờ --only phubai-erp để đảm bảo PM2 tuyệt đối không đụng đến app khác
+          & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --only phubai-erp --update-env
