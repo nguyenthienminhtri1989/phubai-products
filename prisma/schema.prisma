@@ -92,6 +92,7 @@ model Item {
   twist        Int? // Độ săn (Số nguyên)
   weavingStyle String? // Kiểu dệt
   material     String? // Nguyên liệu
+  yarnType     String  @default("SINGLE") // "SINGLE" = 1 thành phần (chỉ cotton), "BLENDED" = sợi pha (cotton + PE)
 
   // Quan hệ (Giữ nguyên logic cũ)
   runningOnMachines Machine[] // Đang chạy trên máy nào?

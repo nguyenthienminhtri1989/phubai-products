@@ -22,6 +22,7 @@ interface ItemData {
     twist?: number;
     weavingStyle?: string;
     material?: string;
+    yarnType?: string;
     _count?: { productionLogs: number };
 }
 
@@ -267,6 +268,15 @@ export default function ItemsManagementPage() {
             )
         },
         {
+            title: "Loại sợi",
+            dataIndex: "yarnType",
+            key: "yarnType",
+            align: 'center' as const,
+            render: (yarnType: string) => yarnType === "BLENDED"
+                ? <Tag color="orange">Sợi pha (PE)</Tag>
+                : <Tag color="blue">Một thành phần</Tag>
+        },
+        {
             title: "Trạng thái",
             key: "status",
             render: (_: any, r: ItemData) => {
@@ -424,6 +434,16 @@ export default function ItemsManagementPage() {
 
                     <Form.Item name="material" label="Nguyên liệu đầu vào">
                         <Input placeholder="Ví dụ: Bông Mỹ, Xơ Thái..." />
+                    </Form.Item>
+
+                    <Form.Item name="yarnType" label="Loại sợi">
+                        <Select
+                            defaultValue="SINGLE"
+                            options={[
+                                { label: "Sợi một thành phần (cotton)", value: "SINGLE" },
+                                { label: "Sợi pha (cotton + PE)", value: "BLENDED" },
+                            ]}
+                        />
                     </Form.Item>
 
                     <div style={{ textAlign: "right", marginTop: 16 }}>

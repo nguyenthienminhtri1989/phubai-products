@@ -2152,3 +2152,38 @@ src/app/admin/page-registry/page.tsx  — Giao di?n CRUD danh sách trang v?i b?ng,
 ### Known limitations
 - Chýa có xác nh?n n?u xoá trang v?n c?n user ðý?c c?p quy?n truy c?p
 - Chýa h? tr? thêm pageGroup m?i ð?ng (danh sách group hi?n t?i hard-code trong UI)
+
+---
+
+## DANH MUC MAT HANG â€” Them field yarnType vao Item
+
+**Status:** âœ… Completed 2026-05-05
+
+### What was built
+Them field yarnType (String, default "SINGLE") vao model Item de phan biet soi mot thanh phan va soi pha. UI trang Items duoc cap nhat them dropdown chon loai soi. Trang Dinh muc NVL (raw-material-rates) da duoc refactor de dung yarnType thay vi detect tu ten mat hang de quyet dinh an/hien truong PE.
+
+### Files created/modified
+`
+prisma/schema.prisma                                   â€” Them yarnType String @default("SINGLE") vao model Item
+prisma/migrations/20260505000001_add_yarn_type_to_item/ â€” Migration SQL ADD COLUMN yarnType
+src/app/api/items/route.ts                             â€” POST nhan them yarnType tu body
+src/app/api/items/[id]/route.ts                        â€” PUT nhan them yarnType tu body
+src/app/items/page.tsx                                 â€” Them Form.Item dropdown "Loai soi" va cot hien thi trong bang
+src/app/kdsx/raw-material-rates/page.tsx               â€” Refactor hasPE(item: ItemInfo) dung yarnType; cap nhat ItemInfo interface
+`
+
+### Key business logic implemented
+- yarnType = "SINGLE": soi mot thanh phan (chi cotton) â€” khong co o PE trong dinh muc
+- yarnType = "BLENDED": soi pha (cotton + PE) â€” hien thi va cho nhap o PE trong dinh muc
+- Ham hasPE(item: ItemInfo) doi tu detect-from-name sang doc truc tiep item.yarnType === "BLENDED"
+- Cac row Item cu trong DB duoc migrate voi gia tri mac dinh "SINGLE" (an toan)
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | /api/items | Nhan them truong yarnType khi tao mat hang moi |
+| PUT    | /api/items/[id] | Nhan them truong yarnType khi cap nhat mat hang |
+
+### Known limitations
+- Cac mat hang CVCM hien tai trong DB se co yarnType = "SINGLE" (gia tri mac dinh) â€” Admin can vao trang Items de cap nhat sang "BLENDED" cho tung mat hang soi pha
+- Ham detectYarnGroup() va isDoubleTwist() khong bi anh huong va giu nguyen

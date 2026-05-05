@@ -19,7 +19,7 @@ export async function PUT(
     const itemId = parseInt(id);
 
     const body = await req.json();
-    const { name, code, ne, composition, twist, weavingStyle, material } = body;
+    const { name, code, ne, composition, twist, weavingStyle, material, yarnType } = body;
 
     const updatedItem = await prisma.item.update({
       where: { id: itemId },
@@ -31,6 +31,7 @@ export async function PUT(
         twist: twist ? parseInt(twist) : null,
         weavingStyle,
         material,
+        ...(yarnType !== undefined ? { yarnType } : {}),
       },
     });
 

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, code, ne, composition, twist, weavingStyle, material } = body;
+    const { name, code, ne, composition, twist, weavingStyle, material, yarnType } = body;
 
     if (!name)
       return NextResponse.json({ error: "Tên bắt buộc" }, { status: 400 });
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
         twist: twist ? parseInt(twist) : null,
         weavingStyle,
         material,
+        yarnType: yarnType || "SINGLE",
       },
     });
 

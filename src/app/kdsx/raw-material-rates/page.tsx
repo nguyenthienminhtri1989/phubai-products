@@ -44,6 +44,7 @@ interface ItemInfo {
   ne: number | null;
   material: string | null;
   composition: string | null;
+  yarnType?: string; // "SINGLE" | "BLENDED"
 }
 
 interface RawMaterialRate {
@@ -80,9 +81,9 @@ function isDoubleTwist(name: string): boolean {
   return name.includes("/2") || name.toUpperCase().includes("XE ĐÔI");
 }
 
-// Chỉ CVCM mới có PE
-function hasPE(name: string): boolean {
-  return detectYarnGroup(name) === "CVCM";
+// Chỉ BLENDED mới có PE (dùng yarnType thay vì detect từ tên)
+function hasPE(item: ItemInfo): boolean {
+  return item.yarnType === "BLENDED";
 }
 
 const GROUP_COLORS: Record<YarnGroup, string> = {
@@ -352,7 +353,7 @@ export default function RawMaterialRatesPage() {
       width: 110,
       align: "right" as const,
       render: (_: unknown, r: RawMaterialRate) =>
-        hasPE(r.item.name) ? (
+        hasPE(r.item) ? (
           <Text code>{fmt3(r.peRate)}</Text>
         ) : (
           <Text type="secondary">—</Text>
@@ -429,7 +430,7 @@ export default function RawMaterialRatesPage() {
   // =============================================
   // RENDER
   // =============================================
-  const showPE = selectedItem ? hasPE(selectedItem.name) : false;
+  const showPE = selectedItem ? hasPE(selectedItem) : false;
   const showGC = selectedItem ? isDoubleTwist(selectedItem.name) : false;
 
   return (
@@ -572,7 +573,7 @@ export default function RawMaterialRatesPage() {
                 setSelectedItem(item);
                 // Clear conditional fields
                 if (item) {
-                  if (!hasPE(item.name)) form.setFieldValue("peRate", null);
+                  if (!hasPE(item)) form.setFieldValue("peRate", null);
                   if (!isDoubleTwist(item.name))
                     form.setFieldValue("doubleTwistGcRate", null);
                 }
@@ -603,7 +604,7 @@ export default function RawMaterialRatesPage() {
               {isDoubleTwist(selectedItem.name) && (
                 <Tag color="volcano">Sợi xe đôi</Tag>
               )}
-              {hasPE(selectedItem.name) && (
+              {hasPE(selectedItem) && (
                 <Tag color="orange">Có PE/Benma</Tag>
               )}
             </div>

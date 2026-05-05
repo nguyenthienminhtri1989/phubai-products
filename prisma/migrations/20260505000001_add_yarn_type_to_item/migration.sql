@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "items" ADD COLUMN "yarnType" TEXT NOT NULL DEFAULT 'SINGLE';

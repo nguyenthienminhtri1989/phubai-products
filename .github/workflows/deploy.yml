@@ -35,13 +35,16 @@ jobs:
       - name: 3. Install dependencies
         run: npm install
 
-      - name: 4. Prisma Generate
+      - name: 4. Apply Database Changes Safely
+        run: npx prisma migrate deploy
+
+      - name: 5. Prisma Generate
         run: npx prisma generate
 
-      - name: 5. Build Next.js
+      - name: 6. Build Next.js
         run: npm run build
 
-      - name: 6. Restart PM2 with Ecosystem
+      - name: 7. Restart PM2 with Ecosystem
         run: |
           # Thêm cờ --only phubai-erp để đảm bảo PM2 tuyệt đối không đụng đến app khác
           & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --only phubai-erp --update-env
