@@ -7,10 +7,12 @@ function daysInMonth(yearMonth: string): number {
   return new Date(y, m, 0).getDate();
 }
 
-// Helper: kiểm tra overlap segment cùng máy
+// Helper: kiểm tra overlap segment cùng máy + cùng mặt hàng
+// (cho phép 1 máy chạy 2 mặt hàng khác nhau trong cùng khoảng ngày)
 async function checkOverlap(
   scheduleId: number,
   machineId: number,
+  itemId: number,
   fromDay: number,
   toDay: number,
   excludeSegmentId?: number
@@ -19,6 +21,7 @@ async function checkOverlap(
     where: {
       scheduleId,
       machineId,
+      itemId, // Chỉ chặn khi cùng máy + cùng mặt hàng
       id: excludeSegmentId ? { not: excludeSegmentId } : undefined,
       OR: [
         { AND: [{ fromDay: { lte: fromDay } }, { toDay: { gte: fromDay } }] },
@@ -101,11 +104,11 @@ export async function POST(
     );
   }
 
-  // Kiểm tra overlap
-  const hasOverlap = await checkOverlap(scheduleId, machineId, fromDay, toDay);
+  // Kiểm tra overlap (chỉ chặn khi cùng máy + cùng mặt hàng trùng ngày)
+  const hasOverlap = await checkOverlap(scheduleId, machineId, itemId, fromDay, toDay);
   if (hasOverlap) {
     return NextResponse.json(
-      { error: "Máy này đã có kế hoạch trong khoảng ngày đã chọn" },
+      { error: "Máy này đã có kế hoạch cho mặt hàng này trong khoảng ngày đã chọn" },
       { status: 409 }
     );
   }

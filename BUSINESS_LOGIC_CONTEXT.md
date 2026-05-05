@@ -2187,3 +2187,40 @@ src/app/kdsx/raw-material-rates/page.tsx               — Refactor hasPE(item: 
 ### Known limitations
 - Cac mat hang CVCM hien tai trong DB se co yarnType = "SINGLE" (gia tri mac dinh) — Admin can vao trang Items de cap nhat sang "BLENDED" cho tung mat hang soi pha
 - Ham detectYarnGroup() va isDoubleTwist() khong bi anh huong va giu nguyen
+
+
+---
+
+## KDSX — Fix overlap logic: cho phép 1 máy chạy 2 mặt hàng trong cùng ngày
+
+**Status:** ✅ Completed 2026-05-05
+
+### What was built
+
+Nới lỏng logic kiểm tra overlap segment trong kế hoạch sản xuất. Trước đây hệ thống chặn mọi trường hợp 2 segment cùng machineId có ngày trùng nhau. Nay chỉ chặn khi cùng máy + cùng mặt hàng (itemId) bị trùng ngày — cho phép 1 máy chạy 2 mặt hàng khác nhau trong cùng khoảng ngày.
+
+### Files created/modified
+```
+src/app/api/kdsx/production-schedule/[id]/segments/route.ts          — thêm itemId vào hàm checkOverlap + lời gọi POST
+src/app/api/kdsx/production-schedule/[id]/segments/[segmentId]/route.ts — thêm itemId vào hàm checkOverlap + lời gọi PUT
+```
+
+### Key business logic implemented
+
+- checkOverlap() cũ: filter theo scheduleId + machineId → chặn tất cả overlap cùng máy
+- checkOverlap() mới: filter theo scheduleId + machineId + itemId → chỉ chặn overlap cùng máy + cùng mặt hàng
+- Thực tế sản xuất: 1 máy có thể đổi mặt hàng trong ngày (VD: ngày 5 chạy cả MH A và MH B)
+- Message lỗi cũng được cập nhật cho rõ hơn: "Máy này đã có kế hoạch cho mặt hàng này trong khoảng ngày đã chọn"
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | /api/kdsx/production-schedule/[id]/segments | Tạo segment mới, chỉ chặn nếu cùng máy + cùng mặt hàng trùng ngày |
+| PUT    | /api/kdsx/production-schedule/[id]/segments/[segmentId] | Sửa segment, check overlap tương tự |
+
+### Known limitations
+
+- Không validate trường hợp 1 máy chạy quá nhiều mặt hàng cùng lúc (không giới hạn số lượng mặt hàng trên 1 máy trong 1 ngày)
+- Frontend không cần thay đổi
+
