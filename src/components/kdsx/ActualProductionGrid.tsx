@@ -318,14 +318,14 @@ export default function ActualProductionGrid({
                       const hasActualData = actualKg > 0;
                       const bmKey = `${row.machineId}-${row.itemId}`;
                       const benchmarkKg = resolvedBenchmarkMap[bmKey] ?? 0;
-                      // Giá trị hiển thị: ưu tiên thực tế, fallback định mức
-                      const displayKg = hasActualData ? actualKg : benchmarkKg;
-                      const hasAnyValue = displayKg > 0;
                       const isBenchmarkFill =
                         !hasActualData &&
                         benchmarkKg > 0 &&
                         !daysWithActualData.has(day) &&
-                        day > row.lastDay; // định mức tương lai (sau ngày cuối có SL thực tế)
+                        day >= row.firstDay &&
+                        day > row.lastDay;
+                      const displayKg = hasActualData ? actualKg : isBenchmarkFill ? benchmarkKg : 0;
+                      const hasAnyValue = displayKg > 0;
 
                       if (isHoliday) {
                         return (

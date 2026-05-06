@@ -114,28 +114,37 @@ export default function ScheduleComparisonDashboard({
     rowCombos.add(`${seg.machineId}-${seg.itemId}`);
   }
 
+  // Tính firstDay và lastDay cho mỗi combo
+  const comboRange: Record<string, { firstDay: number; lastDay: number }> = {};
+  for (const combo of rowCombos) {
+    const [machineIdStr, itemIdStr] = combo.split("-");
+    const machineId = parseInt(machineIdStr);
+    const itemId = parseInt(itemIdStr);
+    let firstDay = totalDays + 1, lastDay = 0;
+    const mg = grid[machineId] ?? {};
+    for (const dayStr of Object.keys(mg)) {
+      const d = parseInt(dayStr);
+      if ((mg[d]?.[itemId] ?? 0) > 0) {
+        if (d < firstDay) firstDay = d;
+        if (d > lastDay) lastDay = d;
+      }
+    }
+    comboRange[combo] = { firstDay, lastDay };
+  }
+
   for (const combo of rowCombos) {
     const [machineIdStr, itemIdStr] = combo.split("-");
     const machineId = parseInt(machineIdStr);
     const itemId = parseInt(itemIdStr);
     const bmKg = benchmarkMap[combo] ?? 0;
-
-    // Tính lastDay của combo này từ grid data
-    const machineGrid = grid[machineId] ?? {};
-    let lastDay = 0;
-    for (const dayStr of Object.keys(machineGrid)) {
-      const day = parseInt(dayStr);
-      if ((machineGrid[day]?.[itemId] ?? 0) > 0) {
-        if (day > lastDay) lastDay = day;
-      }
-    }
+    const range = comboRange[combo];
 
     for (let day = 1; day <= totalDays; day++) {
       if (holidays.includes(day)) continue;
       const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
       if (actual > 0) {
         thByItem[itemId] = (thByItem[itemId] ?? 0) + actual;
-      } else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
+      } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day >= range.firstDay && day > range.lastDay) {
         thByItem[itemId] = (thByItem[itemId] ?? 0) + bmKg;
       }
     }
@@ -173,16 +182,10 @@ export default function ScheduleComparisonDashboard({
         const itemId = parseInt(itemIdStr);
         const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
         const bmKg = benchmarkMap[combo] ?? 0;
-        // Tính lastDay của combo từ grid
-        const machineGrid = grid[machineId] ?? {};
-        let lastDay = 0;
-        for (const ds of Object.keys(machineGrid)) {
-          const d = parseInt(ds);
-          if ((machineGrid[d]?.[itemId] ?? 0) > 0 && d > lastDay) lastDay = d;
-        }
+        const range = comboRange[combo];
         if (actual > 0) {
           thCumul += actual;
-        } else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
+        } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day >= range.firstDay && day > range.lastDay) {
           thCumul += bmKg;
         }
       }

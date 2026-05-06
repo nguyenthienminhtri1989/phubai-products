@@ -1,184 +1,91 @@
-Tôi thấy vấn đề rồi. Có **2 chỗ khác** ngoài `ActualProductionGrid.tsx` cũng tính tổng TH nhưng chưa áp dụng logic `firstDay/lastDay`:
+**File: `src/components/kdsx/ActualProductionGrid.tsx`**
 
-**Chỗ 1: `ProductionScheduleDetailClient.tsx`** — phần `actualSummaryByItem` (bảng so sánh KH/TH ở đầu trang):
+Tìm phần render ô ngày (trong `dayNumbers.map(day => {`), sửa logic `displayKg` và `hasAnyValue`:
 
 ```typescript
-// Dòng khoảng 170-185: tính actualSummaryByItem
-// Đang cộng MỌI ô có data, không phân biệt firstDay/lastDay
-if (dayData && dayData[itemId] !== undefined) totalActualKg += dayData[itemId];
+// CŨ:
+const displayKg = hasActualData ? actualKg : benchmarkKg;
+const hasAnyValue = displayKg > 0;
+const isBenchmarkFill =
+  !hasActualData &&
+  benchmarkKg > 0 &&
+  !daysWithActualData.has(day) &&
+  day > row.lastDay;
+
+// MỚI:
+const isBenchmarkFill =
+  !hasActualData &&
+  benchmarkKg > 0 &&
+  !daysWithActualData.has(day) &&
+  day >= row.firstDay &&
+  day > row.lastDay;
+
+// displayKg: chỉ hiện benchmark khi isBenchmarkFill = true
+const displayKg = hasActualData ? actualKg : isBenchmarkFill ? benchmarkKg : 0;
+const hasAnyValue = displayKg > 0;
 ```
 
-**Chỗ 2: `ScheduleComparisonDashboard.tsx`** — phần `thByItem` + `lineData`:
+Chỉ sửa 3 dòng này. Logic: `displayKg` = 0 (trống) khi ô không có data thực tế VÀ không phải ô benchmark tương lai. Chỉ hiện benchmark khi `isBenchmarkFill = true`.
+
+---
+
+**File: `src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx`**
+
+Phần `actualSummaryByItem` đã sửa đúng logic `day > lastDay` — giữ nguyên.
+
+**File: `src/components/kdsx/ScheduleComparisonDashboard.tsx`**
+
+Cần thêm điều kiện `day >= range.firstDay` vào logic tính `thByItem`. Tìm dòng:
 
 ```typescript
-// Đang cộng benchmark cho ngày chưa có data nhưng KHÔNG check firstDay/lastDay
-const value = actual > 0 ? actual : daysWithActualData.has(day) ? 0 : bmKg;
+} else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
 ```
 
-Cả 2 chỗ này **không có thông tin `firstDay/lastDay` per row** nên không biết khi nào nên dừng điền định mức.
-
-**Fix logic tổng TH trong 2 files — cần biết firstDay/lastDay của mỗi combo (machineId, itemId)**
-
-## File 1: `src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx`
-
-Phần tính `actualSummaryByItem` (khoảng dòng tính `totalActualKg`). Hiện tại chỉ cộng SL thực tế. Cần thêm logic cộng benchmark cho ngày tương lai, nhưng chỉ trong phạm vi `firstDay-lastDay` và chỉ khi cột ngày đó chưa có data.
-
-Sửa đoạn tính `actualSummaryByItem`:
+Sửa thành:
 
 ```typescript
-const actualSummaryByItem = allItemIds
-  .map((itemId) => {
-    const machineIds = Array.from(
-      new Set(
-        schedule.segments
-          .filter((s) => s.itemId === itemId)
-          .map((s) => s.machineId),
-      ),
-    );
-
-    // Xác định ngày nào đã có data thực tế (toàn bộ grid, không chỉ máy này)
-    const daysWithData = new Set<number>();
-    for (const mid of Object.keys(actualGrid).map(Number)) {
-      for (const dayStr of Object.keys(actualGrid[mid] ?? {})) {
-        const day = parseInt(dayStr);
-        const dayData = actualGrid[mid][day];
-        if (dayData && Object.values(dayData).some((kg) => kg > 0)) {
-          daysWithData.add(day);
-        }
-      }
-    }
-
-    let totalActualKg = 0;
-    for (const machineId of machineIds) {
-      const machineGrid = actualGrid[machineId] ?? {};
-      const bmKey = `${machineId}-${itemId}`;
-      const bmKg = actualBenchmarkMap[bmKey] ?? 0;
-
-      // Tìm firstDay/lastDay của combo này từ grid data
-      let firstDay = totalDays + 1;
-      let lastDay = 0;
-      for (const dayStr of Object.keys(machineGrid)) {
-        const day = parseInt(dayStr);
-        if (machineGrid[day]?.[itemId] > 0) {
-          if (day < firstDay) firstDay = day;
-          if (day > lastDay) lastDay = day;
-        }
-      }
-
-      for (let day = filterFrom; day <= filterTo; day++) {
-        if (holidayArr.includes(day)) continue;
-        const actual = machineGrid[day]?.[itemId] ?? 0;
-        if (actual > 0) {
-          totalActualKg += actual;
-        } else if (
-          bmKg > 0 &&
-          !daysWithData.has(day) &&
-          day >= firstDay &&
-          day > lastDay
-        ) {
-          // Điền benchmark chỉ sau lastDay và khi cột ngày chưa có data
-          totalActualKg += bmKg;
-        }
-      }
-    }
-    return {
-      itemId,
-      itemName: itemMap.get(itemId) ?? `Item ${itemId}`,
-      totalActualKg,
-      totalActualTons: totalActualKg / 1000,
-    };
-  })
-  .filter((a) => a.totalActualKg > 0 || actualGridLoaded);
+} else if (bmKg > 0 && !daysWithActualData.has(day) && day >= range.firstDay && day > range.lastDay) {
 ```
 
-## File 2: `src/components/kdsx/ScheduleComparisonDashboard.tsx`
-
-Phần tính `thByItem`. Cần biết `firstDay/lastDay` cho mỗi combo. Sửa:
+Trong đó `range` cần được tính trước cho mỗi combo giống như đã mô tả ở các prompt trước. Nếu `ScheduleComparisonDashboard` chưa có `comboRange`, thêm:
 
 ```typescript
-// Sau khi build rowCombos, tính firstDay/lastDay cho từng combo
+// Trước vòng lặp tính thByItem:
 const comboRange: Record<string, { firstDay: number; lastDay: number }> = {};
 for (const combo of rowCombos) {
   const [machineIdStr, itemIdStr] = combo.split("-");
   const machineId = parseInt(machineIdStr);
   const itemId = parseInt(itemIdStr);
-  let firstDay = totalDays + 1;
-  let lastDay = 0;
-  const machineGrid = grid[machineId] ?? {};
-  for (const dayStr of Object.keys(machineGrid)) {
-    const day = parseInt(dayStr);
-    if ((machineGrid[day]?.[itemId] ?? 0) > 0) {
-      if (day < firstDay) firstDay = day;
-      if (day > lastDay) lastDay = day;
+  let firstDay = totalDays + 1,
+    lastDay = 0;
+  const mg = grid[machineId] ?? {};
+  for (const dayStr of Object.keys(mg)) {
+    const d = parseInt(dayStr);
+    if ((mg[d]?.[itemId] ?? 0) > 0) {
+      if (d < firstDay) firstDay = d;
+      if (d > lastDay) lastDay = d;
     }
   }
   comboRange[combo] = { firstDay, lastDay };
 }
-
-// Sửa vòng lặp tính thByItem:
-for (const combo of rowCombos) {
-  const [machineIdStr, itemIdStr] = combo.split("-");
-  const machineId = parseInt(machineIdStr);
-  const itemId = parseInt(itemIdStr);
-  const bmKg = benchmarkMap[combo] ?? 0;
-  const range = comboRange[combo] ?? { firstDay: totalDays + 1, lastDay: 0 };
-
-  for (let day = 1; day <= totalDays; day++) {
-    if (holidays.includes(day)) continue;
-    const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-    if (actual > 0) {
-      thByItem[itemId] = (thByItem[itemId] ?? 0) + actual;
-    } else if (
-      bmKg > 0 &&
-      !daysWithActualData.has(day) &&
-      day >= range.firstDay &&
-      day > range.lastDay
-    ) {
-      thByItem[itemId] = (thByItem[itemId] ?? 0) + bmKg;
-    }
-  }
-}
 ```
 
-Sửa tương tự cho `lineData` (phần tính `thCumul`):
+Rồi trong vòng lặp:
 
 ```typescript
-// CŨ:
-if (!holidays.includes(day)) {
-  for (const machineId in grid) {
-    const dayData = grid[Number(machineId)]?.[day];
-    if (dayData) {
-      for (const kg of Object.values(dayData)) {
-        thCumul += kg;
-      }
-    }
-  }
-}
-
-// MỚI:
-if (!holidays.includes(day)) {
-  for (const combo of rowCombos) {
-    const [machineIdStr, itemIdStr] = combo.split("-");
-    const machineId = parseInt(machineIdStr);
-    const itemId = parseInt(itemIdStr);
-    const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-    const bmKg = benchmarkMap[combo] ?? 0;
-    const range = comboRange[combo] ?? { firstDay: totalDays + 1, lastDay: 0 };
-
-    if (actual > 0) {
-      thCumul += actual;
-    } else if (
-      bmKg > 0 &&
-      !daysWithActualData.has(day) &&
-      day >= range.firstDay &&
-      day > range.lastDay
-    ) {
-      thCumul += bmKg;
-    }
-  }
-}
+const range = comboRange[combo];
+const value =
+  actual > 0
+    ? actual
+    : bmKg > 0 &&
+        !daysWithActualData.has(day) &&
+        range.lastDay > 0 &&
+        day >= range.firstDay &&
+        day > range.lastDay
+      ? bmKg
+      : 0;
 ```
 
 ---
 
-Chỉ sửa 2 files. Logic giống nhau: benchmark chỉ điền khi `day >= firstDay && day > lastDay && !daysWithActualData.has(day)`.
+Tóm tắt: lỗi gốc là `displayKg = benchmarkKg` kể cả khi ô không thuộc phạm vi benchmark. Sửa bằng cách chỉ gán `displayKg = benchmarkKg` khi `isBenchmarkFill = true`.
