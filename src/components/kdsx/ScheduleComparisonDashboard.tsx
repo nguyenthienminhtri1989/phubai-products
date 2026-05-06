@@ -34,6 +34,7 @@ interface ScheduleComparisonDashboardProps {
   segments: Segment[];
   holidays: number[];
   totalDays: number;
+  benchmarkMap?: Record<string, number>; // Định mức theo "machineId-itemId"
 }
 
 interface ActualGrid {
@@ -66,6 +67,7 @@ export default function ScheduleComparisonDashboard({
   segments,
   holidays,
   totalDays,
+  benchmarkMap = {},
 }: ScheduleComparisonDashboardProps) {
   const [grid, setGrid] = useState<ActualGrid>({});
   const [loading, setLoading] = useState(true);
@@ -82,15 +84,36 @@ export default function ScheduleComparisonDashboard({
 
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-  // Tổng TH theo itemId
+  // Tổng TH theo itemId — cộng cả định mức cho ngày chưa nhập
   const thByItem: Record<number, number> = {};
-  for (const machineId in grid) {
-    const machGrid = grid[Number(machineId)];
-    for (const day in machGrid) {
-      const dayData = machGrid[Number(day)];
-      for (const [itemIdStr, kg] of Object.entries(dayData)) {
-        const itemId = parseInt(itemIdStr);
-        thByItem[itemId] = (thByItem[itemId] ?? 0) + kg;
+  // Build tất cả combo (machineId-itemId) từ grid và segments
+  const rowCombos = new Set<string>();
+  for (const machineIdStr in grid) {
+    const machineId = parseInt(machineIdStr);
+    for (const dayStr in grid[machineId]) {
+      const dayData = grid[machineId][parseInt(dayStr)];
+      for (const itemIdStr in dayData) {
+        rowCombos.add(`${machineId}-${itemIdStr}`);
+      }
+    }
+  }
+  // Thêm từ segments KH (để có benchmark cho máy chưa nhập ngày nào)
+  for (const seg of segments) {
+    rowCombos.add(`${seg.machineId}-${seg.itemId}`);
+  }
+
+  for (const combo of rowCombos) {
+    const [machineIdStr, itemIdStr] = combo.split("-");
+    const machineId = parseInt(machineIdStr);
+    const itemId = parseInt(itemIdStr);
+    const bmKg = benchmarkMap[combo] ?? 0;
+
+    for (let day = 1; day <= totalDays; day++) {
+      if (holidays.includes(day)) continue;
+      const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
+      const value = actual > 0 ? actual : bmKg;
+      if (value > 0) {
+        thByItem[itemId] = (thByItem[itemId] ?? 0) + value;
       }
     }
   }

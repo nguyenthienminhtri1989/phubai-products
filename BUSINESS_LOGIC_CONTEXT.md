@@ -2261,3 +2261,29 @@ src/lib/permissions.ts                          — Thêm factoryIds vào PermUser, 
 ### Known limitations
 - Token JWT không t? refresh khi admin thay ð?i factoryIds c?a user ðang ðãng nh?p (c?n logout/login l?i ð? c?p nh?t factoryIds trong session)
 - actoryId (single) trên b?ng users v?n ðý?c gi? ð? tránh breaking change v?i các API khác ðang dùng tr?c ti?p
+
+---
+
+## K? HO?CH S?N XU?T — Benchmark Fill cho ô chýa nh?p SL
+
+**Status:** ? Completed 2026-05-06
+
+### What was built
+Khi ô ngày trong lý?i th?c t? chýa có SL nh?p vào, h? th?ng t? ði?n giá tr? ð?nh m?c t? benchmarkMap v?i n?n xám nh?t và ch? nghiêng xám. Giá tr? này ðý?c tính vào t?ng d?ng và t?ng ngày. Không thay ð?i DB hay API.
+
+### Files created/modified
+```
+src/components/kdsx/ActualProductionGrid.tsx          — S?a render ô ngày (benchmark fill), rowTotal, totalActualByDay
+src/components/kdsx/ScheduleComparisonDashboard.tsx   — Thêm prop benchmarkMap, s?a tính thByItem
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — Truy?n actualBenchmarkMap vào ScheduleComparisonDashboard
+```
+
+### Key business logic implemented
+- Ô chýa nh?p SL th?c t? ? hi?n giá tr? ð?nh m?c (ch? xám nghiêng, n?n #f0f0f0), tính vào t?ng
+- Ô ð? nh?p SL th?c t? ? hi?n SL th?c t? + so sánh màu (xanh/vàng/ð? so benchmark), kèm s? ð?nh m?c nh? bên dý?i
+- rowTotal = ? (th?c t? n?u có, ngý?c l?i benchmark) cho t?ng ngày không ph?i ngh?
+- totalActualByDay = týõng t? nhýng iterate qua gridRows thay v? allMachineIds
+- ScheduleComparisonDashboard.thByItem = t?ng th?c t? + benchmark cho ngày tr?ng, c?ng qua rowCombos t? grid + segments
+
+### Known limitations
+- T?ng và bi?u ð? so sánh trong ScheduleComparisonDashboard ph?n ánh c? benchmark fill, có th? gây nh?m l?n n?u benchmark không chính xác

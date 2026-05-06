@@ -832,6 +832,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                 segments={schedule.segments}
                 holidays={holidayArr}
                 totalDays={totalDays}
+                benchmarkMap={actualBenchmarkMap}
               />
             ),
           },

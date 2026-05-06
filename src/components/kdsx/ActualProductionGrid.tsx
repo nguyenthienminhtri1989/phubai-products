@@ -174,15 +174,18 @@ export default function ActualProductionGrid({
     machineRowSpan[row.machineId] = (machineRowSpan[row.machineId] ?? 0) + 1;
   }
 
-  // Hàng TỔNG/NGÀY — tổng tất cả máy, tất cả mặt hàng trong ngày
-  const allMachineIds = [...new Set(Object.keys(grid).map(Number))];
-  const totalActualByDay = dayNumbers.map(day => {
+  // Hàng TỔNG/NGÀY — cộng cả định mức cho ngày chưa nhập
+  const totalActualByDay = dayNumbers.map((day) => {
     if (holidays.includes(day)) return 0;
     let total = 0;
-    for (const mid of allMachineIds) {
-      const dayData = grid[mid]?.[day];
-      if (dayData) {
-        for (const kg of Object.values(dayData)) total += kg;
+    for (const row of gridRows) {
+      const actual = grid[row.machineId]?.[day]?.[row.itemId] ?? 0;
+      if (actual > 0) {
+        total += actual;
+      } else {
+        // Chưa có thực tế → cộng định mức
+        const bmKey = `${row.machineId}-${row.itemId}`;
+        total += resolvedBenchmarkMap[bmKey] ?? 0;
       }
     }
     return total;
@@ -248,14 +251,16 @@ export default function ActualProductionGrid({
                 const machineGrid = grid[row.machineId] ?? {};
                 const itemColor = getColor(row.itemId, itemColors);
 
-                // Tổng TH của dòng này
+                // Tổng TH của dòng này — cộng cả định mức cho ngày chưa nhập
+                const bmKey = `${row.machineId}-${row.itemId}`;
+                const benchmarkKgForRow = resolvedBenchmarkMap[bmKey] ?? 0;
                 let rowTotal = 0;
                 for (const day of dayNumbers) {
-                  if (!holidays.includes(day)) rowTotal += machineGrid[day]?.[row.itemId] ?? 0;
+                  if (holidays.includes(day)) continue;
+                  const actual = machineGrid[day]?.[row.itemId] ?? 0;
+                  rowTotal += actual > 0 ? actual : benchmarkKgForRow;
                 }
 
-                // Tra định mức KH — chỉ tham khảo, không quyết định dòng hiển thị
-                const matchingSeg = segments.find(s => s.machineId === row.machineId && s.itemId === row.itemId);
 
                 return (
                   <tr
@@ -292,12 +297,13 @@ export default function ActualProductionGrid({
                     {dayNumbers.map(day => {
                       const isHoliday = holidays.includes(day);
                       const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
-                      const hasData = actualKg > 0;
+                      const hasActualData = actualKg > 0;
                       const bmKey = `${row.machineId}-${row.itemId}`;
                       const benchmarkKg = resolvedBenchmarkMap[bmKey] ?? 0;
-                      const segKg = matchingSeg && day >= matchingSeg.fromDay && day <= matchingSeg.toDay
-                        ? matchingSeg.kgPerDay : 0;
-                      const planKg = benchmarkKg || segKg; // ưu tiên benchmark EMPIRICAL, fallback segment KH
+                      // Giá trị hiển thị: ưu tiên thực tế, fallback định mức
+                      const displayKg = hasActualData ? actualKg : benchmarkKg;
+                      const hasAnyValue = displayKg > 0;
+                      const isBenchmarkFill = !hasActualData && benchmarkKg > 0; // ô giả định
 
                       if (isHoliday) {
                         return (
@@ -308,21 +314,38 @@ export default function ActualProductionGrid({
                       }
 
                       return (
-                        <td key={day} style={{
-                          ...tdStyle,
-                          background: hasData ? getBg(row.itemId, itemColors) : undefined,
-                          borderLeft: "1px solid #d0d0d0",
-                        }}>
-                          {hasData ? (
+                        <td
+                          key={day}
+                          style={{
+                            ...tdStyle,
+                            background: isBenchmarkFill
+                              ? "#f0f0f0" // xám nhạt cho ô định mức
+                              : hasActualData
+                                ? getBg(row.itemId, itemColors)
+                                : undefined,
+                            borderLeft: "1px solid #d0d0d0",
+                          }}
+                        >
+                          {hasAnyValue ? (
                             <div>
-                              <span style={{
-                                color: planKg > 0 ? compareColor(actualKg, planKg) : "#595959",
-                                fontSize: 11, fontWeight: 800,
-                              }}>
-                                {actualKg.toLocaleString()}
+                              <span
+                                style={{
+                                  color: isBenchmarkFill
+                                    ? "#aaa" // xám cho định mức
+                                    : benchmarkKg > 0
+                                      ? compareColor(actualKg, benchmarkKg)
+                                      : "#595959",
+                                  fontSize: 11,
+                                  fontWeight: isBenchmarkFill ? 400 : 800,
+                                  fontStyle: isBenchmarkFill ? "italic" : "normal",
+                                }}
+                              >
+                                {displayKg.toLocaleString()}
                               </span>
-                              {planKg > 0 && (
-                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>({planKg.toLocaleString()})</div>
+                              {hasActualData && benchmarkKg > 0 && (
+                                <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>
+                                  ({benchmarkKg.toLocaleString()})
+                                </div>
                               )}
                             </div>
                           ) : (

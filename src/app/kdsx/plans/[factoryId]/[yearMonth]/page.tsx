@@ -118,14 +118,20 @@ interface Plan {
   fixedCosts: FixedCostEntry[];
 }
 
+// Chuẩn hiển thị số: "," ngăn hàng nghìn, "." ngăn thập phân
 function fmtVnd(v: number | null | undefined): string {
   if (v == null) return "0.00 đ";
   return (
-    v.toLocaleString("vi-VN", {
+    v.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }) + " đ"
   );
+}
+
+function fmtQty(v: number | null | undefined): string {
+  if (v == null) return "0";
+  return v.toLocaleString("en-US");
 }
 
 const STATUS_COLOR = { DRAFT: "default", SUBMITTED: "blue", APPROVED: "green" } as const;
@@ -582,7 +588,7 @@ export default function PlanDetailPage({
       title: "SL (kg)", dataIndex: "qty", key: "qty",
       render: (v: number, r: PlanLineItem) => (
         <Space size={4}>
-          <span>{v.toLocaleString()}</span>
+          <span>{fmtQty(v)}</span>
           {r.isAutoQty && <Tag color="blue" style={{ fontSize: 10, padding: "0 4px" }}>AUTO</Tag>}
         </Space>
       ),
@@ -634,7 +640,7 @@ export default function PlanDetailPage({
         </Space>
       ),
     },
-    { title: "SL TH (kg)", dataIndex: "qty", key: "qty", render: (v: number) => v.toLocaleString() },
+    { title: "SL TH (kg)", dataIndex: "qty", key: "qty", render: (v: number) => fmtQty(v) },
     { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
     { title: "DT TH (đ)", key: "rev", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.revenueVnd) },
     { title: "CP Bông (đ)", key: "cotton", render: (_: unknown, r: ActualLineItem) => fmtVnd(r.cottonCostVnd) },
@@ -863,7 +869,7 @@ export default function PlanDetailPage({
                     {/* Tổng kết TH nhanh */}
                     <div style={{ marginTop: 12, padding: "10px 16px", background: "#f6ffed", borderRadius: 6, border: "1px solid #b7eb8f" }}>
                       <Space size={32}>
-                        <span>🏭 SL TH: <strong>{actual.lineItems.reduce((s, li) => s + li.qty, 0).toLocaleString("vi-VN")} kg</strong></span>
+                        <span>🏭 SL TH: <strong>{fmtQty(actual.lineItems.reduce((s, li) => s + li.qty, 0))} kg</strong></span>
                         <span style={{ color: "#3f8600" }}>💰 DT TH: <strong>{fmtVnd(actual.lineItems.reduce((s, li) => s + (li.revenueVnd ?? 0), 0))}</strong></span>
                         <span style={{ color: actual.lineItems.reduce((s, li) => s + (li.grossProfitVnd ?? 0), 0) >= 0 ? "#3f8600" : "#cf1322" }}>
                           📈 LN gộp TH: <strong>{fmtVnd(actual.lineItems.reduce((s, li) => s + (li.grossProfitVnd ?? 0), 0))}</strong>
@@ -906,7 +912,7 @@ export default function PlanDetailPage({
             children: (
               <Descriptions bordered column={2} size="middle">
                 <Descriptions.Item label="Tổng sản lượng" span={2}>
-                  <Text strong>{plan.lineItems.reduce((s, li) => s + li.qty, 0).toLocaleString("vi-VN")} kg</Text>
+                  <Text strong>{fmtQty(plan.lineItems.reduce((s, li) => s + li.qty, 0))} kg</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Tổng doanh thu">
                   <Text strong style={{ color: "#3f8600" }}>{fmtVnd(totalRevenue)}</Text>
