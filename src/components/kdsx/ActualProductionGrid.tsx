@@ -167,6 +167,19 @@ export default function ActualProductionGrid({
     a.machineId !== b.machineId ? a.machineId - b.machineId : a.firstDay - b.firstDay
   );
 
+  // Xác định ngày nào đã có ít nhất 1 bản ghi SL thực tế
+  const daysWithActualData = new Set<number>();
+  for (const machineIdStr of Object.keys(grid)) {
+    const machineGrid = grid[parseInt(machineIdStr)];
+    for (const dayStr of Object.keys(machineGrid)) {
+      const day = parseInt(dayStr);
+      const dayData = machineGrid[day];
+      if (dayData && Object.values(dayData).some((kg) => kg > 0)) {
+        daysWithActualData.add(day);
+      }
+    }
+  }
+
   // Tính rowSpan cho cột Máy
   const machineRowSpan: Record<number, number> = {};
   const machineFirstSeen: Record<number, boolean> = {};
@@ -174,7 +187,7 @@ export default function ActualProductionGrid({
     machineRowSpan[row.machineId] = (machineRowSpan[row.machineId] ?? 0) + 1;
   }
 
-  // Hàng TỔNG/NGÀY — cộng cả định mức cho ngày chưa nhập
+  // Hàng TỔNG/NGÀY — chỉ cộng định mức cho ngày chưa có bất kỳ data nào
   const totalActualByDay = dayNumbers.map((day) => {
     if (holidays.includes(day)) return 0;
     let total = 0;
@@ -183,9 +196,9 @@ export default function ActualProductionGrid({
       if (actual > 0) {
         total += actual;
       } else {
-        // Chưa có thực tế → cộng định mức
+        // Chỉ cộng định mức nếu ngày đó chưa có bất kỳ bản ghi nào
         const bmKey = `${row.machineId}-${row.itemId}`;
-        total += resolvedBenchmarkMap[bmKey] ?? 0;
+        total += daysWithActualData.has(day) ? 0 : (resolvedBenchmarkMap[bmKey] ?? 0);
       }
     }
     return total;
@@ -251,14 +264,14 @@ export default function ActualProductionGrid({
                 const machineGrid = grid[row.machineId] ?? {};
                 const itemColor = getColor(row.itemId, itemColors);
 
-                // Tổng TH của dòng này — cộng cả định mức cho ngày chưa nhập
+                // Tổng TH của dòng này — chỉ cộng định mức cho ngày chưa có data nào
                 const bmKey = `${row.machineId}-${row.itemId}`;
                 const benchmarkKgForRow = resolvedBenchmarkMap[bmKey] ?? 0;
                 let rowTotal = 0;
                 for (const day of dayNumbers) {
                   if (holidays.includes(day)) continue;
                   const actual = machineGrid[day]?.[row.itemId] ?? 0;
-                  rowTotal += actual > 0 ? actual : benchmarkKgForRow;
+                  rowTotal += actual > 0 ? actual : daysWithActualData.has(day) ? 0 : benchmarkKgForRow;
                 }
 
 
@@ -303,7 +316,7 @@ export default function ActualProductionGrid({
                       // Giá trị hiển thị: ưu tiên thực tế, fallback định mức
                       const displayKg = hasActualData ? actualKg : benchmarkKg;
                       const hasAnyValue = displayKg > 0;
-                      const isBenchmarkFill = !hasActualData && benchmarkKg > 0; // ô giả định
+                      const isBenchmarkFill = !hasActualData && benchmarkKg > 0 && !daysWithActualData.has(day); // ô giả định
 
                       if (isHoliday) {
                         return (

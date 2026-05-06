@@ -182,3 +182,50 @@ Prompt từ Claude.ai thường có cấu trúc:
 ## Xem thêm
 
 Đọc `AI_RULES.md` để biết toàn bộ conventions, phân quyền và quy trình migration.
+
+---
+
+## 9. Duy trì bộ nhớ dài hạn — BẮT BUỘC
+
+Dự án này dùng Claude.ai (chat) để thiết kế spec và Claude Code để thực thi.
+Để Claude.ai không phải hỏi lại từ đầu mỗi session, sau khi hoàn thành
+BẤT KỲ task nào, Claude Code PHẢI cập nhật đủ 3 file sau:
+
+### File 1: BUSINESS_LOGIC_CONTEXT.md
+
+Append theo format đã có ở mục 5. Bắt buộc, không skip.
+
+### File 2: PROJECT_PASSPORT.md
+
+Cập nhật các mục sau nếu có thay đổi:
+
+- "Modules đã hoàn thành" — thêm tính năng mới
+- Schema chính — thêm model/field mới
+- "File quan trọng trong project" — thêm file mới tạo
+- "Còn thiếu / Chưa implement" — xóa item đã làm xong
+- "Known Limitations" — thêm giới hạn mới nếu có
+
+### File 3: CLAUDE.md (chính file này)
+
+Cập nhật nếu có:
+
+- Convention mới phát sinh
+- Gotcha / lỗi đã gặp cần tránh lặp lại
+- Pattern mới được thiết lập
+
+### Thứ tự đọc khi bắt đầu session mới:
+
+1. CLAUDE.md (file này) — conventions & rules
+2. PROJECT_PASSPORT.md — hiện trạng tổng thể dự án
+3. PLANS/PLAN\_[feature].md — task cụ thể đang được giao
+4. Các file source liên quan đến task
+
+---
+
+## 10. Workflow phối hợp Claude.ai ↔ Claude Code
+
+- **Claude.ai (chat):** nhận mô tả nghiệp vụ → thiết kế spec → tạo file PLANS/PLAN\_[feature].md
+- **Claude Code:** đọc PLAN file → đọc source thực tế → thực thi → cập nhật 3 file bộ nhớ
+
+Claude Code KHÔNG tự thiết kế lại spec đã có trong PLAN file.
+Claude Code KHÔNG bỏ qua bước cập nhật bộ nhớ dù task nhỏ hay lớn.

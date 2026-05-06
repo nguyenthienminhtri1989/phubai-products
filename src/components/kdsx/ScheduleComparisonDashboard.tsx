@@ -84,8 +84,20 @@ export default function ScheduleComparisonDashboard({
 
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-  // Tổng TH theo itemId — cộng cả định mức cho ngày chưa nhập
+  // Tổng TH theo itemId — chỉ cộng định mức cho ngày chưa có bất kỳ data nào
   const thByItem: Record<number, number> = {};
+  // Xác định ngày nào đã có ít nhất 1 bản ghi SL thực tế
+  const daysWithActualData = new Set<number>();
+  for (const machineIdStr in grid) {
+    const machineId = parseInt(machineIdStr);
+    for (const dayStr in grid[machineId]) {
+      const day = parseInt(dayStr);
+      const dayData = grid[machineId][day];
+      if (dayData && Object.values(dayData).some((kg) => kg > 0)) {
+        daysWithActualData.add(day);
+      }
+    }
+  }
   // Build tất cả combo (machineId-itemId) từ grid và segments
   const rowCombos = new Set<string>();
   for (const machineIdStr in grid) {
@@ -111,7 +123,8 @@ export default function ScheduleComparisonDashboard({
     for (let day = 1; day <= totalDays; day++) {
       if (holidays.includes(day)) continue;
       const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-      const value = actual > 0 ? actual : bmKg;
+      // Chỉ cộng định mức nếu ngày chưa có bất kỳ data thực tế nào
+      const value = actual > 0 ? actual : daysWithActualData.has(day) ? 0 : bmKg;
       if (value > 0) {
         thByItem[itemId] = (thByItem[itemId] ?? 0) + value;
       }
