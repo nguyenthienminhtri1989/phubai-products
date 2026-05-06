@@ -1,197 +1,235 @@
-**Ô chưa có SL thực tế → tự điền giá trị định mức benchmark, nền xám nhạt, tính vào tổng**
+# TASK: Máy ống chạy nhiều mặt hàng song song
 
-## Nguyên tắc
+## Đọc các file sau trước khi code:
 
-- Ô đã nhập SL thực tế → hiện SL thực tế + màu mặt hàng (như hiện tại)
-- Ô chưa nhập SL → hiện giá trị định mức từ `benchmarkMap` + nền xám nhạt `#f0f0f0`
-- Tổng dòng + Tổng ngày = thực tế + định mức gộp lại
-- Không lưu DB — chỉ hiển thị trên UI
+- `prisma/schema.prisma` (model Machine, ProductionLog)
+- `src/app/machines/page.tsx` (trang điều phối)
+- `src/app/kd-daily-input/page.tsx` (trang nhập SL mobile)
+- `src/app/api/machines/route.ts` và `src/app/api/machines/[id]/route.ts`
+- `src/app/api/production/daily-input/route.ts`
 
-## File 1: `src/components/kdsx/ActualProductionGrid.tsx`
+---
 
-### Sửa phần render ô ngày
+## 1. Schema
 
-Tìm đoạn render từng ô ngày trong `dayNumbers.map(day => {`:
+### 1.1 Thêm field vào Machine:
 
-```typescript
-// CŨ:
-const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
-const hasData = actualKg > 0;
-// ...
-// Ô không có data hiện "·"
-
-// MỚI:
-const actualKg = machineGrid[day]?.[row.itemId] ?? 0;
-const hasActualData = actualKg > 0;
-const bmKey = `${row.machineId}-${row.itemId}`;
-const benchmarkKg = resolvedBenchmarkMap[bmKey] ?? 0;
-// Giá trị hiển thị: ưu tiên thực tế, fallback định mức
-const displayKg = hasActualData ? actualKg : benchmarkKg;
-const hasAnyValue = displayKg > 0;
-const isBenchmarkFill = !hasActualData && benchmarkKg > 0; // ô giả định
+```prisma
+allowMultiItemPerShift Boolean @default(false)
 ```
 
-Sửa phần render `<td>`:
+### 1.2 Thêm model mới:
 
-```tsx
-return (
-  <td
-    key={day}
-    style={{
-      ...tdStyle,
-      background: isHoliday
-        ? "#ffebe8"
-        : isBenchmarkFill
-          ? "#f0f0f0" // xám nhạt cho ô định mức
-          : hasActualData
-            ? getBg(row.itemId, itemColors)
-            : undefined,
-      borderLeft: "1px solid #d0d0d0",
-    }}
-  >
-    {hasAnyValue ? (
-      <div>
-        <span
-          style={{
-            color: isBenchmarkFill
-              ? "#aaa" // xám cho định mức
-              : benchmarkKg > 0
-                ? compareColor(actualKg, benchmarkKg)
-                : "#595959",
-            fontSize: 11,
-            fontWeight: isBenchmarkFill ? 400 : 800,
-            fontStyle: isBenchmarkFill ? "italic" : "normal",
-          }}
-        >
-          {displayKg.toLocaleString()}
-        </span>
-        {hasActualData && benchmarkKg > 0 && (
-          <div style={{ fontSize: 9, color: "#666", fontWeight: 500 }}>
-            ({benchmarkKg.toLocaleString()})
-          </div>
-        )}
-      </div>
-    ) : (
-      <span style={{ color: "#d9d9d9", fontSize: 13 }}>·</span>
-    )}
-  </td>
-);
-```
+```prisma
+model MachineItemAssignment {
+  id          Int     @id @default(autoincrement())
+  machineId   Int
+  machine     Machine @relation(fields: [machineId], references: [id])
+  itemId      Int
+  item        Item    @relation(fields: [itemId], references: [id])
+  fromSpindle Int?
+  toSpindle   Int?
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
 
-### Sửa tổng dòng (rowTotal) — cộng cả định mức cho ngày chưa nhập
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-```typescript
-// CŨ:
-let rowTotal = 0;
-for (const day of dayNumbers) {
-  if (!holidays.includes(day)) rowTotal += machineGrid[day]?.[row.itemId] ?? 0;
-}
-
-// MỚI:
-const bmKey = `${row.machineId}-${row.itemId}`;
-const benchmarkKgForRow = resolvedBenchmarkMap[bmKey] ?? 0;
-let rowTotal = 0;
-for (const day of dayNumbers) {
-  if (holidays.includes(day)) continue;
-  const actual = machineGrid[day]?.[row.itemId] ?? 0;
-  rowTotal += actual > 0 ? actual : benchmarkKgForRow; // thực tế hoặc định mức
+  @@unique([machineId, itemId])
+  @@index([machineId])
+  @@map("machine_item_assignments")
 }
 ```
 
-### Sửa tổng ngày (totalActualByDay) — cộng cả định mức
+Thêm relation ngược trong Machine và Item:
 
-Cần biết mỗi ngày, máy nào + mặt hàng nào chưa có data → dùng benchmark. Sửa:
+```prisma
+// Machine:
+itemAssignments MachineItemAssignment[]
+
+// Item:
+machineAssignments MachineItemAssignment[]
+```
+
+Migration: `npx prisma migrate dev --name add_multi_item_assignment`
+
+---
+
+## 2. API mới: CRUD assignments
+
+### File mới: `src/app/api/machines/[id]/assignments/route.ts`
+
+**GET**: lấy assignments của máy
 
 ```typescript
-const totalActualByDay = dayNumbers.map((day) => {
-  if (holidays.includes(day)) return 0;
-  let total = 0;
-  for (const row of gridRows) {
-    const actual = grid[row.machineId]?.[day]?.[row.itemId] ?? 0;
-    if (actual > 0) {
-      total += actual;
-    } else {
-      // Chưa có thực tế → cộng định mức
-      const bmKey = `${row.machineId}-${row.itemId}`;
-      total += resolvedBenchmarkMap[bmKey] ?? 0;
-    }
-  }
-  return total;
+const assignments = await prisma.machineItemAssignment.findMany({
+  where: { machineId: id, isActive: true },
+  include: { item: { select: { id: true, name: true } } },
+  orderBy: { sortOrder: "asc" },
 });
 ```
 
-## File 2: `src/components/kdsx/ScheduleComparisonDashboard.tsx`
-
-### Sửa tính tổng TH theo itemId — cộng cả định mức cho ngày chưa nhập
-
-Tìm phần tính `thByItem`, sửa:
+**PUT**: nhận array assignments, xóa cũ tạo mới (replace all)
 
 ```typescript
-// CŨ: chỉ cộng data thực tế
-const thByItem: Record<number, number> = {};
-for (const machineId in grid) { ... }
-
-// MỚI: cộng thực tế + benchmark cho ngày trống
-// Cần thêm props: benchmarkMap, segments vào component (đã có segments)
-// Hoặc đơn giản hơn: tính giống ActualProductionGrid
-
-const thByItem: Record<number, number> = {};
-// Build gridRows giống ActualProductionGrid
-const rowCombos = new Set<string>();
-// Từ grid data
-for (const machineIdStr in grid) {
-  const machineId = parseInt(machineIdStr);
-  for (const dayStr in grid[machineId]) {
-    const dayData = grid[machineId][parseInt(dayStr)];
-    for (const itemIdStr in dayData) {
-      rowCombos.add(`${machineId}-${itemIdStr}`);
-    }
-  }
-}
-// Từ segments KH (để có benchmark cho máy chưa nhập ngày nào)
-for (const seg of segments) {
-  rowCombos.add(`${seg.machineId}-${seg.itemId}`);
-}
-
-for (const combo of rowCombos) {
-  const [machineIdStr, itemIdStr] = combo.split("-");
-  const machineId = parseInt(machineIdStr);
-  const itemId = parseInt(itemIdStr);
-  const bmKg = benchmarkMap[combo] ?? 0;
-
-  for (let day = 1; day <= totalDays; day++) {
-    if (holidays.includes(day)) continue;
-    const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-    const value = actual > 0 ? actual : bmKg;
-    if (value > 0) {
-      thByItem[itemId] = (thByItem[itemId] ?? 0) + value;
-    }
-  }
-}
-```
-
-### Thêm prop benchmarkMap vào ScheduleComparisonDashboard
-
-Interface thêm:
-
-```typescript
-interface ScheduleComparisonDashboardProps {
-  // ... existing props ...
-  benchmarkMap?: Record<string, number>; // THÊM
-}
-```
-
-### File parent truyền benchmarkMap
-
-File `ProductionScheduleDetailClient.tsx`, tìm `<ScheduleComparisonDashboard`, thêm prop:
-
-```tsx
-<ScheduleComparisonDashboard
-  // ... existing props ...
-  benchmarkMap={actualBenchmarkMap} // THÊM
-/>
+// Body: { assignments: [{ itemId, fromSpindle?, toSpindle?, sortOrder }] }
+await prisma.machineItemAssignment.deleteMany({ where: { machineId: id } });
+await prisma.machineItemAssignment.createMany({
+  data: body.assignments.map((a, i) => ({
+    machineId: id,
+    itemId: a.itemId,
+    fromSpindle: a.fromSpindle ?? null,
+    toSpindle: a.toSpindle ?? null,
+    sortOrder: a.sortOrder ?? i,
+    isActive: true,
+  })),
+});
 ```
 
 ---
 
-Tóm tắt: ô chưa nhập → hiện định mức (chữ xám nghiêng, nền xám nhạt), tính vào tổng. Sửa 3 files, không thay đổi DB hay API.
+## 3. UI Machines — modal điều phối cho máy multi-item
+
+File: `src/app/machines/page.tsx`
+
+### 3.1 Thêm field `allowMultiItemPerShift` vào form tạo/sửa máy:
+
+```tsx
+<Form.Item
+  name="allowMultiItemPerShift"
+  valuePropName="checked"
+  label="Chạy nhiều MH/ca"
+>
+  <Switch checkedChildren="Có" unCheckedChildren="Không" />
+</Form.Item>
+```
+
+### 3.2 Thêm nút "Điều phối chi tiết" cho máy có `allowMultiItemPerShift = true`
+
+Cột Hành động, thêm nút bên cạnh nút Sửa:
+
+```tsx
+{
+  r.allowMultiItemPerShift && (
+    <Button
+      size="small"
+      icon={<ThunderboltOutlined />}
+      onClick={() => openMultiItemModal(r)}
+    />
+  );
+}
+```
+
+### 3.3 Modal điều phối chi tiết (mới)
+
+Form dạng `Form.List` cho phép thêm/xóa dòng:
+
+```tsx
+// Mỗi dòng:
+// [Select mặt hàng] [Cọc từ (number)] [Cọc đến (number)] [Xóa]
+// [+ Thêm mặt hàng]
+// [Lưu]
+```
+
+Khi mở modal: fetch `GET /api/machines/{id}/assignments` để load assignments hiện có.
+Khi lưu: gọi `PUT /api/machines/{id}/assignments` với toàn bộ danh sách.
+
+### 3.4 Cập nhật interface MachineData:
+
+```typescript
+allowMultiItemPerShift?: boolean;
+```
+
+### 3.5 API PUT machine nhận field mới:
+
+Đọc `src/app/api/machines/[id]/route.ts`, thêm `allowMultiItemPerShift` vào update data.
+
+---
+
+## 4. Mobile input — render nhiều ô cho máy multi-item
+
+File: `src/app/kd-daily-input/page.tsx`
+
+### 4.1 Khi load máy, fetch assignments nếu `allowMultiItemPerShift`:
+
+```typescript
+// Sau khi load machines, với mỗi máy multi-item:
+if (machine.allowMultiItemPerShift) {
+  const res = await fetch(`/api/machines/${machine.id}/assignments`);
+  const assignments = await res.json();
+  // Lưu vào state: machineAssignments[machineId] = assignments
+}
+```
+
+### 4.2 Render UI theo loại máy:
+
+**Máy thường** (`allowMultiItemPerShift = false`): giữ nguyên UI hiện tại (1 ô, startIndex/endIndex).
+
+**Máy multi-item** (`allowMultiItemPerShift = true`): render N ô nhập, mỗi ô 1 mặt hàng:
+
+```tsx
+// Thay vì 1 form startIndex/endIndex, render:
+{
+  assignments.map((a) => (
+    <div key={a.itemId}>
+      <div>
+        {a.item.name} {a.fromSpindle && `(cọc ${a.fromSpindle}-${a.toSpindle})`}
+      </div>
+      <InputNumber
+        placeholder="Sản lượng (kg)"
+        value={multiInputStates[machine.id]?.[a.itemId]}
+        onChange={(v) => updateMultiInput(machine.id, a.itemId, v)}
+        style={{ width: "100%", height: 56, fontSize: 24 }}
+        inputMode="decimal"
+      />
+    </div>
+  ));
+}
+```
+
+### 4.3 Lưu nhiều records:
+
+Khi bấm "Lưu", với máy multi-item, tạo 1 ProductionLog per assignment:
+
+```typescript
+for (const a of assignments) {
+  const kg = multiInputStates[machine.id]?.[a.itemId] ?? 0;
+  if (kg <= 0) continue;
+  await fetch("/api/production/daily-input", {
+    method: "POST",
+    body: JSON.stringify({
+      recordDate: dateStr,
+      shift: selectedShift,
+      machineId: machine.id,
+      itemId: a.itemId,
+      startIndex: 0,
+      endIndex: 0,
+      inputNE: 0,
+      finalOutput: kg,
+      note: a.fromSpindle ? `Cọc ${a.fromSpindle}-${a.toSpindle}` : null,
+    }),
+  });
+}
+```
+
+### 4.4 Load phiên trước cho máy multi-item:
+
+Khi load previous indexes, với máy multi-item: query tất cả ProductionLog cho máy đó trong ca+ngày, group by itemId → fill vào multiInputStates.
+
+### 4.5 Nút "Đổi hàng giữa ca" vẫn giữ cho máy thường. Máy multi-item không cần (đã có nhiều ô sẵn).
+
+---
+
+## 5. Verify
+
+```powershell
+# Schema
+Select-String -Pattern "allowMultiItemPerShift|MachineItemAssignment" -LiteralPath "prisma\schema.prisma" | Select-Object -First 5
+
+# API
+Test-Path "src\app\api\machines\[id]\assignments\route.ts"
+
+# UI
+Select-String -Pattern "allowMultiItemPerShift|multiItem|assignments" -LiteralPath "src\app\machines\page.tsx" | Select-Object -First 5
+Select-String -Pattern "allowMultiItemPerShift|multiInput|assignments" -LiteralPath "src\app\kd-daily-input\page.tsx" | Select-Object -First 5
+```

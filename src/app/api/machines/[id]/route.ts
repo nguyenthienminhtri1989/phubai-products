@@ -20,8 +20,10 @@ export async function PUT(
         isActive: body.isActive,
         currentNE: body.currentNE !== undefined ? (body.currentNE === null || body.currentNE === '' ? null : parseFloat(body.currentNE)) : undefined,
         ...(body.model !== undefined && { model: body.model || null }),
+        ...(body.allowMultiItemPerShift !== undefined && { allowMultiItemPerShift: body.allowMultiItemPerShift }),
         // Không update currentItemId ở đây, dùng API Batch kia chuyên nghiệp hơn
       },
+
     });
     return NextResponse.json(updated);
   } catch (e) {

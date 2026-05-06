@@ -2287,3 +2287,44 @@ src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx � Truy?
 
 ### Known limitations
 - T?ng v� bi?u �? so s�nh trong ScheduleComparisonDashboard ph?n �nh c? benchmark fill, c� th? g�y nh?m l?n n?u benchmark kh�ng ch�nh x�c
+
+---
+
+## SẢN XUẤT — Máy ống chạy nhiều mặt hàng song song (Multi-item per shift)
+
+**Status:** ✅ Completed 2026-05-06
+
+### What was built
+
+Thêm khả năng cấu hình máy chạy nhiều mặt hàng trong cùng 1 ca (VD: máy ống chia cọc). Bao gồm: field schema, bảng phân công, API CRUD, UI điều phối chi tiết trên trang Máy, và UI nhập sản lượng theo từng mặt hàng trên trang kd-daily-input.
+
+### Files created/modified
+```
+prisma/schema.prisma                                           — Thêm allowMultiItemPerShift vào Machine; relation ngược vào Item; model MachineItemAssignment mới
+prisma/migrations/20260506140000_add_multi_item_assignment/    — Migration SQL tạo bảng machine_item_assignments + cột allowMultiItemPerShift
+src/app/api/machines/[id]/assignments/route.ts                 — API mới: GET lấy assignments, PUT replace-all assignments của máy
+src/app/api/machines/[id]/route.ts                             — Thêm allowMultiItemPerShift vào PUT update
+src/app/api/machines/route.ts                                  — Thêm allowMultiItemPerShift vào POST create
+src/app/machines/page.tsx                                      — Thêm Switch "Chạy nhiều MH/ca", nút Điều phối chi tiết, Modal Form.List thêm/xóa assignments theo cọc
+src/app/kd-daily-input/page.tsx                                — Khi load, fetch assignments cho máy multi-item → render N rows (1/mặt hàng). Máy thường giữ nguyên UI cũ.
+```
+
+### Key business logic implemented
+- allowMultiItemPerShift = true → máy có nhiều MachineItemAssignment (mỗi assignment có fromSpindle, toSpindle)
+- kd-daily-input: máy multi-item render N rows riêng biệt, không cho đổi mặt hàng tại giao diện (cố định theo assignment)
+- PUT /api/machines/{id}/assignments dùng replace-all: deleteMany rồi createMany — tránh duplicate
+- Dữ liệu lưu ProductionLog vẫn là 1 record per (machineId, itemId, date, shift) — unique constraint không thay đổi
+- Máy multi-item không có nút "Đổi hàng giữa ca" (vì đã có nhiều ô sẵn từ assignments)
+- Tag "Multi" hiển thị ở cột Máy trên kd-daily-input để phân biệt
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/machines/{id}/assignments | Lấy danh sách assignments (isActive=true, order by sortOrder) |
+| PUT    | /api/machines/{id}/assignments | Replace toàn bộ assignments của máy |
+
+### Known limitations
+- Chưa có validation: fromSpindle phải < toSpindle
+- Chưa kiểm tra overlap cọc giữa các assignments trong cùng máy
+- Trang daily-input/grid (sx.daily-input-grid) chưa hỗ trợ multi-item
+- Nút "Nhập 0 cho máy dừng" áp dụng cho cả row multi-item (mỗi mặt hàng riêng)

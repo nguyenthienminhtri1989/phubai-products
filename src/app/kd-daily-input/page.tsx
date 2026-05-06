@@ -40,11 +40,15 @@ interface RowData {
   machineName: string;
   itemId: number;
   itemName: string;
-  originalItemId: number; // để detect thay đổi khi lưu
-  outputKg: number | null; // null = chưa nhập
+  originalItemId: number;
+  outputKg: number | null;
   note: string;
   isDirty: boolean;
   existingId?: number;
+  // Multi-item
+  isMultiItem?: boolean;
+  fromSpindle?: number | null;
+  toSpindle?: number | null;
 }
 
 interface Factory {
@@ -64,11 +68,20 @@ interface Machine {
   processId: number;
   currentItemId?: number | null;
   currentItem?: { id: number; name: string } | null;
+  allowMultiItemPerShift?: boolean;
 }
 
 interface ItemOption {
   id: number;
   name: string;
+}
+
+interface AssignmentData {
+  id: number;
+  itemId: number;
+  fromSpindle?: number | null;
+  toSpindle?: number | null;
+  item: { id: number; name: string };
 }
 
 // ============================================================
@@ -85,9 +98,7 @@ export default function KdDailyInputPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
 
-  // Danh sách mặt hàng cho dropdown thay đổi
   const [items, setItems] = useState<ItemOption[]>([]);
-  // Index của row đang ở chế độ chọn mặt hàng
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   // Load factories on mount
@@ -98,7 +109,7 @@ export default function KdDailyInputPage() {
       .catch(() => message.error("Không tải được danh sách nhà máy"));
   }, []);
 
-  // Load items on mount (dùng cho dropdown thay đổi mặt hàng)
+  // Load items on mount
   useEffect(() => {
     fetch("/api/items?all=true")
       .then((r) => r.json())
@@ -142,62 +153,110 @@ export default function KdDailyInputPage() {
       const machinesRes = await fetch(`/api/machines?processId=${processId}`);
       const machinesData: Machine[] = await machinesRes.json();
 
-      // 2. Fetch dữ liệu đã nhập của ngày này
+      // 2. Fetch assignments cho máy multi-item
+      const assignmentsMap = new Map<number, AssignmentData[]>();
+      await Promise.all(
+        machinesData
+          .filter((m) => m.allowMultiItemPerShift)
+          .map(async (m) => {
+            const res = await fetch(`/api/machines/${m.id}/assignments`);
+            const data: AssignmentData[] = await res.json();
+            assignmentsMap.set(m.id, data);
+          })
+      );
+
+      // 3. Fetch dữ liệu đã nhập của ngày này
       const existingRes = await fetch(
         `/api/kd-daily-input?factoryId=${factoryId}&processId=${processId}&date=${dateStr}`,
       );
       const existingData: any[] = await existingRes.json();
 
-      // 3. Tạo map từ dữ liệu đã nhập: key = `${machineId}-${itemId}`
+      // 4. Map dữ liệu đã nhập: key = `${machineId}-${itemId}`
       const existingMap = new Map<string, any>();
       existingData.forEach((d) => {
         existingMap.set(`${d.machineId}-${d.itemId}`, d);
       });
 
-      // 4. Build rows từ machines
-      // Mỗi máy → 1 row với mặt hàng đang chạy (currentItem)
-      // Nếu có dữ liệu đã nhập với itemId khác → thêm row extra
+      // 5. Build rows từ machines
       const newRows: RowData[] = [];
       const handledKeys = new Set<string>();
 
       for (const machine of machinesData) {
-        const currentItemId = machine.currentItemId;
-        const currentItemName = machine.currentItem?.name ?? "Chưa cấu hình";
+        if (machine.allowMultiItemPerShift) {
+          // Máy multi-item: render 1 row per assignment
+          const assignments = assignmentsMap.get(machine.id) ?? [];
+          if (assignments.length === 0) {
+            // Không có assignment → hiện 1 dòng chưa cấu hình
+            newRows.push({
+              machineId: machine.id,
+              machineName: machine.name,
+              itemId: 0,
+              itemName: "Chưa phân công mặt hàng",
+              originalItemId: 0,
+              outputKg: null,
+              note: "",
+              isDirty: false,
+              isMultiItem: true,
+            });
+          } else {
+            for (const a of assignments) {
+              const key = `${machine.id}-${a.itemId}`;
+              const existing = existingMap.get(key);
+              handledKeys.add(key);
 
-        // Row chính: dùng currentItem
-        if (currentItemId) {
-          const key = `${machine.id}-${currentItemId}`;
-          const existing = existingMap.get(key);
-          handledKeys.add(key);
-
-          newRows.push({
-            machineId: machine.id,
-            machineName: machine.name,
-            itemId: currentItemId,
-            itemName: currentItemName,
-            originalItemId: currentItemId,
-            outputKg: existing ? existing.outputKg : null,
-            note: existing?.note ?? "",
-            isDirty: false,
-            existingId: existing?.id,
-          });
+              newRows.push({
+                machineId: machine.id,
+                machineName: machine.name,
+                itemId: a.itemId,
+                itemName: a.item.name,
+                originalItemId: a.itemId,
+                outputKg: existing ? existing.outputKg : null,
+                note: existing?.note ?? "",
+                isDirty: false,
+                existingId: existing?.id,
+                isMultiItem: true,
+                fromSpindle: a.fromSpindle,
+                toSpindle: a.toSpindle,
+              });
+            }
+          }
         } else {
-          // Máy chưa cấu hình mặt hàng — vẫn hiện để biết + có thể chọn
-          newRows.push({
-            machineId: machine.id,
-            machineName: machine.name,
-            itemId: 0,
-            itemName: "Chưa cấu hình",
-            originalItemId: 0,
-            outputKg: null,
-            note: "",
-            isDirty: false,
-          });
+          // Máy thường
+          const currentItemId = machine.currentItemId;
+          const currentItemName = machine.currentItem?.name ?? "Chưa cấu hình";
+
+          if (currentItemId) {
+            const key = `${machine.id}-${currentItemId}`;
+            const existing = existingMap.get(key);
+            handledKeys.add(key);
+
+            newRows.push({
+              machineId: machine.id,
+              machineName: machine.name,
+              itemId: currentItemId,
+              itemName: currentItemName,
+              originalItemId: currentItemId,
+              outputKg: existing ? existing.outputKg : null,
+              note: existing?.note ?? "",
+              isDirty: false,
+              existingId: existing?.id,
+            });
+          } else {
+            newRows.push({
+              machineId: machine.id,
+              machineName: machine.name,
+              itemId: 0,
+              itemName: "Chưa cấu hình",
+              originalItemId: 0,
+              outputKg: null,
+              note: "",
+              isDirty: false,
+            });
+          }
         }
       }
 
-      // 5. Thêm các row từ dữ liệu đã nhập mà không có trong danh sách máy hiện tại
-      // (ví dụ: máy đã đổi mặt hàng sau khi nhập)
+      // 6. Thêm các row từ dữ liệu đã nhập mà không có trong danh sách máy hiện tại
       existingData.forEach((d) => {
         const key = `${d.machineId}-${d.itemId}`;
         if (!handledKeys.has(key)) {
@@ -219,7 +278,7 @@ export default function KdDailyInputPage() {
 
       const entered = newRows.filter((r) => r.outputKg !== null).length;
       message.success(
-        `Đã tải ${newRows.length} máy. Đã nhập: ${entered}/${newRows.length}`,
+        `Đã tải ${newRows.length} dòng. Đã nhập: ${entered}/${newRows.length}`,
       );
     } catch (err) {
       message.error("Lỗi tải dữ liệu");
@@ -253,18 +312,16 @@ export default function KdDailyInputPage() {
   const handlePaste = useCallback(
     (e: React.ClipboardEvent, startIndex: number) => {
       const text = e.clipboardData.getData("text");
-      if (!text.includes("\n") && !text.includes("\t")) return; // paste 1 giá trị bình thường
+      if (!text.includes("\n") && !text.includes("\t")) return;
 
       e.preventDefault();
 
-      // Parse clipboard — hỗ trợ cả copy 1 cột lẫn nhiều cột từ Excel
       const lines = text
         .split("\n")
         .map((line) => line.split("\t")[0].trim())
         .filter((line) => line !== "");
 
       const values = lines.map((line) => {
-        // Xử lý số có dấu phẩy hàng nghìn: "1,234" → 1234
         const cleaned = line.replace(/,/g, "").replace(/\./g, "");
         const num = parseFloat(cleaned);
         return isNaN(num) ? null : num;
@@ -309,12 +366,11 @@ export default function KdDailyInputPage() {
 
     setLoading(true);
     try {
-      // 1. Cập nhật điều phối máy nếu mặt hàng thay đổi
+      // 1. Cập nhật điều phối máy nếu mặt hàng thay đổi (chỉ áp dụng cho máy thường)
       const itemChangedRows = rows.filter(
-        (r) => r.itemId !== r.originalItemId && r.itemId !== 0,
+        (r) => !r.isMultiItem && r.itemId !== r.originalItemId && r.itemId !== 0,
       );
       if (itemChangedRows.length > 0) {
-        // Gọi từng máy riêng (single update, operator được phép)
         for (const r of itemChangedRows) {
           const res = await fetch("/api/machines/batch", {
             method: "POST",
@@ -347,7 +403,7 @@ export default function KdDailyInputPage() {
             machineId: r.machineId,
             itemId: r.itemId,
             outputKg: r.outputKg,
-            note: r.note,
+            note: r.note || (r.fromSpindle ? `Cọc ${r.fromSpindle}-${r.toSpindle}` : null),
           })),
         }),
       });
@@ -358,9 +414,8 @@ export default function KdDailyInputPage() {
       }
 
       message.success(
-        `Đã lưu ${dirty.length} máy và cập nhật tiến độ hợp đồng`,
+        `Đã lưu ${dirty.length} dòng và cập nhật tiến độ hợp đồng`,
       );
-      // Reset isDirty + cập nhật originalItemId
       setRows((prev) =>
         prev.map((r) => ({ ...r, isDirty: false, originalItemId: r.itemId })),
       );
@@ -392,19 +447,39 @@ export default function KdDailyInputPage() {
       title: "Máy",
       dataIndex: "machineName",
       width: 110,
-      render: (v: string) => <Text strong>{v}</Text>,
+      render: (v: string, r: RowData) => (
+        <div>
+          <Text strong>{v}</Text>
+          {r.isMultiItem && (
+            <Tag color="purple" style={{ marginLeft: 4, fontSize: 10 }}>Multi</Tag>
+          )}
+        </div>
+      ),
     },
     {
       title: "Mặt hàng đang chạy",
       dataIndex: "itemName",
-      width: 240,
+      width: 260,
       render: (v: string, r: RowData, i: number) => {
+        // Máy multi-item: chỉ hiển thị tag + thông tin cọc, không cho đổi mặt hàng tại đây
+        if (r.isMultiItem) {
+          return (
+            <Space size={4} wrap={false}>
+              <Tag color={getItemColor(v)} style={{ fontSize: 13, fontWeight: 600 }}>{v}</Tag>
+              {r.fromSpindle != null && r.toSpindle != null && (
+                <Tag color="default" style={{ fontSize: 11 }}>
+                  Cọc {r.fromSpindle}–{r.toSpindle}
+                </Tag>
+              )}
+            </Space>
+          );
+        }
+
         const isEditing = editingItemIndex === i;
         const itemChanged = r.itemId !== r.originalItemId && r.itemId !== 0;
         const hasMultipleRows =
           rows.filter((row) => row.machineId === r.machineId).length > 1;
 
-        // Máy chưa cấu hình hoặc đang ở chế độ chỉnh sửa → hiện Select
         if (isEditing || r.itemId === 0) {
           return (
             <Select
@@ -438,14 +513,12 @@ export default function KdDailyInputPage() {
               }}
               options={items.map((it) => ({ label: it.name, value: it.id }))}
               onBlur={() => {
-                // Chỉ thoát edit mode nếu đã có item (không phải Chưa cấu hình)
                 if (r.itemId !== 0) setEditingItemIndex(null);
               }}
             />
           );
         }
 
-        // Chế độ hiển thị bình thường
         return (
           <Space size={4} wrap={false}>
             <Tag color={itemChanged ? "orange" : getItemColor(v)} style={{ fontSize: 13, fontWeight: 600 }}>{v}</Tag>
@@ -611,7 +684,7 @@ export default function KdDailyInputPage() {
             <Statistic
               title="Đã nhập"
               value={enteredCount}
-              suffix={`/ ${rows.length} máy`}
+              suffix={`/ ${rows.length} dòng`}
               valueStyle={{ fontSize: 18, color: "#52c41a" }}
             />
             <Divider type="vertical" style={{ height: 40 }} />
@@ -634,7 +707,7 @@ export default function KdDailyInputPage() {
               disabled={dirtyCount === 0}
               onClick={handleSave}
             >
-              Lưu tất cả ({dirtyCount} máy)
+              Lưu tất cả ({dirtyCount} dòng)
             </Button>
           </Space>
         </div>

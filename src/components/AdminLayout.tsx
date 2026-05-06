@@ -154,25 +154,11 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-sx",
     label: "SẢN XUẤT",
     icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
-    subGroups: [
-      {
-        key: "sub-sx",
-        label: "Quản lý sản xuất",
-        icon: <AppstoreOutlined />,
-        pageKeys: ["sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.iot-import", "sx.line-setup", "sx.line-diagram", "sx.qr-machines"],
-      },
-      {
-        key: "sub-stops",
-        label: "Dừng máy & Bảo dưỡng",
-        icon: <PauseCircleOutlined />,
-        pageKeys: ["sx.machine-stops", "sx.stop-history", "sx.maintenance"],
-      },
-      {
-        key: "sub-benchmark",
-        label: "Định mức Năng suất",
-        icon: <LineChartOutlined />,
-        pageKeys: ["benchmark.versions", "benchmark.capacity", "benchmark.comparison"],
-      },
+    pageKeys: [
+      "sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.iot-import",
+      "sx.line-setup", "sx.line-diagram", "sx.qr-machines",
+      "sx.machine-stops", "sx.stop-history", "sx.maintenance",
+      "benchmark.versions", "benchmark.capacity", "benchmark.comparison",
     ],
   },
   {

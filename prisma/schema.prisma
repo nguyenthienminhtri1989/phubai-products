@@ -121,6 +121,9 @@ model Item {
   // Module Kế hoạch SX tháng
   scheduleSegments ScheduleSegment[]
 
+  // Multi-item assignments
+  machineAssignments MachineItemAssignment[]
+
   @@map("items")
 }
 
@@ -149,6 +152,9 @@ model Machine {
 
   spindleCount Int? // Số cọc (Chỉ dùng cho FormulaType = 3, máy khác để Null)
 
+  // --- Chế độ chạy nhiều mặt hàng ---
+  allowMultiItemPerShift Boolean @default(false)
+
   // --- Trạng thái hiện tại ---
   currentItemId Int? // Máy đang chạy hàng nào? (Dùng để gợi ý khi nhập liệu)
   currentItem   Item? @relation(fields: [currentItemId], references: [id])
@@ -172,6 +178,9 @@ model Machine {
 
   // Module Kế hoạch SX tháng
   scheduleSegments ScheduleSegment[]
+
+  // Multi-item assignments
+  itemAssignments MachineItemAssignment[]
 
   @@map("machines")
 }
@@ -1357,4 +1366,27 @@ model MaterialPrice {
   @@index([materialTypeId])
   @@index([yearMonth])
   @@map("material_prices")
+}
+
+// ==========================================
+// MODEL: PHÂN CÔNG MẶT HÀNG CHO MÁY ỐNG MULTI-ITEM
+// ==========================================
+model MachineItemAssignment {
+  id        Int     @id @default(autoincrement())
+  machineId Int
+  machine   Machine @relation(fields: [machineId], references: [id])
+  itemId    Int
+  item      Item    @relation(fields: [itemId], references: [id])
+
+  fromSpindle Int? // Cọc từ (cọc đầu chạy mặt hàng này)
+  toSpindle   Int? // Cọc đến (cọc cuối chạy mặt hàng này)
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([machineId, itemId])
+  @@index([machineId])
+  @@map("machine_item_assignments")
 }

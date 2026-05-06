@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Table, Card, Button, Input, Select, Tag, Space, Modal, Form, message, InputNumber, Switch, Popconfirm, Row, Col } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined, SearchOutlined } from "@ant-design/icons";
+import { Table, Card, Button, Input, Select, Tag, Space, Modal, Form, message, InputNumber, Switch, Popconfirm, Row, Col, Divider } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined, SearchOutlined, AppstoreAddOutlined, MinusCircleOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import { getRoleDefaultPerm, type UserRole } from "@/lib/permissions";
 
@@ -18,6 +18,16 @@ interface MachineData {
     currentNE?: number;
     model?: string;
     isActive: boolean;
+    allowMultiItemPerShift?: boolean;
+}
+
+interface AssignmentData {
+    id?: number;
+    itemId: number;
+    fromSpindle?: number | null;
+    toSpindle?: number | null;
+    sortOrder?: number;
+    item?: { id: number; name: string };
 }
 
 export default function MachinesPage() {
@@ -45,6 +55,13 @@ export default function MachinesPage() {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [dispatchForm] = Form.useForm();
 
+    // Modal Multi-item assignment
+    const [isMultiItemModalOpen, setIsMultiItemModalOpen] = useState(false);
+    const [multiItemMachine, setMultiItemMachine] = useState<MachineData | null>(null);
+    const [multiItemLoading, setMultiItemLoading] = useState(false);
+    const [multiItemSaving, setMultiItemSaving] = useState(false);
+    const [multiItemForm] = Form.useForm();
+
     const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
     const pagePermissions: { pageKey: string; canView: boolean; canEdit: boolean }[] =
@@ -52,8 +69,6 @@ export default function MachinesPage() {
 
     const isAdmin = userRole === "ADMIN";
 
-    // Trang "sx.machines" thuộc nhóm "SẢN XUẤT"
-    // Ưu tiên: 1) ADMIN bypass, 2) PagePermission override từ DB, 3) Role default
     const PAGE_KEY = "sx.machines";
     const PAGE_GROUP = "SẢN XUẤT";
     const pagePerm = pagePermissions.find((p) => p.pageKey === PAGE_KEY);
@@ -69,7 +84,6 @@ export default function MachinesPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Lấy danh mục
             const [fRes, pRes, iRes] = await Promise.all([
                 fetch('/api/factories'), fetch('/api/processes'), fetch('/api/items')
             ]);
@@ -77,7 +91,6 @@ export default function MachinesPage() {
             setProcesses(await pRes.json());
             setItems(await iRes.json());
 
-            // Admin/FACTORY_MANAGER dùng filter controls; các role khác lọc client-side theo processIds
             const isManager = userRole === "FACTORY_MANAGER";
             let query = "?";
             if (isAdmin || isManager) {
@@ -88,12 +101,10 @@ export default function MachinesPage() {
             const mRes = await fetch(`/api/machines${query}`);
             let mData: MachineData[] = await mRes.json();
 
-            // Non-admin, non-manager: chỉ giữ máy thuộc công đoạn của mình
             if (!isAdmin && !isManager && userProcessIds.length > 0) {
                 mData = mData.filter(m => userProcessIds.includes(m.processId));
             }
 
-            // Lọc local theo tên
             if (searchText) {
                 mData = mData.filter(m => m.name.toLowerCase().includes(searchText.toLowerCase()));
             }
@@ -102,7 +113,7 @@ export default function MachinesPage() {
         finally { setLoading(false); }
     };
 
-    useEffect(() => { fetchData(); }, [filterFactory, filterProcess, session]); // Reload khi đổi filter hoặc session load xong
+    useEffect(() => { fetchData(); }, [filterFactory, filterProcess, session]);
 
     // 2. Xử lý Thêm / Sửa
     const handleSave = async (values: any) => {
@@ -149,16 +160,66 @@ export default function MachinesPage() {
 
             message.success(`Đã gán mặt hàng cho ${selectedRowKeys.length} máy!`);
             setIsDispatchModalOpen(false);
-            setSelectedRowKeys([]); // Clear selection
+            setSelectedRowKeys([]);
             fetchData();
         } catch (e) { message.error("Có lỗi xảy ra"); }
+    };
+
+    // 5. Mở modal điều phối chi tiết multi-item
+    const openMultiItemModal = async (machine: MachineData) => {
+        setMultiItemMachine(machine);
+        setIsMultiItemModalOpen(true);
+        setMultiItemLoading(true);
+        try {
+            const res = await fetch(`/api/machines/${machine.id}/assignments`);
+            const data: AssignmentData[] = await res.json();
+            multiItemForm.setFieldsValue({
+                assignments: data.map(a => ({
+                    itemId: a.itemId,
+                    fromSpindle: a.fromSpindle ?? undefined,
+                    toSpindle: a.toSpindle ?? undefined,
+                })),
+            });
+        } catch {
+            message.error("Không tải được phân công mặt hàng");
+        } finally {
+            setMultiItemLoading(false);
+        }
+    };
+
+    // 6. Lưu assignments
+    const handleSaveAssignments = async (values: any) => {
+        if (!multiItemMachine) return;
+        setMultiItemSaving(true);
+        try {
+            const res = await fetch(`/api/machines/${multiItemMachine.id}/assignments`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assignments: values.assignments ?? [] }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Lỗi lưu");
+            }
+            message.success("Đã lưu phân công mặt hàng!");
+            setIsMultiItemModalOpen(false);
+        } catch (e: any) {
+            message.error(e.message || "Lỗi lưu");
+        } finally {
+            setMultiItemSaving(false);
+        }
     };
 
     // Columns
     const columns = [
         {
             title: "Tên máy", dataIndex: "name", width: 120,
-            render: (text: string, r: any) => <b style={{ color: r.isActive ? '#000' : '#ccc' }}>{text} {r.isActive ? '' : '(Dừng)'}</b>
+            render: (text: string, r: any) => (
+                <b style={{ color: r.isActive ? '#000' : '#ccc' }}>
+                    {text} {r.isActive ? '' : '(Dừng)'}
+                    {r.allowMultiItemPerShift && <Tag color="purple" style={{ marginLeft: 4, fontSize: 11 }}>Multi-MH</Tag>}
+                </b>
+            )
         },
         {
             title: "Công đoạn", dataIndex: ["process", "name"], width: 150,
@@ -171,7 +232,9 @@ export default function MachinesPage() {
         },
         {
             title: "Mặt hàng đang chạy", key: "item",
-            render: (_: any, r: MachineData) => r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
+            render: (_: any, r: MachineData) => r.allowMultiItemPerShift
+                ? <Tag color="purple">Nhiều mặt hàng</Tag>
+                : r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
         },
         {
             title: "Loại máy", dataIndex: "model", key: "model", width: 140,
@@ -190,9 +253,18 @@ export default function MachinesPage() {
             )
         },
         {
-            title: "Hành động", key: "action", width: 100, align: 'right' as const,
+            title: "Hành động", key: "action", width: 120, align: 'right' as const,
             render: (_: any, r: MachineData) => canEdit(r) ? (
                 <Space>
+                    {r.allowMultiItemPerShift && (
+                        <Button
+                            size="small"
+                            type="dashed"
+                            icon={<AppstoreAddOutlined />}
+                            onClick={() => openMultiItemModal(r)}
+                            title="Điều phối chi tiết nhiều mặt hàng"
+                        />
+                    )}
                     <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
                     {isAdmin && (
                         <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
@@ -204,7 +276,6 @@ export default function MachinesPage() {
         }
     ];
 
-    // Kiểm tra quyền xem trang theo RBAC
     if (!canViewPage) return <div className="p-10">Bạn không có quyền truy cập trang này.</div>;
 
     return (
@@ -317,9 +388,23 @@ export default function MachinesPage() {
                         </Col>
                     </Row>
 
-                    <Form.Item name="isActive" valuePropName="checked" label="Trạng thái">
-                        <Switch checkedChildren="Hoạt động" unCheckedChildren="Tạm dừng" defaultChecked />
-                    </Form.Item>
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item name="isActive" valuePropName="checked" label="Trạng thái">
+                                <Switch checkedChildren="Hoạt động" unCheckedChildren="Tạm dừng" defaultChecked />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item
+                                name="allowMultiItemPerShift"
+                                valuePropName="checked"
+                                label="Chạy nhiều MH/ca"
+                                tooltip="Cho phép máy này chạy nhiều mặt hàng trong cùng 1 ca (VD: máy ống chia cọc)"
+                            >
+                                <Switch checkedChildren="Có" unCheckedChildren="Không" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
 
                     <Button type="primary" htmlType="submit" block>Lưu thông tin</Button>
                 </Form>
@@ -346,6 +431,97 @@ export default function MachinesPage() {
                         />
                     </Form.Item>
                     <Button type="primary" htmlType="submit" block size="large">Xác nhận chuyển đổi</Button>
+                </Form>
+            </Modal>
+
+            {/* MODAL 3: MULTI-ITEM ASSIGNMENT (ĐIỀU PHỐI CHI TIẾT) */}
+            <Modal
+                title={<span><AppstoreAddOutlined /> Phân công mặt hàng — {multiItemMachine?.name}</span>}
+                open={isMultiItemModalOpen}
+                onCancel={() => setIsMultiItemModalOpen(false)}
+                footer={null}
+                width={680}
+            >
+                <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
+                    Cấu hình từng mặt hàng chạy trên máy <b>{multiItemMachine?.name}</b> theo từng nhóm cọc.
+                </div>
+                <Divider style={{ margin: '8px 0 16px' }} />
+                <Form
+                    form={multiItemForm}
+                    layout="vertical"
+                    onFinish={handleSaveAssignments}
+                >
+                    <Form.List name="assignments">
+                        {(fields, { add, remove }) => (
+                            <>
+                                {/* Header */}
+                                <Row gutter={8} style={{ marginBottom: 6, fontWeight: 600, fontSize: 12, color: '#888' }}>
+                                    <Col flex="1">Mặt hàng</Col>
+                                    <Col style={{ width: 100 }}>Cọc từ</Col>
+                                    <Col style={{ width: 100 }}>Cọc đến</Col>
+                                    <Col style={{ width: 36 }}></Col>
+                                </Row>
+
+                                {fields.map(({ key, name, ...restField }) => (
+                                    <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
+                                        <Col flex="1">
+                                            <Form.Item
+                                                {...restField}
+                                                name={[name, 'itemId']}
+                                                rules={[{ required: true, message: 'Chọn mặt hàng' }]}
+                                                style={{ margin: 0 }}
+                                            >
+                                                <Select
+                                                    showSearch
+                                                    optionFilterProp="label"
+                                                    placeholder="Chọn mặt hàng..."
+                                                    options={items.map(i => ({ label: i.name, value: i.id }))}
+                                                />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col style={{ width: 100 }}>
+                                            <Form.Item
+                                                {...restField}
+                                                name={[name, 'fromSpindle']}
+                                                style={{ margin: 0 }}
+                                            >
+                                                <InputNumber placeholder="Từ cọc" style={{ width: '100%' }} min={1} />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col style={{ width: 100 }}>
+                                            <Form.Item
+                                                {...restField}
+                                                name={[name, 'toSpindle']}
+                                                style={{ margin: 0 }}
+                                            >
+                                                <InputNumber placeholder="Đến cọc" style={{ width: '100%' }} min={1} />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col style={{ width: 36, textAlign: 'center' }}>
+                                            <MinusCircleOutlined
+                                                onClick={() => remove(name)}
+                                                style={{ color: '#ff4d4f', fontSize: 18, cursor: 'pointer' }}
+                                            />
+                                        </Col>
+                                    </Row>
+                                ))}
+
+                                <Button
+                                    type="dashed"
+                                    onClick={() => add()}
+                                    block
+                                    icon={<PlusOutlined />}
+                                    style={{ marginBottom: 16 }}
+                                >
+                                    Thêm mặt hàng
+                                </Button>
+                            </>
+                        )}
+                    </Form.List>
+
+                    <Button type="primary" htmlType="submit" block loading={multiItemSaving}>
+                        Lưu phân công
+                    </Button>
                 </Form>
             </Modal>
         </div>

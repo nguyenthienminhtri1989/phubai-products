@@ -35,6 +35,7 @@ export async function POST(req: Request) {
         isActive: body.isActive !== false,
         currentNE: body.currentNE !== undefined && body.currentNE !== null && body.currentNE !== '' ? parseFloat(body.currentNE) : undefined,
         ...(body.model !== undefined && { model: body.model || null }),
+        ...(body.allowMultiItemPerShift !== undefined && { allowMultiItemPerShift: body.allowMultiItemPerShift }),
       },
     });
     return NextResponse.json(newMachine);
