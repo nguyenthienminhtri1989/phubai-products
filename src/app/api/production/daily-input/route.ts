@@ -19,8 +19,22 @@ export async function GET(request: Request) {
   const machineId = searchParams.get("machineId");
   const date = searchParams.get("date");
   const shift = searchParams.get("shift");
+  const allItems = searchParams.get("allItems") === "true";
 
   if (!machineId || !date || !shift) return NextResponse.json(null);
+
+  // allItems=true: trả về tất cả records của máy+ngày+ca (dùng cho máy multi-item)
+  if (allItems) {
+    const logs = await prisma.productionLog.findMany({
+      where: {
+        machineId: parseInt(machineId),
+        recordDate: normalizeDate(date),
+        shift: parseInt(shift),
+      },
+      select: { id: true, itemId: true, finalOutput: true },
+    });
+    return NextResponse.json(logs);
+  }
 
   const log = await prisma.productionLog.findFirst({
     where: {

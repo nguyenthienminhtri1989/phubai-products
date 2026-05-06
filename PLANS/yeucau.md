@@ -1,235 +1,159 @@
-# TASK: Máy ống chạy nhiều mặt hàng song song
+**FIX bước 4: Sửa đúng trang mobile input — file `src/app/production/mobile-input/page.tsx`**
 
-## Đọc các file sau trước khi code:
+Đọc file `src/app/production/mobile-input/page.tsx` và `src/app/api/machines/[id]/assignments/route.ts` trước khi code.
 
-- `prisma/schema.prisma` (model Machine, ProductionLog)
-- `src/app/machines/page.tsx` (trang điều phối)
-- `src/app/kd-daily-input/page.tsx` (trang nhập SL mobile)
-- `src/app/api/machines/route.ts` và `src/app/api/machines/[id]/route.ts`
-- `src/app/api/production/daily-input/route.ts`
+Các bước 1-3 (schema, API assignments, UI machines) đã xong. Chỉ cần sửa bước 4 trong file `src/app/production/mobile-input/page.tsx`:
 
----
+### 4.1 Thêm state:
 
-## 1. Schema
-
-### 1.1 Thêm field vào Machine:
-
-```prisma
-allowMultiItemPerShift Boolean @default(false)
+```typescript
+const [machineAssignments, setMachineAssignments] = useState<
+  Record<number, any[]>
+>({});
+const [multiInputStates, setMultiInputStates] = useState<
+  Record<number, Record<number, number | null>>
+>({});
 ```
 
-### 1.2 Thêm model mới:
+### 4.2 Khi load máy (trong useEffect fetchMachines), sau khi có danh sách máy:
 
-```prisma
-model MachineItemAssignment {
-  id          Int     @id @default(autoincrement())
-  machineId   Int
-  machine     Machine @relation(fields: [machineId], references: [id])
-  itemId      Int
-  item        Item    @relation(fields: [itemId], references: [id])
-  fromSpindle Int?
-  toSpindle   Int?
-  isActive    Boolean @default(true)
-  sortOrder   Int     @default(0)
+```typescript
+// Với mỗi máy có allowMultiItemPerShift = true, fetch assignments
+for (const m of filtered) {
+  if (m.allowMultiItemPerShift) {
+    const res = await fetch(`/api/machines/${m.id}/assignments`);
+    if (res.ok) {
+      const data = await res.json();
+      machineAssignments[m.id] = data;
+    }
+  }
+}
+setMachineAssignments({ ...machineAssignments });
+```
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+Cần thêm `allowMultiItemPerShift` vào interface Machine:
 
-  @@unique([machineId, itemId])
-  @@index([machineId])
-  @@map("machine_item_assignments")
+```typescript
+interface Machine {
+  // ... fields hiện có ...
+  allowMultiItemPerShift?: boolean;
 }
 ```
 
-Thêm relation ngược trong Machine và Item:
+### 4.3 Render UI: phân biệt 2 loại máy
 
-```prisma
-// Machine:
-itemAssignments MachineItemAssignment[]
+**Máy thường** (`allowMultiItemPerShift !== true`): giữ nguyên UI hiện tại (startIndex, endIndex, formulaType...).
 
-// Item:
-machineAssignments MachineItemAssignment[]
-```
-
-Migration: `npx prisma migrate dev --name add_multi_item_assignment`
-
----
-
-## 2. API mới: CRUD assignments
-
-### File mới: `src/app/api/machines/[id]/assignments/route.ts`
-
-**GET**: lấy assignments của máy
-
-```typescript
-const assignments = await prisma.machineItemAssignment.findMany({
-  where: { machineId: id, isActive: true },
-  include: { item: { select: { id: true, name: true } } },
-  orderBy: { sortOrder: "asc" },
-});
-```
-
-**PUT**: nhận array assignments, xóa cũ tạo mới (replace all)
-
-```typescript
-// Body: { assignments: [{ itemId, fromSpindle?, toSpindle?, sortOrder }] }
-await prisma.machineItemAssignment.deleteMany({ where: { machineId: id } });
-await prisma.machineItemAssignment.createMany({
-  data: body.assignments.map((a, i) => ({
-    machineId: id,
-    itemId: a.itemId,
-    fromSpindle: a.fromSpindle ?? null,
-    toSpindle: a.toSpindle ?? null,
-    sortOrder: a.sortOrder ?? i,
-    isActive: true,
-  })),
-});
-```
-
----
-
-## 3. UI Machines — modal điều phối cho máy multi-item
-
-File: `src/app/machines/page.tsx`
-
-### 3.1 Thêm field `allowMultiItemPerShift` vào form tạo/sửa máy:
-
-```tsx
-<Form.Item
-  name="allowMultiItemPerShift"
-  valuePropName="checked"
-  label="Chạy nhiều MH/ca"
->
-  <Switch checkedChildren="Có" unCheckedChildren="Không" />
-</Form.Item>
-```
-
-### 3.2 Thêm nút "Điều phối chi tiết" cho máy có `allowMultiItemPerShift = true`
-
-Cột Hành động, thêm nút bên cạnh nút Sửa:
+**Máy multi-item** (`allowMultiItemPerShift === true`): thay thế toàn bộ phần form startIndex/endIndex/NE/output bằng:
 
 ```tsx
 {
-  r.allowMultiItemPerShift && (
-    <Button
-      size="small"
-      icon={<ThunderboltOutlined />}
-      onClick={() => openMultiItemModal(r)}
-    />
-  );
-}
-```
-
-### 3.3 Modal điều phối chi tiết (mới)
-
-Form dạng `Form.List` cho phép thêm/xóa dòng:
-
-```tsx
-// Mỗi dòng:
-// [Select mặt hàng] [Cọc từ (number)] [Cọc đến (number)] [Xóa]
-// [+ Thêm mặt hàng]
-// [Lưu]
-```
-
-Khi mở modal: fetch `GET /api/machines/{id}/assignments` để load assignments hiện có.
-Khi lưu: gọi `PUT /api/machines/{id}/assignments` với toàn bộ danh sách.
-
-### 3.4 Cập nhật interface MachineData:
-
-```typescript
-allowMultiItemPerShift?: boolean;
-```
-
-### 3.5 API PUT machine nhận field mới:
-
-Đọc `src/app/api/machines/[id]/route.ts`, thêm `allowMultiItemPerShift` vào update data.
-
----
-
-## 4. Mobile input — render nhiều ô cho máy multi-item
-
-File: `src/app/kd-daily-input/page.tsx`
-
-### 4.1 Khi load máy, fetch assignments nếu `allowMultiItemPerShift`:
-
-```typescript
-// Sau khi load machines, với mỗi máy multi-item:
-if (machine.allowMultiItemPerShift) {
-  const res = await fetch(`/api/machines/${machine.id}/assignments`);
-  const assignments = await res.json();
-  // Lưu vào state: machineAssignments[machineId] = assignments
-}
-```
-
-### 4.2 Render UI theo loại máy:
-
-**Máy thường** (`allowMultiItemPerShift = false`): giữ nguyên UI hiện tại (1 ô, startIndex/endIndex).
-
-**Máy multi-item** (`allowMultiItemPerShift = true`): render N ô nhập, mỗi ô 1 mặt hàng:
-
-```tsx
-// Thay vì 1 form startIndex/endIndex, render:
-{
-  assignments.map((a) => (
-    <div key={a.itemId}>
-      <div>
-        {a.item.name} {a.fromSpindle && `(cọc ${a.fromSpindle}-${a.toSpindle})`}
+  machineAssignments[currentMachine.id]?.map((a) => (
+    <div
+      key={a.itemId}
+      style={{
+        marginBottom: 16,
+        padding: 16,
+        background: "#f6f8fa",
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
+        {a.item.name}
+        {a.fromSpindle && (
+          <Tag style={{ marginLeft: 8 }}>
+            Cọc {a.fromSpindle}-{a.toSpindle}
+          </Tag>
+        )}
       </div>
       <InputNumber
+        value={multiInputStates[currentMachine.id]?.[a.itemId]}
+        onChange={(v) =>
+          setMultiInputStates((prev) => ({
+            ...prev,
+            [currentMachine.id]: { ...prev[currentMachine.id], [a.itemId]: v },
+          }))
+        }
         placeholder="Sản lượng (kg)"
-        value={multiInputStates[machine.id]?.[a.itemId]}
-        onChange={(v) => updateMultiInput(machine.id, a.itemId, v)}
         style={{ width: "100%", height: 56, fontSize: 24 }}
+        controls={false}
         inputMode="decimal"
+        min={0}
       />
     </div>
   ));
 }
 ```
 
-### 4.3 Lưu nhiều records:
+Nếu chưa có assignments: hiện thông báo "Chưa điều phối mặt hàng" + nút "Thêm mặt hàng" cho phép user tự gán tạm.
 
-Khi bấm "Lưu", với máy multi-item, tạo 1 ProductionLog per assignment:
+### 4.4 Sửa hàm handleSave cho máy multi-item:
 
 ```typescript
-for (const a of assignments) {
-  const kg = multiInputStates[machine.id]?.[a.itemId] ?? 0;
-  if (kg <= 0) continue;
-  await fetch("/api/production/daily-input", {
-    method: "POST",
-    body: JSON.stringify({
-      recordDate: dateStr,
-      shift: selectedShift,
-      machineId: machine.id,
-      itemId: a.itemId,
-      startIndex: 0,
-      endIndex: 0,
-      inputNE: 0,
-      finalOutput: kg,
-      note: a.fromSpindle ? `Cọc ${a.fromSpindle}-${a.toSpindle}` : null,
-    }),
-  });
+if (currentMachine.allowMultiItemPerShift) {
+  const assignments = machineAssignments[currentMachine.id] ?? [];
+  for (const a of assignments) {
+    const kg = multiInputStates[currentMachine.id]?.[a.itemId];
+    if (!kg || kg <= 0) continue;
+    await fetch("/api/production/daily-input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recordDate: selectedDate.format("YYYY-MM-DD"),
+        shift: selectedShift,
+        machineId: currentMachine.id,
+        itemId: a.itemId,
+        startIndex: 0,
+        endIndex: 0,
+        inputNE: 0,
+        finalOutput: kg,
+        note: a.fromSpindle ? `Cọc ${a.fromSpindle}-${a.toSpindle}` : null,
+      }),
+    });
+  }
+  // Đánh dấu saved + chuyển máy tiếp
+  // ... (giữ logic andNext giống máy thường)
+  return;
+}
+// ... giữ nguyên logic handleSave cho máy thường bên dưới
+```
+
+### 4.5 Load phiên trước cho máy multi-item:
+
+Trong hàm `loadPreviousIndexes`, thêm xử lý:
+
+```typescript
+if (m.allowMultiItemPerShift) {
+  // Query tất cả ProductionLog cho máy này trong ca+ngày
+  const res = await fetch(
+    `/api/production/daily-input?machineId=${m.id}&date=${dateStr}&shift=${shift}&allItems=true`,
+  );
+  if (res.ok) {
+    const logs = await res.json();
+    // logs = array [{itemId, finalOutput}, ...]
+    const multiState: Record<number, number> = {};
+    for (const log of Array.isArray(logs) ? logs : []) {
+      multiState[log.itemId] = log.finalOutput;
+    }
+    // Lưu vào multiInputStates
+    setMultiInputStates((prev) => ({ ...prev, [m.id]: multiState }));
+    newStates[m.id] = {
+      ...newStates[m.id],
+      saved: Object.keys(multiState).length > 0,
+      output: Object.values(multiState).reduce((s, v) => s + v, 0),
+    };
+  }
+  continue; // skip logic startIndex/endIndex cho máy này
 }
 ```
 
-### 4.4 Load phiên trước cho máy multi-item:
+API `daily-input` GET cần hỗ trợ param `allItems=true` để trả về tất cả records của máy+ngày+ca (không chỉ 1 record). Đọc file `src/app/api/production/daily-input/route.ts` và thêm logic này.
 
-Khi load previous indexes, với máy multi-item: query tất cả ProductionLog cho máy đó trong ca+ngày, group by itemId → fill vào multiInputStates.
-
-### 4.5 Nút "Đổi hàng giữa ca" vẫn giữ cho máy thường. Máy multi-item không cần (đã có nhiều ô sẵn).
+### 4.6 Nút "Đổi hàng giữa ca": ẩn cho máy multi-item (không cần — đã có nhiều ô sẵn).
 
 ---
 
-## 5. Verify
+**Không sửa file nào khác ngoài:**
 
-```powershell
-# Schema
-Select-String -Pattern "allowMultiItemPerShift|MachineItemAssignment" -LiteralPath "prisma\schema.prisma" | Select-Object -First 5
-
-# API
-Test-Path "src\app\api\machines\[id]\assignments\route.ts"
-
-# UI
-Select-String -Pattern "allowMultiItemPerShift|multiItem|assignments" -LiteralPath "src\app\machines\page.tsx" | Select-Object -First 5
-Select-String -Pattern "allowMultiItemPerShift|multiInput|assignments" -LiteralPath "src\app\kd-daily-input\page.tsx" | Select-Object -First 5
-```
+- `src/app/production/mobile-input/page.tsx`
+- `src/app/api/production/daily-input/route.ts` (thêm support `allItems` param)
