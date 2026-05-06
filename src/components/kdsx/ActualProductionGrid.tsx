@@ -271,7 +271,12 @@ export default function ActualProductionGrid({
                 for (const day of dayNumbers) {
                   if (holidays.includes(day)) continue;
                   const actual = machineGrid[day]?.[row.itemId] ?? 0;
-                  rowTotal += actual > 0 ? actual : daysWithActualData.has(day) ? 0 : benchmarkKgForRow;
+                  const inRange = day >= row.firstDay && day <= row.lastDay;
+                  rowTotal += actual > 0
+                    ? actual
+                    : !daysWithActualData.has(day) && inRange
+                      ? benchmarkKgForRow
+                      : 0;
                 }
 
 
@@ -316,7 +321,12 @@ export default function ActualProductionGrid({
                       // Giá trị hiển thị: ưu tiên thực tế, fallback định mức
                       const displayKg = hasActualData ? actualKg : benchmarkKg;
                       const hasAnyValue = displayKg > 0;
-                      const isBenchmarkFill = !hasActualData && benchmarkKg > 0 && !daysWithActualData.has(day); // ô giả định
+                      const isBenchmarkFill =
+                        !hasActualData &&
+                        benchmarkKg > 0 &&
+                        !daysWithActualData.has(day) &&
+                        day >= row.firstDay &&
+                        day <= row.lastDay; // ô giả định
 
                       if (isHoliday) {
                         return (

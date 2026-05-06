@@ -1,9 +1,11 @@
-Tôi hiểu rõ ý bạn. Logic đúng:
+Tôi thấy vấn đề. Máy con G37 số 1 chạy 2 mặt hàng:
 
-- **Ngày chưa có bất kỳ bản ghi SL nào** (chưa ai nhập cho bất kỳ máy/mặt hàng nào trong ngày đó) → điền định mức cho tất cả ô trong cột ngày đó
-- **Ngày đã có ít nhất 1 bản ghi SL** (dù chỉ 1 máy 1 mặt hàng) → cột ngày đó chỉ hiện dữ liệu thực tế, ô nào trống thì để trống, **không điền định mức**
+- **26/1 CVCm 60/40**: ngày 1-5 (có SL thực tế ngày 1-3, định mức ngày 4-5)
+- **40/1 CVCm 60/40**: ngày 4-5 (có SL thực tế ngày 4-5)
 
-Vì ngày đã nhập liệu = ngày đã xảy ra trong thực tế → ô trống là do máy đó không chạy mặt hàng đó trong ngày đó, không nên giả định bằng định mức.
+Ô ngày 4-5 dòng 26/1 CVCm **phải trống** vì máy đã đổi sang 40/1 CVCm. Nhưng hiện tại đang hiện định mức (1,110) và (530) ở những ô đó.
+
+Vấn đề: logic `daysWithActualData` chưa đủ — cần kết hợp thêm điều kiện **dòng nào thuộc khoảng ngày nào**.
 
 Đưa cho Claude Code:
 
@@ -11,60 +13,45 @@ Vì ngày đã nhập liệu = ngày đã xảy ra trong thực tế → ô tr�
 
 **File: `src/components/kdsx/ActualProductionGrid.tsx`**
 
-Thêm logic xác định ngày nào đã có dữ liệu thực tế. Tìm trước phần render `gridRows.map(...)`, thêm:
+Logic hiện tại điền định mức cho tất cả ngày chưa có data ở dòng đó. Nhưng khi máy đổi mặt hàng, dòng cũ phải **dừng** tại ngày cuối cùng có SL thực tế.
 
-```typescript
-// Xác định ngày nào đã có ít nhất 1 bản ghi SL thực tế
-const daysWithActualData = new Set<number>();
-for (const machineIdStr of Object.keys(grid)) {
-  const machineGrid = grid[parseInt(machineIdStr)];
-  for (const dayStr of Object.keys(machineGrid)) {
-    const day = parseInt(dayStr);
-    const dayData = machineGrid[day];
-    if (dayData && Object.values(dayData).some((kg) => kg > 0)) {
-      daysWithActualData.add(day);
-    }
-  }
-}
-```
-
-Sau đó sửa phần render ô ngày — chỉ điền định mức khi **ngày đó chưa có bất kỳ data nào**:
+Sửa điều kiện `isBenchmarkFill` — chỉ điền định mức khi ngày nằm trong khoảng `firstDay` đến `lastDay` của dòng đó VÀ ngày chưa có bất kỳ data nào:
 
 ```typescript
 // CŨ:
-const isBenchmarkFill = !hasActualData && benchmarkKg > 0;
-
-// MỚI:
 const isBenchmarkFill =
   !hasActualData && benchmarkKg > 0 && !daysWithActualData.has(day);
+
+// MỚI: chỉ điền định mức nếu:
+// 1. Ô này chưa có SL thực tế
+// 2. Có định mức benchmark
+// 3. Ngày này chưa có bất kỳ bản ghi SL nào (cả tháng)
+// 4. Ngày nằm trong khoảng firstDay-lastDay của dòng này
+const isBenchmarkFill =
+  !hasActualData &&
+  benchmarkKg > 0 &&
+  !daysWithActualData.has(day) &&
+  day >= row.firstDay &&
+  day <= row.lastDay;
 ```
 
-Sửa tương tự cho phần tính `rowTotal`:
+Sửa tương tự cho `rowTotal`:
 
 ```typescript
 // CŨ:
-rowTotal += actual > 0 ? actual : benchmarkKgForRow;
-
-// MỚI:
 rowTotal +=
   actual > 0 ? actual : daysWithActualData.has(day) ? 0 : benchmarkKgForRow;
-```
-
-Và `totalActualByDay`:
-
-```typescript
-// CŨ:
-total += actual > 0 ? actual : (resolvedBenchmarkMap[bmKey] ?? 0);
 
 // MỚI:
-total +=
+const inRange = day >= row.firstDay && day <= row.lastDay;
+rowTotal +=
   actual > 0
     ? actual
-    : daysWithActualData.has(day)
-      ? 0
-      : (resolvedBenchmarkMap[bmKey] ?? 0);
+    : !daysWithActualData.has(day) && inRange
+      ? benchmarkKgForRow
+      : 0;
 ```
 
-**Chỉ sửa 4 chỗ trong 1 file, không sửa gì khác.**
+---
 
-Cũng áp dụng logic tương tự trong `src/components/kdsx/ScheduleComparisonDashboard.tsx` nếu đang dùng cùng cách tính.
+Chỉ sửa 2 chỗ. Logic: ô chỉ được điền định mức khi nằm trong **khoảng ngày hoạt động** của dòng đó (`firstDay` đến `lastDay` — đã có sẵn trong `row`).
