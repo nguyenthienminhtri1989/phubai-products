@@ -20,6 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { username },
           include: {
             userProcesses: true,
+            userFactories: true, // Load danh sách nhà máy (nhiều)
             pagePermissions: {
               include: { page: { select: { pageKey: true } } },
             },
@@ -49,6 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           username: user.username,
           userRole: user.userRole,
           factoryId: user.factoryId,
+          factoryIds: user.userFactories.map((uf) => uf.factoryId), // Nhiều nhà máy
           processIds: user.userProcesses.map((up) => up.processId),
           fullName: user.fullName,
           pagePermissions: pagePerms,
@@ -65,6 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.username = (user as any).username;
         token.userRole = (user as any).userRole;
         token.factoryId = (user as any).factoryId;
+        token.factoryIds = (user as any).factoryIds; // Nhiều nhà máy
         token.processIds = (user as any).processIds;
         token.fullName = (user as any).fullName;
         token.pagePermissions = (user as any).pagePermissions;
@@ -99,6 +102,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).username = token.username;
         (session.user as any).userRole = token.userRole;
         (session.user as any).factoryId = token.factoryId;
+        (session.user as any).factoryIds = token.factoryIds; // Nhiều nhà máy
         (session.user as any).processIds = token.processIds;
         (session.user as any).fullName = token.fullName;
         (session.user as any).pagePermissions = token.pagePermissions;

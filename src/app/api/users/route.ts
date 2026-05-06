@@ -19,6 +19,7 @@ export async function GET() {
       include: {
         userProcesses: { include: { process: true } },
         factory: { select: { id: true, name: true } },
+        userFactories: { include: { factory: { select: { id: true, name: true } } } },
       },
     });
 
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { username, password, fullName, userRole, processIds, factoryId } = body;
+    const { username, password, fullName, userRole, processIds, factoryIds } = body;
 
     // Validate
     if (!username || !password || !fullName) {
@@ -64,6 +65,9 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
+    const fIds: number[] = Array.isArray(factoryIds) ? factoryIds.map(Number) : [];
+    // factoryId đầu tiên trong list (backward compat cho session)
+    const primaryFactoryId = fIds.length > 0 ? fIds[0] : null;
 
     const newUser = await prisma.user.create({
       data: {
@@ -71,10 +75,13 @@ export async function POST(req: Request) {
         password: hashedPassword,
         fullName,
         userRole: userRole || "VIEWER",
-        factoryId: factoryId ? parseInt(factoryId) : null,
+        factoryId: primaryFactoryId,
         isActive: true,
         userProcesses: {
           create: pIds.map((pid) => ({ processId: pid })),
+        },
+        userFactories: {
+          create: fIds.map((fid) => ({ factoryId: fid })),
         },
       },
     });
@@ -99,14 +106,17 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { id, isActive, userRole, processIds, newPassword, fullName, factoryId } = body;
+    const { id, isActive, userRole, processIds, newPassword, fullName, factoryIds } = body;
     const pIds: number[] = Array.isArray(processIds) ? processIds.map(Number) : [];
+    const fIds: number[] = Array.isArray(factoryIds) ? factoryIds.map(Number) : [];
+    // factoryId đầu tiên trong list (backward compat cho session)
+    const primaryFactoryId = fIds.length > 0 ? fIds[0] : null;
 
     const updateData: any = {
       isActive,
       userRole: userRole || "VIEWER",
       fullName,
-      factoryId: factoryId ? parseInt(factoryId) : null,
+      factoryId: primaryFactoryId,
     };
 
     if (newPassword && newPassword.trim() !== "") {
@@ -115,6 +125,7 @@ export async function PUT(req: Request) {
 
     // Xóa toàn bộ quan hệ cũ rồi tạo lại
     await prisma.userProcess.deleteMany({ where: { userId: parseInt(id) } });
+    await prisma.userFactory.deleteMany({ where: { userId: parseInt(id) } });
 
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(id) },
@@ -122,6 +133,9 @@ export async function PUT(req: Request) {
         ...updateData,
         userProcesses: {
           create: pIds.map((pid) => ({ processId: pid })),
+        },
+        userFactories: {
+          create: fIds.map((fid) => ({ factoryId: fid })),
         },
       },
     });

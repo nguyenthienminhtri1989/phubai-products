@@ -27,6 +27,7 @@ interface UserType {
   factoryId: number | null;
   factory: { id: number; name: string } | null;
   userProcesses: { processId: number; process: { name: string } }[];
+  userFactories: { factoryId: number; factory: { id: number; name: string } }[];
 }
 
 interface FactoryOption {
@@ -108,6 +109,8 @@ export default function UserManagementPage() {
         : { ...values, password: values.newPassword };
       // Đảm bảo processIds luôn là mảng
       if (!payload.processIds) payload.processIds = [];
+      // Đảm bảo factoryIds luôn là mảng
+      if (!payload.factoryIds) payload.factoryIds = [];
 
       const res = await fetch('/api/users', {
         method: method,
@@ -148,7 +151,7 @@ export default function UserManagementPage() {
     form.setFieldsValue({
       isActive: true,
       userRole: 'VIEWER',
-      factoryId: null,
+      factoryIds: [],
     });
     setIsModalOpen(true);
   };
@@ -158,12 +161,16 @@ export default function UserManagementPage() {
     setEditingUser(user);
     form.resetFields();
     setSelectedRole((user.userRole as UserRole) || "VIEWER");
+    // Lấy danh sách factoryIds từ userFactories (mới)
+    const fIds = user.userFactories && user.userFactories.length > 0
+      ? user.userFactories.map(uf => uf.factoryId)
+      : (user.factoryId ? [user.factoryId] : []);
     form.setFieldsValue({
       username: user.username,
       fullName: user.fullName,
       isActive: user.isActive,
       userRole: user.userRole || "VIEWER",
-      factoryId: user.factoryId,
+      factoryIds: fIds,
       processIds: user.userProcesses.map(up => up.processId),
       newPassword: ''
     });
@@ -191,8 +198,17 @@ export default function UserManagementPage() {
     },
     {
       title: 'Nhà máy',
-      render: (_: any, r: UserType) =>
-        r.factory ? <Tag color="blue">{r.factory.name}</Tag> : <span style={{ color: '#ccc' }}>—</span>
+      render: (_: any, r: UserType) => {
+        // Hiển thị nhiều nhà máy từ userFactories (pivot table)
+        if (r.userFactories && r.userFactories.length > 0) {
+          return r.userFactories.map(uf => (
+            <Tag key={uf.factoryId} color="blue">{uf.factory.name}</Tag>
+          ));
+        }
+        // Fallback cho dữ liệu cũ chưa migrate
+        if (r.factory) return <Tag color="blue">{r.factory.name}</Tag>;
+        return <span style={{ color: '#ccc' }}>—</span>;
+      }
     },
     {
       title: 'Công đoạn',
@@ -322,10 +338,10 @@ export default function UserManagementPage() {
             </Select>
           </Form.Item>
 
-          {/* FIELD: FACTORY — chỉ hiện khi role cần */}
+          {/* FIELD: FACTORY — chỉ hiện khi role cần, cho phép chọn nhiều */}
           {FACTORY_ROLES.includes(selectedRole) && (
-            <Form.Item name="factoryId" label="Gán nhà máy">
-              <Select allowClear placeholder="Chọn nhà máy...">
+            <Form.Item name="factoryIds" label="Gán nhà máy (có thể chọn nhiều)">
+              <Select mode="multiple" allowClear placeholder="Chọn nhà máy...">
                 {factories.map((f) => (
                   <Select.Option key={f.id} value={f.id}>{f.name}</Select.Option>
                 ))}

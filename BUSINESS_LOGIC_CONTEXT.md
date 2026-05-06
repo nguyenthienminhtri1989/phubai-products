@@ -2224,3 +2224,40 @@ src/app/api/kdsx/production-schedule/[id]/segments/[segmentId]/route.ts â€” thÃª
 - KhÃ´ng validate trÆ°á»ng há»£p 1 mÃ¡y cháº¡y quÃ¡ nhiá»u máº·t hÃ ng cÃ¹ng lÃºc (khÃ´ng giá»›i háº¡n sá»‘ lÆ°á»£ng máº·t hÃ ng trÃªn 1 mÃ¡y trong 1 ngÃ y)
 - Frontend khÃ´ng cáº§n thay Ä‘á»•i
 
+
+---
+
+## USER MANAGEMENT — Multi-Factory Assignment for STATISTICIAN
+
+**Status:** ? Completed 2026-05-06
+
+### What was built
+Thêm tính nãng gán nhi?u nhà máy cho User (ğ?c bi?t là role STATISTICIAN). Trı?c ğây m?i user ch? có th? gán 1 nhà máy qua actoryId. Bây gi? có b?ng pivot user_factories ğ? lıu quan h? nhi?u-nhi?u User <-> Factory.
+
+### Files created/modified
+`
+prisma/schema.prisma                            — Thêm model UserFactory + relation vào User và Factory
+prisma/migrations/20260506000001_.../           — Migration t?o b?ng user_factories
+src/app/api/users/route.ts                      — Thay factoryId b?ng factoryIds[], sync b?ng UserFactory
+src/app/users/page.tsx                          — Select multi-factory (mode="multiple"), hi?n th? nhi?u NM trong b?ng
+src/auth.ts                                     — Load factoryIds t? userFactories vào JWT token và session
+src/lib/permissions.ts                          — Thêm factoryIds vào PermUser, c?p nh?t canEditFactory cho STATISTICIAN
+`
+
+### Key business logic implemented
+- UserFactory là b?ng pivot nhi?u-nhi?u gi?a User và Factory, tıõng t? UserProcess
+- actoryId (single) trên b?ng users v?n ğı?c gi? nguyên (backward compat), luôn = actoryIds[0]
+- canEditFactory() cho STATISTICIAN: check actoryIds.includes(targetId) trı?c, fallback actoryId
+- Khi save user, xóa toàn b? userFactory c? r?i insert l?i (delete-and-recreate pattern gi?ng processIds)
+- actoryIds ğı?c bake vào JWT token và session, dùng ğı?c ? c? server-side API và client-side
+
+### API endpoints
+| Method | Path        | Description |
+|--------|-------------|-------------|
+| GET    | /api/users  | Tr? v? userFactories kèm factory info |
+| POST   | /api/users  | Nh?n actoryIds[], t?o UserFactory records |
+| PUT    | /api/users  | Nh?n actoryIds[], xóa c? và t?o l?i UserFactory records |
+
+### Known limitations
+- Token JWT không t? refresh khi admin thay ğ?i factoryIds c?a user ğang ğãng nh?p (c?n logout/login l?i ğ? c?p nh?t factoryIds trong session)
+- actoryId (single) trên b?ng users v?n ğı?c gi? ğ? tránh breaking change v?i các API khác ğang dùng tr?c ti?p

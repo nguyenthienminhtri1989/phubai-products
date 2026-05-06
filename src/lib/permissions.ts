@@ -36,6 +36,7 @@ export interface PagePerm {
 export interface PermUser {
   userRole: UserRole;
   factoryId?: number | null;
+  factoryIds?: number[];   // Danh sách nhà máy (STATISTICIAN có thể nhiều hơn 1)
   processIds?: number[];
   // PagePermission overrides (loaded from DB)
   pagePermissions?: { pageKey: string; canView: boolean; canEdit: boolean }[];
@@ -229,16 +230,22 @@ export function getRoleDefaultsForAllPages(
 /**
  * Kiểm tra user có quyền chỉnh sửa data của 1 nhà máy cụ thể.
  * - ADMIN: luôn true
- * - FACTORY_MANAGER, STATISTICIAN: chỉ NM được gán (factoryId)
+ * - FACTORY_MANAGER: chỉ NM được gán (factoryId)
+ * - STATISTICIAN: có thể nhiều NM — check factoryIds array trước, fallback factoryId
  * - DIRECTOR: phụ thuộc vào PagePermission (check page-level trước, data-level ở đây)
  */
 export function canEditFactory(user: PermUser, targetFactoryId: number): boolean {
   if (user.userRole === "ADMIN") return true;
   if (user.userRole === "DIRECTOR") return false; // Director mặc định không sửa, trừ khi có PagePermission
-  if (
-    user.userRole === "FACTORY_MANAGER" ||
-    user.userRole === "STATISTICIAN"
-  ) {
+  if (user.userRole === "FACTORY_MANAGER") {
+    return user.factoryId === targetFactoryId;
+  }
+  if (user.userRole === "STATISTICIAN") {
+    // Check factoryIds array trước (nhiều nhà máy)
+    if (user.factoryIds && user.factoryIds.length > 0) {
+      return user.factoryIds.includes(targetFactoryId);
+    }
+    // Fallback về factoryId đơn (backward compat)
     return user.factoryId === targetFactoryId;
   }
   // PROCESS_LEAD, TEAM_LEAD: dùng processIds, không check factoryId trực tiếp

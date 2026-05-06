@@ -51,7 +51,9 @@ model Factory {
   productionSchedules ProductionSchedule[]
 
   // Users assigned to this factory
-  users User[]
+  users         User[]
+  userFactories UserFactory[] // Pivot table cho phân quyền nhiều NM
+
 
   @@map("factories")
 }
@@ -245,6 +247,7 @@ model User {
 
   // --- PHẠM VI CÔNG VIỆC ---
   userProcesses   UserProcess[] // User thuộc các công đoạn nào?
+  userFactories   UserFactory[] // Gán nhiều nhà máy (cho STATISTICIAN)
   pagePermissions PagePermission[] // Quyền xem/sửa từng trang
 
   createdLogs   ProductionLog[] // Quan hệ: Ai nhập dòng này?
@@ -267,6 +270,18 @@ model UserProcess {
 
   @@id([userId, processId])
   @@map("user_processes")
+}
+
+// Bảng trung gian: User <-> Factory (nhiều-nhiều)
+// Dùng cho STATISTICIAN cần truy cập nhiều nhà máy
+model UserFactory {
+  userId    Int
+  factoryId Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factory   Factory @relation(fields: [factoryId], references: [id])
+
+  @@id([userId, factoryId])
+  @@map("user_factories")
 }
 
 // Bảng Danh mục Hạng mục bảo dưỡng (Maintenance Task)
