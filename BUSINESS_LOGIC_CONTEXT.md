@@ -2328,3 +2328,40 @@ src/app/kd-daily-input/page.tsx                                — Khi load, fet
 - Chưa kiểm tra overlap cọc giữa các assignments trong cùng máy
 - Trang daily-input/grid (sx.daily-input-grid) chưa hỗ trợ multi-item
 - Nút "Nhập 0 cho máy dừng" áp dụng cho cả row multi-item (mỗi mặt hàng riêng)
+
+---
+
+## KDSX — Production Schedule: Fix logic điền benchmark (Benchmark Fill Scope Fix)
+
+**Status:** ✅ Completed 2026-05-07
+
+### What was built
+
+Sửa lỗi logic điền định mức (benchmark fill) trên tab Thực hiện và So sánh KH/TH của màn hình Production Schedule. Trước đó, ô ngày hiển thị `benchmarkKg` cho tất cả các dòng của máy kể cả mặt hàng đã ngưng chạy — gây ra số liệu ảo. Sau fix, chỉ dòng cuối cùng (mặt hàng đang chạy hiện tại, `lastDay` lớn nhất) của mỗi máy mới được điền benchmark vào các ngày tương lai.
+
+### Files created/modified
+
+```
+src/components/kdsx/ActualProductionGrid.tsx                          — thêm Map lastRowPerMachine, sửa isBenchmarkFill / rowTotal / totalActualByDay
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — thêm lastComboPerMachine, sửa actualSummaryByItem
+src/components/kdsx/ScheduleComparisonDashboard.tsx                   — thêm lastComboPerMachine, sửa thByItem và thCumul (lineData)
+```
+
+### Key business logic implemented
+
+- **lastRowPerMachine / lastComboPerMachine**: Map `machineId → rowKey (hoặc combo)` lưu dòng có `lastDay` lớn nhất cho từng máy. Tính một lần trước vòng lặp render.
+- **isBenchmarkFill** (ActualProductionGrid): chỉ `true` khi `!hasActualData && benchmarkKg > 0 && !daysWithActualData.has(day) && day > row.lastDay && isLastRowOfMachine`.
+- **Điều kiện benchmark fill chung**: `bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay && isLastCombo` — loại bỏ điều kiện `day >= firstDay` (không cần thiết khi đã check `isLastCombo`).
+- Các dòng mặt hàng đã ngưng (không phải dòng cuối của máy) → để trống sau `lastDay`, không điền benchmark.
+
+### API endpoints
+
+Không có endpoint mới — chỉ sửa logic tính toán frontend.
+
+### Known limitations / not yet implemented
+
+- Nếu 2 mặt hàng trên cùng máy có cùng `lastDay` lớn nhất, chỉ 1 trong 2 được chọn làm "last row" (theo thứ tự duyệt Set/Map). Trường hợp này hiếm gặp trong thực tế.
+
+### Data notes
+
+- Không thay đổi schema hay dữ liệu.

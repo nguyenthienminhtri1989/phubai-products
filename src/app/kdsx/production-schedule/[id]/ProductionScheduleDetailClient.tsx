@@ -288,31 +288,13 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     }
   }
 
-  // Xác định combo (machineId-itemId) có lastDay lớn nhất cho mỗi máy
-  const lastComboPerMachine = new Map<number, { itemId: number; lastDay: number }>();
-  for (const mid of Object.keys(actualGrid).map(Number)) {
-    const machineGrid = actualGrid[mid] ?? {};
-    for (const itemId of allItemIds) {
-      let lastDay = 0;
-      for (const dayStr of Object.keys(machineGrid)) {
-        const d = parseInt(dayStr);
-        if ((machineGrid[d]?.[itemId] ?? 0) > 0 && d > lastDay) lastDay = d;
-      }
-      if (lastDay > 0) {
-        const existing = lastComboPerMachine.get(mid);
-        if (!existing || lastDay > existing.lastDay) {
-          lastComboPerMachine.set(mid, { itemId, lastDay });
-        }
-      }
-    }
-  }
-
   const actualSummaryByItem = allItemIds.map(itemId => {
-    // find which machines involve this item
     const machineIds = Array.from(new Set(
       schedule.segments.filter(s => s.itemId === itemId).map(s => s.machineId)
     ));
-    let totalActualKg = 0;
+    let totalActualKg = 0;     // CHỈ sản lượng thực tế
+    let totalProjectedKg = 0;  // Thực tế + giả định (benchmark fill)
+
     for (const machineId of machineIds) {
       const machineGrid = actualGrid[machineId] ?? {};
       const bmKey = `${machineId}-${itemId}`;
@@ -321,27 +303,42 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       let lastDay = 0;
       for (const dayStr of Object.keys(machineGrid)) {
         const day = parseInt(dayStr);
-        if ((machineGrid[day]?.[itemId] ?? 0) > 0) {
-          if (day > lastDay) lastDay = day;
-        }
+        if ((machineGrid[day]?.[itemId] ?? 0) > 0 && day > lastDay) lastDay = day;
       }
 
-      const isLastCombo = lastComboPerMachine.get(machineId)?.itemId === itemId;
+      // Tìm maxLastDay của tất cả item trên máy này để xác định dòng cuối
+      let maxLastDayOfMachine = 0;
+      for (const iid of allItemIds) {
+        for (const dayStr of Object.keys(machineGrid)) {
+          const d = parseInt(dayStr);
+          if ((machineGrid[d]?.[iid] ?? 0) > 0 && d > maxLastDayOfMachine) maxLastDayOfMachine = d;
+        }
+      }
+      const isLastItemOfMachine = lastDay > 0 && lastDay === maxLastDayOfMachine;
 
       for (let day = filterFrom; day <= filterTo; day++) {
         if (holidayArr.includes(day)) continue;
         const actual = machineGrid[day]?.[itemId] ?? 0;
         if (actual > 0) {
           totalActualKg += actual;
-        } else if (bmKg > 0 && !daysWithActualDataGlobal.has(day) && lastDay > 0 && day > lastDay && isLastCombo) {
-          totalActualKg += bmKg;
+          totalProjectedKg += actual;
+        } else if (bmKg > 0 && !daysWithActualDataGlobal.has(day) && lastDay > 0 && day > lastDay && isLastItemOfMachine) {
+          totalProjectedKg += bmKg; // chỉ cộng vào giả định
         }
       }
     }
-    return { itemId, itemName: itemMap.get(itemId) ?? `Item ${itemId}`, totalActualKg, totalActualTons: totalActualKg / 1000 };
-  }).filter(a => a.totalActualKg > 0 || actualGridLoaded);
+    return {
+      itemId,
+      itemName: itemMap.get(itemId) ?? `Item ${itemId}`,
+      totalActualKg,
+      totalProjectedKg,
+      totalActualTons: totalActualKg / 1000,
+      totalProjectedTons: totalProjectedKg / 1000,
+    };
+  }).filter(a => a.totalActualKg > 0 || a.totalProjectedKg > 0 || actualGridLoaded);
 
   const grandActualTotal = actualSummaryByItem.reduce((s, a) => s + a.totalActualKg, 0);
+  const grandProjectedTotal = actualSummaryByItem.reduce((s, a) => s + a.totalProjectedKg, 0);
   const isFullMonth = filterFrom === 1 && filterTo === totalDays;
 
   const thStyle: React.CSSProperties = {
@@ -792,6 +789,92 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                       </div>
                     </>
                   ) : <Spin size="small" />}
+                </div>
+              </div>
+
+              {/* ---- Row: GIẢ ĐỊNH (Actual + Benchmark fill) ---- */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "stretch" }}>
+                <div style={{
+                  ...rowLabelStyle,
+                  background: "#f0f0f0", border: "1px solid #d9d9d9",
+                  borderRadius: 6, color: "#595959", padding: "4px 8px",
+                  justifyContent: "center", textAlign: "center",
+                  fontStyle: "italic",
+                }}>
+                  🔮 GIẢ ĐỊNH
+                </div>
+                {allColIds.map(itemId => {
+                  const act = actualMap.get(itemId);
+                  return (
+                    <div key={itemId} style={{ ...colStyle(itemId), textAlign: "center", opacity: 0.8 }}>
+                      {!actualGridLoaded ? (
+                        <Spin size="small" />
+                      ) : act && act.totalProjectedKg > 0 ? (
+                        <>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#595959", fontStyle: "italic" }}>
+                            {act.totalProjectedTons.toFixed(2)} tấn
+                          </div>
+                          <div style={{ fontSize: 10, color: "#888" }}>
+                            {act.totalProjectedKg.toLocaleString()} kg
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ color: "#ccc", fontSize: 12 }}>—</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ ...totalColStyle, background: "#434343", textAlign: "center" }}>
+                  {actualGridLoaded ? (
+                    <>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: "#d9d9d9", fontStyle: "italic" }}>
+                        {(grandProjectedTotal / 1000).toFixed(2)} tấn
+                      </div>
+                      <div style={{ fontSize: 10, color: "#aaa" }}>
+                        {grandProjectedTotal.toLocaleString()} kg
+                      </div>
+                    </>
+                  ) : <Spin size="small" />}
+                </div>
+              </div>
+
+              {/* ---- Row: % GĐ/KH ---- */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "stretch" }}>
+                <div style={{
+                  ...rowLabelStyle,
+                  background: "#f5f5f5", border: "1px solid #e8e8e8",
+                  borderRadius: 6, color: "#888", padding: "4px 8px",
+                  justifyContent: "center", textAlign: "center",
+                  fontStyle: "italic", fontSize: 10,
+                }}>
+                  % GĐ/KH
+                </div>
+                {allColIds.map(itemId => {
+                  const plan = planMap.get(itemId);
+                  const act = actualMap.get(itemId);
+                  const planKg = plan?.totalKg ?? 0;
+                  const projKg = act?.totalProjectedKg ?? 0;
+                  const ratio = planKg > 0 ? (projKg / planKg) * 100 : null;
+                  const badge = ratioBadge(ratio);
+                  return (
+                    <div key={itemId} style={{
+                      ...colStyle(itemId), textAlign: "center", opacity: 0.8,
+                      background: ratio === null ? "#fafafa" : ratio >= 100 ? "#f6ffed" : ratio >= 90 ? "#fffbe6" : "#fff1f0",
+                      border: `1px dashed ${ratio === null ? "#e8e8e8" : ratio >= 100 ? "#b7eb8f" : ratio >= 90 ? "#ffe58f" : "#ffa39e"}`,
+                    }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: badge.color, fontStyle: "italic" }}>
+                        {badge.label}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{
+                  ...totalColStyle,
+                  background: "#2a2a2a", textAlign: "center",
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: ratioBadge(grandPlanKg > 0 ? grandProjectedTotal / grandPlanKg * 100 : null).color }}>
+                    {ratioBadge(grandPlanKg > 0 ? grandProjectedTotal / grandPlanKg * 100 : null).label}
+                  </div>
                 </div>
               </div>
 

@@ -212,6 +212,13 @@ src/components/kdsx/ScheduleComparisonDashboard.tsx — Bar+Line+Table [MỚI]
 src/app/api/kdsx/production-schedule/[id]/actual/route.ts [MỚI]
 ```
 
+### Quy tắc benchmark fill (2026-05-07)
+
+- Chỉ **dòng cuối cùng** của mỗi máy (combo có `lastDay` lớn nhất) mới được điền benchmark vào ngày tương lai.
+- Các dòng mặt hàng đã ngưng → trống sau `lastDay` của chúng.
+- Điều kiện: `bmKg > 0 && !daysWithActualData.has(day) && day > lastDay && isLastCombo`
+- Map `lastRowPerMachine` / `lastComboPerMachine` được tính một lần trước vòng lặp render trong cả 3 file liên quan.
+
 ---
 
 ## File quan trọng trong project
