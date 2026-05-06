@@ -132,19 +132,31 @@ export default function ScheduleComparisonDashboard({
     comboRange[combo] = { firstDay, lastDay };
   }
 
+  // Xác định combo cuối (lastDay lớn nhất) của mỗi máy
+  const lastComboPerMachine = new Map<number, string>(); // machineId → combo key
+  for (const combo of rowCombos) {
+    const [machineIdStr] = combo.split("-");
+    const machineId = parseInt(machineIdStr);
+    const existing = lastComboPerMachine.get(machineId);
+    if (!existing || comboRange[combo].lastDay > comboRange[existing].lastDay) {
+      lastComboPerMachine.set(machineId, combo);
+    }
+  }
+
   for (const combo of rowCombos) {
     const [machineIdStr, itemIdStr] = combo.split("-");
     const machineId = parseInt(machineIdStr);
     const itemId = parseInt(itemIdStr);
     const bmKg = benchmarkMap[combo] ?? 0;
     const range = comboRange[combo];
+    const isLastCombo = lastComboPerMachine.get(machineId) === combo;
 
     for (let day = 1; day <= totalDays; day++) {
       if (holidays.includes(day)) continue;
       const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
       if (actual > 0) {
         thByItem[itemId] = (thByItem[itemId] ?? 0) + actual;
-      } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day >= range.firstDay && day > range.lastDay) {
+      } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day > range.lastDay && isLastCombo) {
         thByItem[itemId] = (thByItem[itemId] ?? 0) + bmKg;
       }
     }
@@ -183,9 +195,10 @@ export default function ScheduleComparisonDashboard({
         const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
         const bmKg = benchmarkMap[combo] ?? 0;
         const range = comboRange[combo];
+        const isLastComboLine = lastComboPerMachine.get(machineId) === combo;
         if (actual > 0) {
           thCumul += actual;
-        } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day >= range.firstDay && day > range.lastDay) {
+        } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day > range.lastDay && isLastComboLine) {
           thCumul += bmKg;
         }
       }

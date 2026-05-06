@@ -167,6 +167,21 @@ export default function ActualProductionGrid({
     a.machineId !== b.machineId ? a.machineId - b.machineId : a.firstDay - b.firstDay
   );
 
+  // Xác định dòng cuối cùng (lastDay lớn nhất) của mỗi máy — chỉ dòng này mới điền benchmark
+  const lastRowPerMachine = new Map<number, string>(); // machineId → rowKey
+  for (const row of gridRows) {
+    const key = `${row.machineId}-${row.itemId}`;
+    const existingKey = lastRowPerMachine.get(row.machineId);
+    if (!existingKey) {
+      lastRowPerMachine.set(row.machineId, key);
+    } else {
+      const existingRow = gridRows.find(r => `${r.machineId}-${r.itemId}` === existingKey)!;
+      if (row.lastDay > existingRow.lastDay) {
+        lastRowPerMachine.set(row.machineId, key);
+      }
+    }
+  }
+
   // Xác định ngày nào đã có ít nhất 1 bản ghi SL thực tế
   const daysWithActualData = new Set<number>();
   for (const machineIdStr of Object.keys(grid)) {
@@ -195,10 +210,11 @@ export default function ActualProductionGrid({
       const actual = grid[row.machineId]?.[day]?.[row.itemId] ?? 0;
       const bmKey = `${row.machineId}-${row.itemId}`;
       const bmKg = resolvedBenchmarkMap[bmKey] ?? 0;
+      const isLastRow = lastRowPerMachine.get(row.machineId) === `${row.machineId}-${row.itemId}`;
       total +=
         actual > 0
           ? actual
-          : !daysWithActualData.has(day) && day > row.lastDay
+          : !daysWithActualData.has(day) && day > row.lastDay && isLastRow
             ? bmKg
             : 0;
     }
@@ -268,13 +284,14 @@ export default function ActualProductionGrid({
                 // Tổng TH của dòng này — chỉ cộng định mức cho ngày chưa có data nào
                 const bmKey = `${row.machineId}-${row.itemId}`;
                 const benchmarkKgForRow = resolvedBenchmarkMap[bmKey] ?? 0;
+                const isLastRowOfMachine = lastRowPerMachine.get(row.machineId) === rowKey;
                 let rowTotal = 0;
                 for (const day of dayNumbers) {
                   if (holidays.includes(day)) continue;
                   const actual = machineGrid[day]?.[row.itemId] ?? 0;
                   rowTotal += actual > 0
                     ? actual
-                    : !daysWithActualData.has(day) && day > row.lastDay
+                    : !daysWithActualData.has(day) && day > row.lastDay && isLastRowOfMachine
                       ? benchmarkKgForRow
                       : 0;
                 }
@@ -322,8 +339,8 @@ export default function ActualProductionGrid({
                         !hasActualData &&
                         benchmarkKg > 0 &&
                         !daysWithActualData.has(day) &&
-                        day >= row.firstDay &&
-                        day > row.lastDay;
+                        day > row.lastDay &&
+                        isLastRowOfMachine;
                       const displayKg = hasActualData ? actualKg : isBenchmarkFill ? benchmarkKg : 0;
                       const hasAnyValue = displayKg > 0;
 

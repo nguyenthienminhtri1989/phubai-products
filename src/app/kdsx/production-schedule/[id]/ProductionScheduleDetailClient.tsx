@@ -288,6 +288,25 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     }
   }
 
+  // Xác định combo (machineId-itemId) có lastDay lớn nhất cho mỗi máy
+  const lastComboPerMachine = new Map<number, { itemId: number; lastDay: number }>();
+  for (const mid of Object.keys(actualGrid).map(Number)) {
+    const machineGrid = actualGrid[mid] ?? {};
+    for (const itemId of allItemIds) {
+      let lastDay = 0;
+      for (const dayStr of Object.keys(machineGrid)) {
+        const d = parseInt(dayStr);
+        if ((machineGrid[d]?.[itemId] ?? 0) > 0 && d > lastDay) lastDay = d;
+      }
+      if (lastDay > 0) {
+        const existing = lastComboPerMachine.get(mid);
+        if (!existing || lastDay > existing.lastDay) {
+          lastComboPerMachine.set(mid, { itemId, lastDay });
+        }
+      }
+    }
+  }
+
   const actualSummaryByItem = allItemIds.map(itemId => {
     // find which machines involve this item
     const machineIds = Array.from(new Set(
@@ -299,7 +318,6 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
       const bmKey = `${machineId}-${itemId}`;
       const bmKg = actualBenchmarkMap[bmKey] ?? 0;
 
-      // Tìm firstDay/lastDay của combo này từ grid data
       let lastDay = 0;
       for (const dayStr of Object.keys(machineGrid)) {
         const day = parseInt(dayStr);
@@ -308,13 +326,14 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         }
       }
 
+      const isLastCombo = lastComboPerMachine.get(machineId)?.itemId === itemId;
+
       for (let day = filterFrom; day <= filterTo; day++) {
         if (holidayArr.includes(day)) continue;
         const actual = machineGrid[day]?.[itemId] ?? 0;
         if (actual > 0) {
           totalActualKg += actual;
-        } else if (bmKg > 0 && !daysWithActualDataGlobal.has(day) && lastDay > 0 && day > lastDay) {
-          // Điền benchmark chỉ sau lastDay và khi cột ngày chưa có data
+        } else if (bmKg > 0 && !daysWithActualDataGlobal.has(day) && lastDay > 0 && day > lastDay && isLastCombo) {
           totalActualKg += bmKg;
         }
       }
