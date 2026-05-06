@@ -120,13 +120,23 @@ export default function ScheduleComparisonDashboard({
     const itemId = parseInt(itemIdStr);
     const bmKg = benchmarkMap[combo] ?? 0;
 
+    // Tính lastDay của combo này từ grid data
+    const machineGrid = grid[machineId] ?? {};
+    let lastDay = 0;
+    for (const dayStr of Object.keys(machineGrid)) {
+      const day = parseInt(dayStr);
+      if ((machineGrid[day]?.[itemId] ?? 0) > 0) {
+        if (day > lastDay) lastDay = day;
+      }
+    }
+
     for (let day = 1; day <= totalDays; day++) {
       if (holidays.includes(day)) continue;
       const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-      // Chỉ cộng định mức nếu ngày chưa có bất kỳ data thực tế nào
-      const value = actual > 0 ? actual : daysWithActualData.has(day) ? 0 : bmKg;
-      if (value > 0) {
-        thByItem[itemId] = (thByItem[itemId] ?? 0) + value;
+      if (actual > 0) {
+        thByItem[itemId] = (thByItem[itemId] ?? 0) + actual;
+      } else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
+        thByItem[itemId] = (thByItem[itemId] ?? 0) + bmKg;
       }
     }
   }
@@ -157,12 +167,23 @@ export default function ScheduleComparisonDashboard({
     }
     // TH ngày này
     if (!holidays.includes(day)) {
-      for (const machineId in grid) {
-        const dayData = grid[Number(machineId)]?.[day];
-        if (dayData) {
-          for (const kg of Object.values(dayData)) {
-            thCumul += kg;
-          }
+      for (const combo of rowCombos) {
+        const [machineIdStr, itemIdStr] = combo.split("-");
+        const machineId = parseInt(machineIdStr);
+        const itemId = parseInt(itemIdStr);
+        const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
+        const bmKg = benchmarkMap[combo] ?? 0;
+        // Tính lastDay của combo từ grid
+        const machineGrid = grid[machineId] ?? {};
+        let lastDay = 0;
+        for (const ds of Object.keys(machineGrid)) {
+          const d = parseInt(ds);
+          if ((machineGrid[d]?.[itemId] ?? 0) > 0 && d > lastDay) lastDay = d;
+        }
+        if (actual > 0) {
+          thCumul += actual;
+        } else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
+          thCumul += bmKg;
         }
       }
     }

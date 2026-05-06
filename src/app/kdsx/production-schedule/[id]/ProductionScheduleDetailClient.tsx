@@ -276,6 +276,18 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const itemMap = new Map(schedule.segments.map(s => [s.itemId, s.item.name]));
 
   // For each item, sum actual kg from grid within [filterFrom, filterTo]
+  // Xác định ngày nào đã có data thực tế (toàn bộ grid)
+  const daysWithActualDataGlobal = new Set<number>();
+  for (const mid of Object.keys(actualGrid).map(Number)) {
+    for (const dayStr of Object.keys(actualGrid[mid] ?? {})) {
+      const day = parseInt(dayStr);
+      const dayData = actualGrid[mid][day];
+      if (dayData && Object.values(dayData).some((kg) => kg > 0)) {
+        daysWithActualDataGlobal.add(day);
+      }
+    }
+  }
+
   const actualSummaryByItem = allItemIds.map(itemId => {
     // find which machines involve this item
     const machineIds = Array.from(new Set(
@@ -284,11 +296,27 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     let totalActualKg = 0;
     for (const machineId of machineIds) {
       const machineGrid = actualGrid[machineId] ?? {};
+      const bmKey = `${machineId}-${itemId}`;
+      const bmKg = actualBenchmarkMap[bmKey] ?? 0;
+
+      // Tìm firstDay/lastDay của combo này từ grid data
+      let lastDay = 0;
+      for (const dayStr of Object.keys(machineGrid)) {
+        const day = parseInt(dayStr);
+        if ((machineGrid[day]?.[itemId] ?? 0) > 0) {
+          if (day > lastDay) lastDay = day;
+        }
+      }
+
       for (let day = filterFrom; day <= filterTo; day++) {
         if (holidayArr.includes(day)) continue;
-        const dayData = machineGrid[day];
-        // Cấu trúc mới: dayData = { [itemId]: kg }
-        if (dayData && dayData[itemId] !== undefined) totalActualKg += dayData[itemId];
+        const actual = machineGrid[day]?.[itemId] ?? 0;
+        if (actual > 0) {
+          totalActualKg += actual;
+        } else if (bmKg > 0 && !daysWithActualDataGlobal.has(day) && lastDay > 0 && day > lastDay) {
+          // Điền benchmark chỉ sau lastDay và khi cột ngày chưa có data
+          totalActualKg += bmKg;
+        }
       }
     }
     return { itemId, itemName: itemMap.get(itemId) ?? `Item ${itemId}`, totalActualKg, totalActualTons: totalActualKg / 1000 };
