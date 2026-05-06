@@ -187,19 +187,20 @@ export default function ActualProductionGrid({
     machineRowSpan[row.machineId] = (machineRowSpan[row.machineId] ?? 0) + 1;
   }
 
-  // Hàng TỔNG/NGÀY — chỉ cộng định mức cho ngày chưa có bất kỳ data nào
+  // Hàng TỔNG/NGÀY — chỉ cộng định mức sau ngày cuối có SL thực tế của từng dòng
   const totalActualByDay = dayNumbers.map((day) => {
     if (holidays.includes(day)) return 0;
     let total = 0;
     for (const row of gridRows) {
       const actual = grid[row.machineId]?.[day]?.[row.itemId] ?? 0;
-      if (actual > 0) {
-        total += actual;
-      } else {
-        // Chỉ cộng định mức nếu ngày đó chưa có bất kỳ bản ghi nào
-        const bmKey = `${row.machineId}-${row.itemId}`;
-        total += daysWithActualData.has(day) ? 0 : (resolvedBenchmarkMap[bmKey] ?? 0);
-      }
+      const bmKey = `${row.machineId}-${row.itemId}`;
+      const bmKg = resolvedBenchmarkMap[bmKey] ?? 0;
+      total +=
+        actual > 0
+          ? actual
+          : !daysWithActualData.has(day) && day > row.lastDay
+            ? bmKg
+            : 0;
     }
     return total;
   });
@@ -271,10 +272,9 @@ export default function ActualProductionGrid({
                 for (const day of dayNumbers) {
                   if (holidays.includes(day)) continue;
                   const actual = machineGrid[day]?.[row.itemId] ?? 0;
-                  const inRange = day >= row.firstDay && day <= row.lastDay;
                   rowTotal += actual > 0
                     ? actual
-                    : !daysWithActualData.has(day) && inRange
+                    : !daysWithActualData.has(day) && day > row.lastDay
                       ? benchmarkKgForRow
                       : 0;
                 }
@@ -325,8 +325,7 @@ export default function ActualProductionGrid({
                         !hasActualData &&
                         benchmarkKg > 0 &&
                         !daysWithActualData.has(day) &&
-                        day >= row.firstDay &&
-                        day <= row.lastDay; // ô giả định
+                        day > row.lastDay; // định mức tương lai (sau ngày cuối có SL thực tế)
 
                       if (isHoliday) {
                         return (
