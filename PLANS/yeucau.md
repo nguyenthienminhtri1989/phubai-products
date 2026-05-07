@@ -1,91 +1,102 @@
-**File: `src/components/kdsx/ActualProductionGrid.tsx`**
+**File: `src/app/production/daily-input-grid/page.tsx`**
 
-Tìm phần render ô ngày (trong `dayNumbers.map(day => {`), sửa logic `displayKg` và `hasAnyValue`:
+Đọc thêm file `src/app/api/machines/[id]/assignments/route.ts` để biết API assignments.
+
+**Cần sửa:**
+
+### 1. Thêm interface + state
 
 ```typescript
-// CŨ:
-const displayKg = hasActualData ? actualKg : benchmarkKg;
-const hasAnyValue = displayKg > 0;
-const isBenchmarkFill =
-  !hasActualData &&
-  benchmarkKg > 0 &&
-  !daysWithActualData.has(day) &&
-  day > row.lastDay;
+// Thêm vào interface MachineStatus:
+allowMultiItemPerShift?: boolean;
 
-// MỚI:
-const isBenchmarkFill =
-  !hasActualData &&
-  benchmarkKg > 0 &&
-  !daysWithActualData.has(day) &&
-  day >= row.firstDay &&
-  day > row.lastDay;
-
-// displayKg: chỉ hiện benchmark khi isBenchmarkFill = true
-const displayKg = hasActualData ? actualKg : isBenchmarkFill ? benchmarkKg : 0;
-const hasAnyValue = displayKg > 0;
+// Thêm state:
+const [machineAssignments, setMachineAssignments] = useState<Record<number, any[]>>({});
 ```
 
-Chỉ sửa 3 dòng này. Logic: `displayKg` = 0 (trống) khi ô không có data thực tế VÀ không phải ô benchmark tương lai. Chỉ hiện benchmark khi `isBenchmarkFill = true`.
-
----
-
-**File: `src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx`**
-
-Phần `actualSummaryByItem` đã sửa đúng logic `day > lastDay` — giữ nguyên.
-
-**File: `src/components/kdsx/ScheduleComparisonDashboard.tsx`**
-
-Cần thêm điều kiện `day >= range.firstDay` vào logic tính `thByItem`. Tìm dòng:
+### 2. Trong `handleLoad` — sau khi fetch machines, fetch assignments cho máy multi-item
 
 ```typescript
-} else if (bmKg > 0 && !daysWithActualData.has(day) && lastDay > 0 && day > lastDay) {
-```
-
-Sửa thành:
-
-```typescript
-} else if (bmKg > 0 && !daysWithActualData.has(day) && day >= range.firstDay && day > range.lastDay) {
-```
-
-Trong đó `range` cần được tính trước cho mỗi combo giống như đã mô tả ở các prompt trước. Nếu `ScheduleComparisonDashboard` chưa có `comboRange`, thêm:
-
-```typescript
-// Trước vòng lặp tính thByItem:
-const comboRange: Record<string, { firstDay: number; lastDay: number }> = {};
-for (const combo of rowCombos) {
-  const [machineIdStr, itemIdStr] = combo.split("-");
-  const machineId = parseInt(machineIdStr);
-  const itemId = parseInt(itemIdStr);
-  let firstDay = totalDays + 1,
-    lastDay = 0;
-  const mg = grid[machineId] ?? {};
-  for (const dayStr of Object.keys(mg)) {
-    const d = parseInt(dayStr);
-    if ((mg[d]?.[itemId] ?? 0) > 0) {
-      if (d < firstDay) firstDay = d;
-      if (d > lastDay) lastDay = d;
-    }
+// Sau dòng: const machines: MachineStatus[] = await statusRes.json();
+// Fetch assignments cho máy multi-item
+const assignmentMap: Record<number, any[]> = {};
+for (const m of machines) {
+  if ((m as any).allowMultiItemPerShift) {
+    try {
+      const aRes = await fetch(`/api/machines/${m.id}/assignments`);
+      if (aRes.ok) assignmentMap[m.id] = await aRes.json();
+    } catch {}
   }
-  comboRange[combo] = { firstDay, lastDay };
+}
+setMachineAssignments(assignmentMap);
+```
+
+### 3. Trong phần build rows — xử lý máy multi-item
+
+```typescript
+machines.forEach((m) => {
+  const logs: ProductionLogEntry[] =
+    m.todayLogs ?? (m.todayLog ? [m.todayLog] : []);
+  const assignments = assignmentMap[m.id];
+
+  // Máy multi-item: tạo 1 row per assignment
+  if (
+    (m as any).allowMultiItemPerShift &&
+    assignments &&
+    assignments.length > 0
+  ) {
+    for (const a of assignments) {
+      // Tìm log đã có cho assignment này
+      const existingLog = logs.find((l) => l.itemId === a.itemId);
+      newRows.push({
+        machineId: m.id,
+        machineName: m.name,
+        formulaType: 1, // nhập kg trực tiếp cho máy ống
+        spindleCount: m.spindleCount || 1,
+        itemId: a.item.id,
+        itemName: `${a.item.name}${a.fromSpindle ? ` (cọc ${a.fromSpindle}-${a.toSpindle})` : ""}`,
+        originalItemId: a.item.id,
+        startIndex: 0,
+        endIndex: existingLog?.endIndex ?? null,
+        inputNE: 0,
+        isStopped: existingLog?.note === "Máy dừng",
+        efficiency: existingLog?.efficiency ?? null,
+        note: existingLog?.note ?? "",
+        isDirty: false,
+        existingLogId: existingLog?.id,
+        rowKey: genKey(),
+        isSubRow: assignments.indexOf(a) > 0,
+      });
+    }
+    return; // skip logic thường
+  }
+
+  // Logic hiện tại cho máy thường (giữ nguyên)
+  // ...
+});
+```
+
+### 4. Trong `handleSave` — máy multi-item gửi itemId từ assignment
+
+Không cần sửa gì đặc biệt vì mỗi row đã có `itemId` đúng từ assignment. Logic save hiện tại gửi `r.itemId` → đúng.
+
+### 5. Ẩn nút "+" (thêm sub-row đổi MH) cho máy multi-item
+
+Trong cột cuối (nút +), thêm điều kiện:
+
+```typescript
+// Chỉ hiện nút + cho máy thường, không hiện cho multi-item
+if (!r.isSubRow && !machineAssignments[r.machineId]) {
+  // hiện nút + như hiện tại
 }
 ```
 
-Rồi trong vòng lặp:
+### 6. API daily-status cần trả thêm `allowMultiItemPerShift`
 
-```typescript
-const range = comboRange[combo];
-const value =
-  actual > 0
-    ? actual
-    : bmKg > 0 &&
-        !daysWithActualData.has(day) &&
-        range.lastDay > 0 &&
-        day >= range.firstDay &&
-        day > range.lastDay
-      ? bmKg
-      : 0;
-```
+File: `src/app/api/production/daily-status/route.ts`
+
+Trong query machines, thêm `allowMultiItemPerShift: true` vào select.
 
 ---
 
-Tóm tắt: lỗi gốc là `displayKg = benchmarkKg` kể cả khi ô không thuộc phạm vi benchmark. Sửa bằng cách chỉ gán `displayKg = benchmarkKg` khi `isBenchmarkFill = true`.
+Tóm tắt: trang grid desktop cần cùng logic với mobile — máy multi-item fetch assignments → tạo N rows thay vì 1. Sửa 2 files: `daily-input-grid/page.tsx` + `daily-status/route.ts`.

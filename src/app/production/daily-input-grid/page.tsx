@@ -78,6 +78,15 @@ interface ProductionLogEntry {
   item?: { id: number; name: string } | null;
 }
 
+interface MachineAssignment {
+  id: number;
+  machineId: number;
+  itemId: number;
+  fromSpindle?: number | null;
+  toSpindle?: number | null;
+  item: { id: number; name: string };
+}
+
 interface MachineStatus {
   id: number;
   name: string;
@@ -87,6 +96,7 @@ interface MachineStatus {
   currentItem?: { id: number; name: string } | null;
   todayLog: ProductionLogEntry | null;
   todayLogs: ProductionLogEntry[];
+  allowMultiItemPerShift?: boolean;
 }
 
 interface SessionUser {
@@ -144,6 +154,7 @@ export default function DailyInputGridPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
+  const [machineAssignments, setMachineAssignments] = useState<Record<number, MachineAssignment[]>>({});
 
   // Phân quyền
   const su = session?.user as SessionUser | undefined;
@@ -208,6 +219,18 @@ export default function DailyInputGridPage() {
       if (!statusRes.ok) throw new Error("Lỗi tải danh sách máy");
       const machines: MachineStatus[] = await statusRes.json();
 
+      // Fetch assignments cho máy multi-item
+      const assignmentMap: Record<number, MachineAssignment[]> = {};
+      for (const m of machines) {
+        if (m.allowMultiItemPerShift) {
+          try {
+            const aRes = await fetch(`/api/machines/${m.id}/assignments`);
+            if (aRes.ok) assignmentMap[m.id] = await aRes.json();
+          } catch {}
+        }
+      }
+      setMachineAssignments(assignmentMap);
+
       // Với mỗi máy chưa có log → tải last-log để lấy startIndex
       const machinesNeedingLastLog = machines.filter(m => !m.todayLog);
       const lastLogResults = await Promise.all(
@@ -227,7 +250,37 @@ export default function DailyInputGridPage() {
       const newRows: RowData[] = [];
       machines.forEach(m => {
         const logs: ProductionLogEntry[] = m.todayLogs ?? (m.todayLog ? [m.todayLog] : []);
+        const assignments = assignmentMap[m.id];
 
+        // Máy multi-item: tạo 1 row per assignment
+        if (m.allowMultiItemPerShift && assignments && assignments.length > 0) {
+          assignments.forEach((a, idx) => {
+            const existingLog = logs.find(l => l.itemId === a.itemId);
+            const itemLabel = `${a.item.name}${a.fromSpindle ? ` (cọc ${a.fromSpindle}-${a.toSpindle})` : ""}`;
+            newRows.push({
+              machineId: m.id,
+              machineName: m.name,
+              formulaType: 1, // nhập kg trực tiếp cho máy ống
+              spindleCount: m.spindleCount || 1,
+              itemId: a.item.id,
+              itemName: itemLabel,
+              originalItemId: a.item.id,
+              startIndex: 0,
+              endIndex: existingLog?.endIndex ?? null,
+              inputNE: 0,
+              isStopped: existingLog?.note === "Máy dừng",
+              efficiency: existingLog?.efficiency ?? null,
+              note: (existingLog?.note === "Máy dừng" || existingLog?.note === "Sửa chỉ số trước") ? "" : (existingLog?.note ?? ""),
+              isDirty: false,
+              existingLogId: existingLog?.id,
+              rowKey: genKey(),
+              isSubRow: idx > 0,
+            });
+          });
+          return; // skip logic thường
+        }
+
+        // Logic thường cho máy 1 mặt hàng/ca
         if (logs.length === 0) {
           newRows.push({
             machineId: m.id,
@@ -804,14 +857,16 @@ export default function DailyInputGridPage() {
         if (!r.isSubRow) {
           return (
             <Space size={2}>
-              <Tooltip title="Thêm dòng đổi mặt hàng">
-                <Button
-                  type="text" size="small"
-                  icon={<PlusOutlined style={{ fontSize: 11, color: "#1677ff" }} />}
-                  onClick={() => handleAddSubRow(i)}
-                  style={{ padding: "0 4px" }}
-                />
-              </Tooltip>
+              {!machineAssignments[r.machineId] && (
+                <Tooltip title="Thêm dòng đổi mặt hàng">
+                  <Button
+                    type="text" size="small"
+                    icon={<PlusOutlined style={{ fontSize: 11, color: "#1677ff" }} />}
+                    onClick={() => handleAddSubRow(i)}
+                    style={{ padding: "0 4px" }}
+                  />
+                </Tooltip>
+              )}
               {canDelete && r.existingLogId && (
                 <Popconfirm
                   title="Xóa bản ghi ca này?"
