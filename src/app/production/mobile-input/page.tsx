@@ -9,7 +9,8 @@ import {
     SaveOutlined, ArrowRightOutlined,
     CheckCircleOutlined, WarningOutlined, StopOutlined,
     LeftOutlined, RightOutlined,
-    ThunderboltOutlined, ScanOutlined, SwapOutlined, HomeOutlined
+    ThunderboltOutlined, ScanOutlined, SwapOutlined, HomeOutlined,
+    CloseOutlined, EditOutlined, PlusOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -121,6 +122,11 @@ function MobileInputContent() {
     // Multi-item support
     const [machineAssignments, setMachineAssignments] = useState<Record<number, any[]>>({});
     const [multiInputStates, setMultiInputStates] = useState<Record<number, Record<number, number | null>>>({});
+    const [addItemModalVisible, setAddItemModalVisible] = useState(false);
+    const [editAssignmentItem, setEditAssignmentItem] = useState<any>(null); // null = thêm mới, có giá trị = đổi
+
+    // Quick change item (máy thường)
+    const [quickChangeItemVisible, setQuickChangeItemVisible] = useState(false);
 
     // Cảnh báo ca thiếu
     const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
@@ -531,6 +537,37 @@ function MobileInputContent() {
     // ĐỔI HÀNG GIỮA CA
     // ============================
 
+    // ============================
+    // XÓA ASSIGNMENT (MULTI-ITEM)
+    // ============================
+
+    const handleRemoveAssignment = async (machineId: number, itemId: number) => {
+        const existing = machineAssignments[machineId] ?? [];
+        const newAssignments = existing.filter((a) => a.itemId !== itemId);
+        setMachineAssignments((prev) => ({ ...prev, [machineId]: newAssignments }));
+
+        // Xóa giá trị đã nhập
+        setMultiInputStates((prev) => {
+            const ms = { ...prev[machineId] };
+            delete ms[itemId];
+            return { ...prev, [machineId]: ms };
+        });
+
+        // Lưu lên server
+        await fetch(`/api/machines/${machineId}/assignments`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                assignments: newAssignments.map((a, i) => ({
+                    itemId: a.itemId,
+                    fromSpindle: a.fromSpindle,
+                    toSpindle: a.toSpindle,
+                    sortOrder: i,
+                })),
+            }),
+        });
+    };
+
     const handleMobileItemChange = async () => {
         if (!currentMachine || !currentState) return;
         if (!itemChangeCutover) { message.error("Vui lòng nhập chỉ số chốt"); return; }
@@ -913,13 +950,30 @@ function MobileInputContent() {
                     {currentState.saved && <Tag color="green" style={{ fontSize: 12 }}>Đã nhập</Tag>}
                 </div>
                 {currentMachine.currentItem && !currentMachine.allowMultiItemPerShift && (
-                    <Button
-                        type="link" size="small" icon={<SwapOutlined />}
-                        onClick={() => { setItemChangeModalVisible(true); setItemChangeCutover(null); setItemChangeNewId(null); }}
-                        style={{ marginTop: 4, color: "#d46b08", fontSize: 12 }}
-                    >
-                        Đổi hàng giữa ca
-                    </Button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4, justifyContent: "center" }}>
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => setQuickChangeItemVisible(true)}
+                            style={{ color: "#1677ff", fontSize: 12 }}
+                        >
+                            Đổi mặt hàng
+                        </Button>
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={<SwapOutlined />}
+                            onClick={() => {
+                                setItemChangeModalVisible(true);
+                                setItemChangeCutover(null);
+                                setItemChangeNewId(null);
+                            }}
+                            style={{ color: "#d46b08", fontSize: 12 }}
+                        >
+                            Đổi hàng giữa ca
+                        </Button>
+                    </div>
                 )}
             </div>
 
@@ -958,38 +1012,85 @@ function MobileInputContent() {
                                 Vào trang <b>Quản lý Máy</b> để cấu hình.
                             </div>
                         ) : (
-                            (machineAssignments[currentMachine.id] ?? []).map((a: any) => (
-                                <div
-                                    key={a.itemId}
-                                    style={{
-                                        marginBottom: 16, padding: 16,
-                                        background: "#f6f8fa", borderRadius: 12,
-                                        border: "1px solid #e8e8e8",
-                                    }}
-                                >
-                                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                                        {a.item?.name}
-                                        {a.fromSpindle != null && (
-                                            <Tag style={{ fontSize: 12 }}>Cọc {a.fromSpindle}–{a.toSpindle}</Tag>
-                                        )}
+                            <>
+                                {(machineAssignments[currentMachine.id] ?? []).map((a: any) => (
+                                    <div
+                                        key={a.itemId}
+                                        style={{
+                                            marginBottom: 16, padding: 16,
+                                            background: "#f6f8fa", borderRadius: 12,
+                                            border: "1px solid #e8e8e8",
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                fontWeight: 700,
+                                                fontSize: 16,
+                                                marginBottom: 8,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                {a.item?.name}
+                                                {a.fromSpindle != null && (
+                                                    <Tag>
+                                                        Cọc {a.fromSpindle}–{a.toSpindle}
+                                                    </Tag>
+                                                )}
+                                            </div>
+                                            <Space size={4}>
+                                                <Button
+                                                    type="text"
+                                                    size="small"
+                                                    icon={<SwapOutlined />}
+                                                    onClick={() => {
+                                                        setEditAssignmentItem(a);
+                                                        setAddItemModalVisible(true);
+                                                    }}
+                                                    style={{ color: "#d46b08", fontSize: 11 }}
+                                                />
+                                                <Button
+                                                    type="text"
+                                                    size="small"
+                                                    danger
+                                                    icon={<CloseOutlined />}
+                                                    onClick={() => handleRemoveAssignment(currentMachine.id, a.itemId)}
+                                                    style={{ fontSize: 11 }}
+                                                />
+                                            </Space>
+                                        </div>
+                                        <InputNumber
+                                            value={multiInputStates[currentMachine.id]?.[a.itemId] ?? undefined}
+                                            onChange={(v) =>
+                                                setMultiInputStates(prev => ({
+                                                    ...prev,
+                                                    [currentMachine.id]: { ...prev[currentMachine.id], [a.itemId]: v },
+                                                }))
+                                            }
+                                            placeholder="Sản lượng (kg)"
+                                            style={{ width: "100%", height: 56, fontSize: 22 }}
+                                            controls={false}
+                                            inputMode="decimal"
+                                            min={0}
+                                            addonAfter="kg"
+                                        />
                                     </div>
-                                    <InputNumber
-                                        value={multiInputStates[currentMachine.id]?.[a.itemId] ?? undefined}
-                                        onChange={(v) =>
-                                            setMultiInputStates(prev => ({
-                                                ...prev,
-                                                [currentMachine.id]: { ...prev[currentMachine.id], [a.itemId]: v },
-                                            }))
-                                        }
-                                        placeholder="Sản lượng (kg)"
-                                        style={{ width: "100%", height: 56, fontSize: 22 }}
-                                        controls={false}
-                                        inputMode="decimal"
-                                        min={0}
-                                        addonAfter="kg"
-                                    />
-                                </div>
-                            ))
+                                ))}
+                                <Button
+                                    type="dashed"
+                                    block
+                                    icon={<PlusOutlined />}
+                                    onClick={() => {
+                                        setEditAssignmentItem(null);
+                                        setAddItemModalVisible(true);
+                                    }}
+                                    style={{ height: 48, fontSize: 15, borderRadius: 12, marginTop: 8 }}
+                                >
+                                    + Thêm mặt hàng
+                                </Button>
+                            </>
                         )}
                     </div>
                 ) : (
@@ -1112,6 +1213,117 @@ function MobileInputContent() {
 
             {/* MODAL ĐỔI NGÀY / CA */}
             {dateShiftModal}
+
+            {/* MODAL THÊM / ĐỔI MẶT HÀNG (MULTI-ITEM) */}
+            <Modal
+                open={addItemModalVisible}
+                onCancel={() => {
+                    setAddItemModalVisible(false);
+                    setEditAssignmentItem(null);
+                }}
+                title={editAssignmentItem ? "Đổi mặt hàng" : "Thêm mặt hàng"}
+                centered
+                footer={null}
+            >
+                <Select
+                    showSearch
+                    filterOption={(input, opt) =>
+                        (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                    }
+                    style={{ width: "100%", marginBottom: 16 }}
+                    placeholder="Chọn mặt hàng..."
+                    options={items.map((i) => ({ label: i.name, value: i.id }))}
+                    onChange={async (itemId) => {
+                        if (!currentMachine) return;
+                        const existingAssignments = machineAssignments[currentMachine.id] ?? [];
+
+                        let newAssignments;
+                        if (editAssignmentItem) {
+                            // Đổi: thay itemId cũ bằng mới
+                            newAssignments = existingAssignments.map((a) =>
+                                a.itemId === editAssignmentItem.itemId
+                                    ? { ...a, itemId, item: items.find((i) => i.id === itemId) }
+                                    : a,
+                            );
+                        } else {
+                            // Thêm mới
+                            newAssignments = [
+                                ...existingAssignments,
+                                {
+                                    itemId,
+                                    item: items.find((i) => i.id === itemId),
+                                    fromSpindle: null,
+                                    toSpindle: null,
+                                    sortOrder: existingAssignments.length,
+                                },
+                            ];
+                        }
+
+                        // Cập nhật local
+                        setMachineAssignments((prev) => ({
+                            ...prev,
+                            [currentMachine.id]: newAssignments,
+                        }));
+
+                        // Lưu lên server
+                        await fetch(`/api/machines/${currentMachine.id}/assignments`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                assignments: newAssignments.map((a, i) => ({
+                                    itemId: a.itemId,
+                                    fromSpindle: a.fromSpindle,
+                                    toSpindle: a.toSpindle,
+                                    sortOrder: i,
+                                })),
+                            }),
+                        });
+
+                        setAddItemModalVisible(false);
+                        setEditAssignmentItem(null);
+                        message.success(
+                            editAssignmentItem ? "Đã đổi mặt hàng" : "Đã thêm mặt hàng",
+                        );
+                    }}
+                />
+            </Modal>
+
+            {/* MODAL ĐỔI MẶT HÀNG NHANH (MÁY THƯỜNG) */}
+            <Modal
+                open={quickChangeItemVisible}
+                onCancel={() => setQuickChangeItemVisible(false)}
+                title="Đổi mặt hàng cho máy"
+                centered
+                footer={null}
+            >
+                <Select
+                    showSearch
+                    filterOption={(input, opt) =>
+                        (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                    }
+                    style={{ width: "100%" }}
+                    placeholder="Chọn mặt hàng mới..."
+                    options={items.map((i) => ({ label: i.name, value: i.id }))}
+                    onChange={async (itemId) => {
+                        const item = items.find((i) => i.id === itemId);
+                        if (!item || !currentMachine) return;
+                        await fetch("/api/machines/batch", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ machineIds: [currentMachine.id], itemId }),
+                        });
+                        setMachines((prev) =>
+                            prev.map((m) =>
+                                m.id === currentMachine.id
+                                    ? { ...m, currentItem: { id: item.id, name: item.name } }
+                                    : m,
+                            ),
+                        );
+                        setQuickChangeItemVisible(false);
+                        message.success(`Đã đổi sang ${item.name}`);
+                    }}
+                />
+            </Modal>
 
             {/* MODAL ĐỔI HÀNG GIỮA CA */}
             <Modal

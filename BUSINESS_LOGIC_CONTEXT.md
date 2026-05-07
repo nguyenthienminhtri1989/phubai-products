@@ -2365,3 +2365,43 @@ Không có endpoint mới — chỉ sửa logic tính toán frontend.
 ### Data notes
 
 - Không thay đổi schema hay dữ liệu.
+
+---
+
+## MOBILE INPUT — Inline Multi-Item & Quick Item Change
+
+**Status:** ✅ Completed 2026-05-07
+
+### What was built
+
+Added full inline management of machine-item assignments directly on the mobile production input form. Multi-item machines can now add, swap, or remove items without leaving the page. Regular (single-item) machines get a new "Đổi mặt hàng" quick-change button in addition to the existing "Đổi hàng giữa ca" button.
+
+### Files created/modified
+
+```
+src/app/production/mobile-input/page.tsx  — added addItemModal, quickChangeItemModal, handleRemoveAssignment, edit/delete buttons per multi-item assignment, + Thêm mặt hàng button, Đổi mặt hàng button for regular machines
+```
+
+### Key business logic implemented
+
+- Multi-item form: each item card now shows a SwapOutlined button (change) and a CloseOutlined button (delete), plus a dashed "Thêm mặt hàng" button after the list.
+- editAssignmentItem state: null means "add new", non-null means "swap existing item" — shared by one modal.
+- handleRemoveAssignment: filters local assignments, clears corresponding multiInputStates entry, then persists via PUT /api/machines/:id/assignments.
+- Quick change (regular machines): calls /api/machines/batch POST to reassign machine to new item, updates local machines state. Only shown when currentItem exists and allowMultiItemPerShift is false.
+- "Đổi hàng giữa ca" (mid-shift change) is kept and shown side-by-side with the new "Đổi mặt hàng" button.
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | /api/machines/:id/assignments | Save updated assignment list |
+| POST | /api/machines/batch | Reassign machine to a new item (quick change) |
+
+### Known limitations
+
+- Adding a new item to multi-item machine does not pre-fill fromSpindle/toSpindle — user must configure those in the Machines management page.
+- No confirmation dialog before removing an assignment.
+
+### Data notes
+
+- No schema changes. Uses existing MachineItemAssignment model.
