@@ -63,7 +63,11 @@ export default function MobileReportPage() {
     }, [status, router]);
 
     const isAdmin = session?.user?.role === "ADMIN";
+    const userRole: string = (session?.user as any)?.userRole || "";
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
+    const userFactoryIds: number[] = (session?.user as any)?.factoryIds || [];
+    // FACTORY_MANAGER và DIRECTOR quản lý theo factoryId, không theo processId
+    const isFactoryWideRole = isAdmin || userRole === "FACTORY_MANAGER" || userRole === "DIRECTOR";
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [machines, setMachines] = useState<Machine[]>([]);
@@ -85,14 +89,27 @@ export default function MobileReportPage() {
             .then((r) => r.json())
             .then((data: Machine[]) => {
                 if (isAdmin) {
+                    // ADMIN xem tất cả máy
                     setMachines(data);
+                } else if (userRole === "FACTORY_MANAGER" || userRole === "DIRECTOR") {
+                    // FACTORY_MANAGER / DIRECTOR: quản lý theo nhà máy (factoryId)
+                    // Lọc máy theo process.factoryId nếu có factoryIds, nếu không thì xem tất cả
+                    if (userFactoryIds.length > 0) {
+                        setMachines(data.filter((m: any) =>
+                            userFactoryIds.includes(m.process?.factoryId)
+                        ));
+                    } else {
+                        // Không có factoryIds → cho xem tất cả (backward compat)
+                        setMachines(data);
+                    }
                 } else {
+                    // PROCESS_LEAD, TEAM_LEAD, STATISTICIAN: lọc theo processId
                     setMachines(data.filter((m) => userProcessIds.includes(m.processId)));
                 }
             })
             .catch(() => message.error("Lỗi tải danh sách máy"));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, isAdmin]);
+    }, [status, isAdmin, userRole]);
 
     // ─── Date preset handler ────────────────────────────────────────────────
     const handlePreset = (preset: string) => {
