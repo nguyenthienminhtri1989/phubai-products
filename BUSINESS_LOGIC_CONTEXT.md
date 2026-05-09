@@ -2405,3 +2405,63 @@ src/app/production/mobile-input/page.tsx  — added addItemModal, quickChangeIte
 ### Data notes
 
 - No schema changes. Uses existing MachineItemAssignment model.
+
+---
+
+## LOT MANAGEMENT — Module Quản lý Lô hàng
+
+**Status:** ✅ Completed 2026-05-09
+
+### What was built
+
+Module quản lý vòng đời lô hàng gồm 3 loại: lô bông (RAW_COTTON), lô xơ (RAW_FIBER), và lô sợi (YARN). Lô sợi được gắn với máy đang chạy, và khi công nhân nhập sản lượng, hệ thống tự động lấy lotId từ Machine.currentLotId mà không cần chọn thủ công. Trang CRUD đầy đủ với filter loại/trạng thái/nhà máy và chức năng link nguyên liệu giữa các lô.
+
+### Files created/modified
+
+`
+src/app/api/lots/route.ts                          — GET (list + filter) + POST (create lot + link raw materials)
+src/app/api/lots/[id]/route.ts                     — GET detail + PUT update (replace raw material links) + DELETE (guard: no production logs)
+src/app/api/lots/[id]/traceability/route.ts        — GET traceability: NL links + production summary for a YARN lot
+src/app/lots/page.tsx                              — CRUD UI: filter bar + table + modal tạo/sửa lô + quick close button
+src/app/machines/page.tsx                          — Thêm cột "Lô đang SX", Select chọn lô trong modal sửa máy
+src/app/api/machines/route.ts                      — GET include currentLot relation
+src/app/api/machines/[id]/route.ts                 — PUT accept currentLotId field
+src/app/api/production/daily-input/route.ts        — Auto-set lotId from Machine.currentLotId on ProductionLog upsert
+src/components/AdminLayout.tsx                     — Add catalog.lots to ALL_PAGES + SIDEBAR_GROUPS group-catalog
+prisma/schema.prisma                               — Add LotType enum, LotStatus enum, Lot model, LotMaterialLink model; add currentLotId to Machine, lotId to ProductionLog, lots[] to Factory/Item/SalesOrderItem
+prisma/seed-lots-page.js                           — Seed pageRegistry for catalog.lots (id=50)
+`
+
+### Key business logic implemented
+
+- **Lô sợi tự động lấy lotId từ máy**: ProductionLog.upsert tự fetch Machine.currentLotId → lotId = null nếu máy chưa gán lô, không cần UI thêm
+- **YARN bắt buộc chọn itemId**: Validate ở POST /api/lots trả 400 nếu lotType=YARN và không có itemId
+- **Xóa lô chỉ khi chưa có sản lượng**: DELETE /api/lots/[id] kiểm tra count(ProductionLog WHERE lotId) trước khi cho phép xóa
+- **Replace raw material links**: PUT dùng deleteMany + createMany (replace all) thay vì merge để đơn giản hóa
+- **Warning 1 lô xơ**: UI cảnh báo nếu chọn > 1 lô xơ nhưng không enforce ở backend (nghiệp vụ ghi chú: thường chỉ 1)
+- **Đóng lô**: nút "Đóng lô" PUT status=CLOSED → set closedAt=now()
+
+### API endpoints
+
+| Method | Path                             | Description                                        |
+|--------|----------------------------------|----------------------------------------------------|
+| GET    | /api/lots                        | List lots, filter: lotType, status, factoryId, search |
+| POST   | /api/lots                        | Create lot, auto-link rawLotIds if YARN            |
+| GET    | /api/lots/[id]                   | Lot detail with rawMaterials + productionLogs      |
+| PUT    | /api/lots/[id]                   | Update lot, replace raw material links             |
+| DELETE | /api/lots/[id]                   | Delete (ADMIN/FACTORY_MANAGER only, no prod logs)  |
+| GET    | /api/lots/[id]/traceability      | Traceability: rawMaterials + productionSummary     |
+
+### Known limitations / not yet implemented
+
+- Không có trang traceability riêng (UI) — chỉ có API
+- SalesOrderItem dropdown trong modal chưa load từ API (cần fetch /api/kdsx/sales-orders/items hoặc tương tự)
+- Không tự động cập nhật Machine.currentLotId khi lô CLOSED (cần làm thủ công)
+- Chưa tích hợp lotId vào mobile-report hay trang history để lọc theo lô
+
+### Data notes
+
+- pageRegistry seeded: pageKey='catalog.lots', id=50, sortOrder=35
+- LotStatus default = OPEN
+- closedAt tự set khi PUT status=CLOSED
+- Lot model dùng @@map("lots"), LotMaterialLink dùng @@map("lot_material_links")

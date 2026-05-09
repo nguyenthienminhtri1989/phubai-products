@@ -24,6 +24,21 @@ enum UserRole {
 }
 
 // ==========================================
+// ENUM: LOẠI LÔ HÀNG
+// ==========================================
+enum LotType {
+  RAW_COTTON  // Lô bông (nguyên liệu tự nhiên)
+  RAW_FIBER   // Lô xơ (nguyên liệu nhân tạo: PE, viscose...)
+  YARN        // Lô sợi (thành phẩm)
+}
+
+enum LotStatus {
+  OPEN     // Đang sản xuất / đang sử dụng
+  CLOSED   // Đã đóng lô
+  SHIPPED  // Đã giao hàng (chỉ dùng cho YARN)
+}
+
+// ==========================================
 // 1. DANH MỤC NHÀ MÁY (Hierarchy)
 // ==========================================
 
@@ -54,6 +69,8 @@ model Factory {
   users         User[]
   userFactories UserFactory[] // Pivot table cho phân quyền nhiều NM
 
+  // Lot management
+  lots Lot[]
 
   @@map("factories")
 }
@@ -124,6 +141,9 @@ model Item {
   // Multi-item assignments
   machineAssignments MachineItemAssignment[]
 
+  // Lot management
+  lots Lot[]
+
   @@map("items")
 }
 
@@ -163,6 +183,10 @@ model Machine {
   // Dành cho máy loại 3, 4. 
   // Giá trị này sẽ tự động nhảy vào ô nhập liệu để công nhân đỡ phải gõ.
   currentNE Float?
+
+  // Lô sợi đang sản xuất (optional)
+  currentLotId Int?
+  currentLot   Lot? @relation("CurrentLot", fields: [currentLotId], references: [id])
 
   maintenanceTasks MaintenanceTask[]
 
@@ -218,6 +242,10 @@ model ProductionLog {
   // 5. Quan hệ với Máy
   machine Machine @relation(fields: [machineId], references: [id])
 
+  // 6. Lô hàng (tự động lấy từ Machine.currentLotId khi nhập)
+  lotId Int?
+  lot   Lot? @relation(fields: [lotId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -231,6 +259,7 @@ model ProductionLog {
   @@index([recordDate, machineId])
   @@index([machineId, shift])
   @@index([itemId])
+  @@index([lotId])
   @@map("production_logs")
 }
 
@@ -853,6 +882,9 @@ model SalesOrderItem {
   actualLineItems ActualLineItem[]
   allocations     OrderAllocation[]
 
+  // Lot management
+  lots Lot[]
+
   @@index([orderId])
   @@index([itemId])
   @@map("sales_order_items")
@@ -1389,4 +1421,67 @@ model MachineItemAssignment {
   @@unique([machineId, itemId])
   @@index([machineId])
   @@map("machine_item_assignments")
+}
+
+// ==========================================
+// MODULE QUẢN LÝ LÔ HÀNG (Lot Management)
+// ==========================================
+
+model Lot {
+  id        Int       @id @default(autoincrement())
+  lotNumber String    // Người dùng tự đặt, VD: "B2026-05-001", text tự do
+  lotType   LotType   // RAW_COTTON / RAW_FIBER / YARN
+
+  // Mặt hàng — bắt buộc với YARN, optional với NL
+  itemId    Int?
+  item      Item?     @relation(fields: [itemId], references: [id])
+
+  // Nhà máy
+  factoryId Int
+  factory   Factory   @relation(fields: [factoryId], references: [id])
+
+  // Gắn với HĐ (chỉ YARN, optional)
+  salesOrderItemId Int?
+  salesOrderItem   SalesOrderItem? @relation(fields: [salesOrderItemId], references: [id])
+
+  status    LotStatus @default(OPEN)
+  note      String?
+
+  openedAt  DateTime  @default(now())
+  closedAt  DateTime?
+
+  // Relations — truy xuất NL
+  rawMaterials LotMaterialLink[] @relation("YarnLot")  // Lô sợi này dùng NL từ lô nào
+  usedInYarns  LotMaterialLink[] @relation("RawLot")   // Lô NL này được dùng cho lô sợi nào
+
+  // Relations — dữ liệu SX
+  productionLogs ProductionLog[]
+
+  // Máy đang chạy lô này
+  runningOnMachines Machine[] @relation("CurrentLot")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lotType])
+  @@index([factoryId])
+  @@index([itemId])
+  @@index([lotNumber])
+  @@map("lots")
+}
+
+// Link lô sợi ↔ lô nguyên liệu (many-to-many)
+// 1 lô sợi có thể dùng nhiều lô bông + tối đa 1 lô xơ
+model LotMaterialLink {
+  id        Int    @id @default(autoincrement())
+  yarnLotId Int
+  yarnLot   Lot    @relation("YarnLot", fields: [yarnLotId], references: [id])
+  rawLotId  Int
+  rawLot    Lot    @relation("RawLot", fields: [rawLotId], references: [id])
+  note      String?
+
+  @@unique([yarnLotId, rawLotId])
+  @@index([yarnLotId])
+  @@index([rawLotId])
+  @@map("lot_material_links")
 }

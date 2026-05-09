@@ -13,6 +13,8 @@ interface MachineData {
     processId: number;
     process?: { name: string; factory?: { name: string } };
     currentItem?: { name: string; code: string };
+    currentLot?: { id: number; lotNumber: string } | null;
+    currentLotId?: number | null;
     formulaType: number;
     spindleCount?: number;
     currentNE?: number;
@@ -61,6 +63,9 @@ export default function MachinesPage() {
     const [multiItemLoading, setMultiItemLoading] = useState(false);
     const [multiItemSaving, setMultiItemSaving] = useState(false);
     const [multiItemForm] = Form.useForm();
+
+    // Danh sách lô sợi đang mở (dùng cho form chọn lô)
+    const [yarnLots, setYarnLots] = useState<any[]>([]);
 
     const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
@@ -237,6 +242,12 @@ export default function MachinesPage() {
                 : r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
         },
         {
+            title: "Lô đang SX", key: "lot", width: 130,
+            render: (_: any, r: MachineData) => r.currentLot
+                ? <Tag color="orange" style={{ fontWeight: 600 }}>{r.currentLot.lotNumber}</Tag>
+                : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>
+        },
+        {
             title: "Loại máy", dataIndex: "model", key: "model", width: 140,
             render: (v: string) => v
                 ? <Tag color="geekblue">{v}</Tag>
@@ -265,7 +276,16 @@ export default function MachinesPage() {
                             title="Điều phối chi tiết nhiều mặt hàng"
                         />
                     )}
-                    <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMachine(r); form.setFieldsValue(r); setIsModalOpen(true); }} />
+                    <Button size="small" icon={<EditOutlined />} onClick={() => {
+                            setEditingMachine(r);
+                            form.setFieldsValue({ ...r, currentLotId: r.currentLotId ?? undefined });
+                            setIsModalOpen(true);
+                            // Tải danh sách lô sợi đang mở
+                            fetch('/api/lots?lotType=YARN&status=OPEN')
+                                .then(res => res.json())
+                                .then(data => setYarnLots(Array.isArray(data) ? data : []))
+                                .catch(() => {});
+                        }} />
                     {isAdmin && (
                         <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
                             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -405,6 +425,19 @@ export default function MachinesPage() {
                             </Form.Item>
                         </Col>
                     </Row>
+
+                    <Form.Item name="currentLotId" label="Lô đang SX" tooltip="Lô sợi máy này đang chạy. Sản lượng nhập tự động gán vào lô này.">
+                        <Select
+                            allowClear
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="Chọn lô sợi (không bắt buộc)..."
+                            options={yarnLots.map((l: any) => ({
+                                value: l.id,
+                                label: `${l.lotNumber}${l.item ? ' — ' + l.item.name : ''}`,
+                            }))}
+                        />
+                    </Form.Item>
 
                     <Button type="primary" htmlType="submit" block>Lưu thông tin</Button>
                 </Form>

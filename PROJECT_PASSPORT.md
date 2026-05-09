@@ -267,3 +267,24 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 - Cột "Còn lại" âm = sản xuất vượt HĐ → surplus pool → waterfall tháng sau
 - Sợi CVCM có thêm CP PE (Benma), các loại khác chỉ có CP Cotton
 - CP GC xe đôi chỉ áp dụng sợi /2 (30/2, 40/2...)
+
+---
+
+## Cập nhật 2026-05-09: Module Quản lý Lô hàng
+
+### Đã hoàn thành
+
+- **Schema**: 2 enum mới (LotType, LotStatus) + model Lot + LotMaterialLink + field currentLotId (Machine) + lotId (ProductionLog)
+- **API CRUD**: /api/lots (GET/POST), /api/lots/[id] (GET/PUT/DELETE), /api/lots/[id]/traceability (GET)
+- **UI**: /lots page — CRUD lô hàng với filter, modal tạo/sửa, link nguyên liệu bằng checkbox
+- **Tích hợp máy**: Machines page hiển thị "Lô đang SX", form sửa máy có Select chọn lô YARN đang OPEN
+- **Auto lotId**: ProductionLog.upsert tự lấy lotId từ Machine.currentLotId (không cần UI nhập)
+- **Sidebar**: catalog.lots đã có trong DANH MỤC
+- **PageRegistry**: id=50, pageKey='catalog.lots'
+
+### Gác lại chủ ý (đã cập nhật)
+
+- ~~Lot management (phân lô, số lô)~~ → **ĐÃ XONG 2026-05-09**
+- UI trang traceability riêng (hiện chỉ có API)
+- Tự động clear Machine.currentLotId khi đóng lô
+- Lọc lịch sử sản xuất theo lô

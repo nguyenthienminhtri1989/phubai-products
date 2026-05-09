@@ -116,6 +116,7 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "catalog.factories", pageGroup: "DANH MỤC", path: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
   { pageKey: "catalog.processes", pageGroup: "DANH MỤC", path: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
   { pageKey: "catalog.items", pageGroup: "DANH MỤC", path: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
+  { pageKey: "catalog.lots", pageGroup: "DANH MỤC", path: "/lots", label: "Danh mục lô hàng", icon: <TagsOutlined /> },
   { pageKey: "catalog.shifts", pageGroup: "DANH MỤC", path: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
   { pageKey: "catalog.stop-cats", pageGroup: "DANH MỤC", path: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
   { pageKey: "kdsx.raw-material-rates", pageGroup: "DANH MỤC", path: "/kdsx/raw-material-rates", label: "Định mức NVL", icon: <ExperimentOutlined /> },
@@ -193,7 +194,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "DANH MỤC",
     icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "catalog.factories", "catalog.processes", "catalog.items", "catalog.shifts", "catalog.stop-cats",
+      "catalog.factories", "catalog.processes", "catalog.items", "catalog.lots", "catalog.shifts", "catalog.stop-cats",
       "kdsx.raw-material-rates", "kdsx.material-types", "kdsx.material-prices",
       "catalog.energy-type", "catalog.meter-group", "catalog.meters",
     ],
