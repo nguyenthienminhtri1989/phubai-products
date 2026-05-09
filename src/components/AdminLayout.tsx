@@ -102,7 +102,7 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
-  { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
+  // { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
 
   // MOBILE
   { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },

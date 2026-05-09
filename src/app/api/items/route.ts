@@ -37,15 +37,30 @@ export async function POST(req: Request) {
     const session = await auth();
     // Chỉ ADMIN mới được tạo mặt hàng
     const userRole = (session?.user as any)?.userRole as string | undefined;
-    if (userRole !== "ADMIN" && userRole !== "SALES") {
+    if (
+      userRole !== "ADMIN" &&
+      userRole !== "SALES" &&
+      userRole !== "PROCESS_LEADER"
+    ) {
       return NextResponse.json(
-        { error: "Chỉ Admin và Sales mới được thêm mặt hàng" },
+        {
+          error: "Chỉ Admin và Sales, Trưởng công đoạn mới được thêm mặt hàng",
+        },
         { status: 403 },
       );
     }
 
     const body = await req.json();
-    const { name, code, ne, composition, twist, weavingStyle, material, yarnType } = body;
+    const {
+      name,
+      code,
+      ne,
+      composition,
+      twist,
+      weavingStyle,
+      material,
+      yarnType,
+    } = body;
 
     if (!name)
       return NextResponse.json({ error: "Tên bắt buộc" }, { status: 400 });
