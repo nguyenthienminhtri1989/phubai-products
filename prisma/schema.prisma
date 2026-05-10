@@ -27,15 +27,15 @@ enum UserRole {
 // ENUM: LOẠI LÔ HÀNG
 // ==========================================
 enum LotType {
-  RAW_COTTON  // Lô bông (nguyên liệu tự nhiên)
-  RAW_FIBER   // Lô xơ (nguyên liệu nhân tạo: PE, viscose...)
-  YARN        // Lô sợi (thành phẩm)
+  RAW_COTTON // Lô bông (nguyên liệu tự nhiên)
+  RAW_FIBER // Lô xơ (nguyên liệu nhân tạo: PE, viscose...)
+  YARN // Lô sợi (thành phẩm)
 }
 
 enum LotStatus {
-  OPEN     // Đang sản xuất / đang sử dụng
-  CLOSED   // Đã đóng lô
-  SHIPPED  // Đã giao hàng (chỉ dùng cho YARN)
+  OPEN // Đang sản xuất / đang sử dụng
+  CLOSED // Đã đóng lô
+  SHIPPED // Đã giao hàng (chỉ dùng cho YARN)
 }
 
 // ==========================================
@@ -1109,7 +1109,7 @@ model ActualLineItem {
   grossProfitVnd   Float?
 
   isAutoQty Boolean @default(false) // true = SL tự tính từ KH, không nhập tay
-  isAdHoc   Boolean @default(false)  // true = HĐ phát sinh, không có trong KH
+  isAdHoc   Boolean @default(false) // true = HĐ phát sinh, không có trong KH
 
   note String?
 
@@ -1428,31 +1428,31 @@ model MachineItemAssignment {
 // ==========================================
 
 model Lot {
-  id        Int       @id @default(autoincrement())
-  lotNumber String    // Người dùng tự đặt, VD: "B2026-05-001", text tự do
-  lotType   LotType   // RAW_COTTON / RAW_FIBER / YARN
+  id        Int     @id @default(autoincrement())
+  lotNumber String // Người dùng tự đặt, VD: "B2026-05-001", text tự do
+  lotType   LotType // RAW_COTTON / RAW_FIBER / YARN
 
   // Mặt hàng — bắt buộc với YARN, optional với NL
-  itemId    Int?
-  item      Item?     @relation(fields: [itemId], references: [id])
+  itemId Int?
+  item   Item? @relation(fields: [itemId], references: [id])
 
   // Nhà máy
   factoryId Int
-  factory   Factory   @relation(fields: [factoryId], references: [id])
+  factory   Factory @relation(fields: [factoryId], references: [id])
 
   // Gắn với HĐ (chỉ YARN, optional)
   salesOrderItemId Int?
   salesOrderItem   SalesOrderItem? @relation(fields: [salesOrderItemId], references: [id])
 
-  status    LotStatus @default(OPEN)
-  note      String?
+  status LotStatus @default(OPEN)
+  note   String?
 
-  openedAt  DateTime  @default(now())
-  closedAt  DateTime?
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
 
   // Relations — truy xuất NL
-  rawMaterials LotMaterialLink[] @relation("YarnLot")  // Lô sợi này dùng NL từ lô nào
-  usedInYarns  LotMaterialLink[] @relation("RawLot")   // Lô NL này được dùng cho lô sợi nào
+  rawMaterials LotMaterialLink[] @relation("YarnLot") // Lô sợi này dùng NL từ lô nào
+  usedInYarns  LotMaterialLink[] @relation("RawLot") // Lô NL này được dùng cho lô sợi nào
 
   // Relations — dữ liệu SX
   productionLogs ProductionLog[]
@@ -1473,11 +1473,11 @@ model Lot {
 // Link lô sợi ↔ lô nguyên liệu (many-to-many)
 // 1 lô sợi có thể dùng nhiều lô bông + tối đa 1 lô xơ
 model LotMaterialLink {
-  id        Int    @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   yarnLotId Int
-  yarnLot   Lot    @relation("YarnLot", fields: [yarnLotId], references: [id])
+  yarnLot   Lot     @relation("YarnLot", fields: [yarnLotId], references: [id])
   rawLotId  Int
-  rawLot    Lot    @relation("RawLot", fields: [rawLotId], references: [id])
+  rawLot    Lot     @relation("RawLot", fields: [rawLotId], references: [id])
   note      String?
 
   @@unique([yarnLotId, rawLotId])

@@ -13,7 +13,7 @@ export async function PUT(
     if (
       userRole !== "ADMIN" &&
       userRole !== "SALES" &&
-      userRole !== "PROCESS_LEADER"
+      userRole !== "PROCESS_LEAD"
     ) {
       return NextResponse.json(
         { error: "Chỉ Admin, Sales, Trưởng công đoạn mới được sửa mặt hàng" },
@@ -26,7 +26,16 @@ export async function PUT(
     const itemId = parseInt(id);
 
     const body = await req.json();
-    const { name, code, ne, composition, twist, weavingStyle, material, yarnType } = body;
+    const {
+      name,
+      code,
+      ne,
+      composition,
+      twist,
+      weavingStyle,
+      material,
+      yarnType,
+    } = body;
 
     const updatedItem = await prisma.item.update({
       where: { id: itemId },
@@ -60,7 +69,7 @@ export async function DELETE(
     if (
       userRole2 !== "ADMIN" &&
       userRole2 !== "SALES" &&
-      userRole2 !== "PROCESS_LEADER"
+      userRole2 !== "PROCESS_LEAD"
     ) {
       return NextResponse.json(
         { error: "Chỉ Admin, Sales, Trưởng công đoạn được xóa mặt hàng" },
@@ -97,25 +106,39 @@ export async function DELETE(
     });
 
     if (!counts) {
-      return NextResponse.json({ error: "Không tìm thấy mặt hàng" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Không tìm thấy mặt hàng" },
+        { status: 404 },
+      );
     }
 
     const blockers: string[] = [];
     const c = counts._count;
-    if (c.productionLogs > 0)          blockers.push(`${c.productionLogs} bản ghi sản xuất`);
-    if (c.kdDailyInputs > 0)           blockers.push(`${c.kdDailyInputs} bản ghi nhập liệu KD`);
-    if (c.productivityBenchmarks > 0)  blockers.push(`${c.productivityBenchmarks} dòng định mức năng suất`);
-    if (c.planLineItems > 0)           blockers.push(`${c.planLineItems} dòng kế hoạch KD-SX`);
-    if (c.actualLineItems > 0)         blockers.push(`${c.actualLineItems} dòng thực tế KD-SX`);
-    if (c.salesOrderItems > 0)         blockers.push(`${c.salesOrderItems} dòng đơn hàng`);
-    if (c.rawMaterialRates > 0)        blockers.push(`${c.rawMaterialRates} dòng định mức tiêu hao`);
-    if (c.productionLines > 0)         blockers.push(`${c.productionLines} dòng sản xuất`);
-    if (c.iotMaps > 0)                 blockers.push(`${c.iotMaps} mapping IoT`);
-    if (c.runningOnMachines > 0)       blockers.push(`${c.runningOnMachines} máy đang chạy`);
+    if (c.productionLogs > 0)
+      blockers.push(`${c.productionLogs} bản ghi sản xuất`);
+    if (c.kdDailyInputs > 0)
+      blockers.push(`${c.kdDailyInputs} bản ghi nhập liệu KD`);
+    if (c.productivityBenchmarks > 0)
+      blockers.push(`${c.productivityBenchmarks} dòng định mức năng suất`);
+    if (c.planLineItems > 0)
+      blockers.push(`${c.planLineItems} dòng kế hoạch KD-SX`);
+    if (c.actualLineItems > 0)
+      blockers.push(`${c.actualLineItems} dòng thực tế KD-SX`);
+    if (c.salesOrderItems > 0)
+      blockers.push(`${c.salesOrderItems} dòng đơn hàng`);
+    if (c.rawMaterialRates > 0)
+      blockers.push(`${c.rawMaterialRates} dòng định mức tiêu hao`);
+    if (c.productionLines > 0)
+      blockers.push(`${c.productionLines} dòng sản xuất`);
+    if (c.iotMaps > 0) blockers.push(`${c.iotMaps} mapping IoT`);
+    if (c.runningOnMachines > 0)
+      blockers.push(`${c.runningOnMachines} máy đang chạy`);
 
     if (blockers.length > 0) {
       return NextResponse.json(
-        { error: `Không thể xóa — mặt hàng đang được dùng ở: ${blockers.join(", ")}` },
+        {
+          error: `Không thể xóa — mặt hàng đang được dùng ở: ${blockers.join(", ")}`,
+        },
         { status: 400 },
       );
     }
