@@ -2013,23 +2013,23 @@ _Cáº­p nháº­t láº§n cuá»‘i: 2026-04-21 â€” ThÃªm Material Price Management Syste
 
 ---
 
-## ACTUAL PRODUCTION GRID — Benchmark Map t? EMPIRICAL
+## ACTUAL PRODUCTION GRID ï¿½ Benchmark Map t? EMPIRICAL
 
 **Status:** ? Completed 2026-04-25
 
 ### What was built
-API /actual tr? thêm enchmarkMap — b?ng ğ?nh m?c EMPIRICAL kgPerDay cho t?ng combo (machineId, itemId) có trong grid th?c t?. Component ActualProductionGrid ıu tiên dùng enchmarkMap ğ? so màu TH vs KH, fallback sang segment KH n?u không có benchmark.
+API /actual tr? thï¿½m enchmarkMap ï¿½ b?ng ï¿½?nh m?c EMPIRICAL kgPerDay cho t?ng combo (machineId, itemId) cï¿½ trong grid th?c t?. Component ActualProductionGrid ï¿½u tiï¿½n dï¿½ng enchmarkMap ï¿½? so mï¿½u TH vs KH, fallback sang segment KH n?u khï¿½ng cï¿½ benchmark.
 
 ### Files created/modified
 ```
-src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thêm query BenchmarkVersion active + ProductivityBenchmark EMPIRICAL; tr? benchmarkMap trong JSON
-src/components/kdsx/ActualProductionGrid.tsx               — Thêm state benchmarkMap; ğ?c t? API; dùng benchmarkKg || segKg làm planKg
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts  ï¿½ Thï¿½m query BenchmarkVersion active + ProductivityBenchmark EMPIRICAL; tr? benchmarkMap trong JSON
+src/components/kdsx/ActualProductionGrid.tsx               ï¿½ Thï¿½m state benchmarkMap; ï¿½?c t? API; dï¿½ng benchmarkKg || segKg lï¿½m planKg
 ```
 
 ### Key business logic implemented
 - enchmarkMap["machineId-itemId"] = empiricalOutputPerDay t? ProductivityBenchmark (benchmarkType=EMPIRICAL, versionId=activeVersion c?a factory)
-- İu tiên benchmark EMPIRICAL, fallback v? kgPerDay c?a segment KH n?u không có benchmark
-- compareColor(actual, plan): xanh ? KH, vàng ? 90% KH, ğ? < 90% KH, xám n?u plan=0
+- ï¿½u tiï¿½n benchmark EMPIRICAL, fallback v? kgPerDay c?a segment KH n?u khï¿½ng cï¿½ benchmark
+- compareColor(actual, plan): xanh ? KH, vï¿½ng ? 90% KH, ï¿½? < 90% KH, xï¿½m n?u plan=0
 
 ### API endpoints
 | Method | Path | Description |
@@ -2037,38 +2037,38 @@ src/components/kdsx/ActualProductionGrid.tsx               — Thêm state benchmar
 | GET    | /api/kdsx/production-schedule/[id]/actual | Tr? grid + benchmarkMap (EMPIRICAL) + machines + items |
 
 ### Known limitations
-- Benchmark ch? l?y version isActive=true ğ?u tiên (effectiveFrom desc)
-- N?u máy không có model s? b? qua, không t?m benchmark
+- Benchmark ch? l?y version isActive=true ï¿½?u tiï¿½n (effectiveFrom desc)
+- N?u mï¿½y khï¿½ng cï¿½ model s? b? qua, khï¿½ng t?m benchmark
 
 ---
 
 ---
 
-## SCHEDULE COMPARISON DASHBOARD — Fix c?u trúc ActualGrid
+## SCHEDULE COMPARISON DASHBOARD ï¿½ Fix c?u trï¿½c ActualGrid
 
 **Status:** ? Completed 2026-04-25
 
 ### What was built
-S?a bug dashboard dùng c?u trúc grid c? { itemId, kg } không tıõng thích v?i API ğ? tr? v? c?u trúc m?i { [itemId]: kg }.
+S?a bug dashboard dï¿½ng c?u trï¿½c grid c? { itemId, kg } khï¿½ng tï¿½ï¿½ng thï¿½ch v?i API ï¿½? tr? v? c?u trï¿½c m?i { [itemId]: kg }.
 
 ### Files created/modified
 ```
-src/components/kdsx/ScheduleComparisonDashboard.tsx  — S?a interface ActualGrid + 2 v?ng l?p tính t?ng TH
+src/components/kdsx/ScheduleComparisonDashboard.tsx  ï¿½ S?a interface ActualGrid + 2 v?ng l?p tï¿½nh t?ng TH
 ```
 
 ### Key business logic implemented
 - Interface ActualGrid s?a [day: number]: { itemId: number; kg: number } ? [day: number]: { [itemId: number]: number }
-- V?ng l?p 	hByItem: dùng Object.entries(dayData) ğ? iterate theo itemId
-- V?ng l?p 	hCumul (line chart): dùng Object.values(dayData) ğ? c?ng t?ng kg ngày, ki?m tra holiday trı?c
+- V?ng l?p 	hByItem: dï¿½ng Object.entries(dayData) ï¿½? iterate theo itemId
+- V?ng l?p 	hCumul (line chart): dï¿½ng Object.values(dayData) ï¿½? c?ng t?ng kg ngï¿½y, ki?m tra holiday trï¿½?c
 
 ### Known limitations
-- Không có thay ğ?i schema hay API
+- Khï¿½ng cï¿½ thay ï¿½?i schema hay API
 
 ---
 
 ---
 
-## HE THONG PHAN QUYEN — Fix stale JWT va logic fallback sai
+## HE THONG PHAN QUYEN ï¿½ Fix stale JWT va logic fallback sai
 
 **Status:** Completed 2026-04-28
 
@@ -2076,9 +2076,9 @@ src/components/kdsx/ScheduleComparisonDashboard.tsx  — S?a interface ActualGrid 
 Fix bug khien user co role PROCESS_LEAD duoc phan quyen trang /machines qua trang admin permissions nhung van bi chac ra "Khong co quyen truy cap". Root cause la 2 loi: (1) JWT pagePermissions chi duoc load 1 lan luc login, sau khi admin cap quyen user phai logout/login lai; (2) logic fallback trong machines/page.tsx hardcode ["ADMIN","FACTORY_MANAGER"] bo qua PROCESS_LEAD.
 
 ### Files created/modified
-src/auth.ts                              — JWT callback gio refresh pagePermissions tu DB moi lan token duoc tai su dung, khong phai chi luc login
-src/auth.config.ts                       — Xoa jwt/session callbacks trung lap, chi giu authorized() cho Edge middleware
-src/app/machines/page.tsx                — Thay hardcode role list bang getRoleDefaultPerm() tu permissions.ts, dam bao nhat quan voi ma tran quyen toan he thong
+src/auth.ts                              ï¿½ JWT callback gio refresh pagePermissions tu DB moi lan token duoc tai su dung, khong phai chi luc login
+src/auth.config.ts                       ï¿½ Xoa jwt/session callbacks trung lap, chi giu authorized() cho Edge middleware
+src/app/machines/page.tsx                ï¿½ Thay hardcode role list bang getRoleDefaultPerm() tu permissions.ts, dam bao nhat quan voi ma tran quyen toan he thong
 
 ### Key business logic implemented
 - JWT callback trong auth.ts gio co 2 nhanh: neu co user (lan dang nhap dau) -> bake data; neu token.id (tai su dung) -> fetch pagePermissions moi tu DB
@@ -2094,22 +2094,22 @@ Khong thay doi API
 
 ---
 
-## KDSX — Chuy?n ngu?n d? li?u th?c t? sang ProductionLog
+## KDSX ï¿½ Chuy?n ngu?n d? li?u th?c t? sang ProductionLog
 
 **Status:** ? Completed 2026-05-01
 
 ### What was built
-Thay th? ngu?n d? li?u th?c t? trong API actual grid t? KdDailyInput sang ProductionLog. Query m?i dùng groupBy trên (machineId, itemId, recordDate) và SUM(finalOutput) ğ? t?ng h?p 3 ca trong ngày thành m?t giá tr? duy nh?t. Ph?n c?n l?i c?a file (build grid, machines, items, benchmarkMap) gi? nguyên v? data v?n cùng format { machineId, itemId, recordDate, outputKg }.
+Thay th? ngu?n d? li?u th?c t? trong API actual grid t? KdDailyInput sang ProductionLog. Query m?i dï¿½ng groupBy trï¿½n (machineId, itemId, recordDate) vï¿½ SUM(finalOutput) ï¿½? t?ng h?p 3 ca trong ngï¿½y thï¿½nh m?t giï¿½ tr? duy nh?t. Ph?n c?n l?i c?a file (build grid, machines, items, benchmarkMap) gi? nguyï¿½n v? data v?n cï¿½ng format { machineId, itemId, recordDate, outputKg }.
 
 ### Files created/modified
 ```
-src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thay KdDailyInput.findMany() b?ng ProductionLog.groupBy() + SUM(finalOutput), source ğ?i thành "PRODUCTION_LOG"
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts  ï¿½ Thay KdDailyInput.findMany() b?ng ProductionLog.groupBy() + SUM(finalOutput), source ï¿½?i thï¿½nh "PRODUCTION_LOG"
 ```
 
 ### Key business logic implemented
-- ProductionLog.groupBy(["machineId", "itemId", "recordDate"]) g?p 3 ca (shift) trong cùng 1 ngày thành t?ng inalOutput
-- outputKg = l._sum.finalOutput ?? 0 — giá tr? null ğı?c x? l? v? 0
-- source = "PRODUCTION_LOG" — frontend có th? phân bi?t ngu?n d? li?u
+- ProductionLog.groupBy(["machineId", "itemId", "recordDate"]) g?p 3 ca (shift) trong cï¿½ng 1 ngï¿½y thï¿½nh t?ng inalOutput
+- outputKg = l._sum.finalOutput ?? 0 ï¿½ giï¿½ tr? null ï¿½ï¿½?c x? l? v? 0
+- source = "PRODUCTION_LOG" ï¿½ frontend cï¿½ th? phï¿½n bi?t ngu?n d? li?u
 
 ### API endpoints
 | Method | Path | Description |
@@ -2117,41 +2117,41 @@ src/app/api/kdsx/production-schedule/[id]/actual/route.ts  — Thay KdDailyInput.f
 | GET | /api/kdsx/production-schedule/[id]/actual | Tr? v? grid th?c t? l?y t? ProductionLog thay v? KdDailyInput |
 
 ### Known limitations
-- Không l?c theo machineId t? segments — l?y t?t c? máy có record trong tháng
-- Chıa có filter theo factoryId trong ProductionLog query
+- Khï¿½ng l?c theo machineId t? segments ï¿½ l?y t?t c? mï¿½y cï¿½ record trong thï¿½ng
+- Chï¿½a cï¿½ filter theo factoryId trong ProductionLog query
 
 ---
 
-## ADMIN — Page Registry Management UI
+## ADMIN ï¿½ Page Registry Management UI
 
 **Status:** ? Completed 2026-05-03
 
 ### What was built
-Giao di?n qu?n l? danh sách trang (Page Registry) cho Admin, cho phép thêm/s?a/xoá các trang vào h? th?ng phân quy?n tr?c ti?p t? UI mà không c?n ch?y script seed. API ğı?c m? r?ng v?i ğ?y ğ? CRUD.
+Giao di?n qu?n l? danh sï¿½ch trang (Page Registry) cho Admin, cho phï¿½p thï¿½m/s?a/xoï¿½ cï¿½c trang vï¿½o h? th?ng phï¿½n quy?n tr?c ti?p t? UI mï¿½ khï¿½ng c?n ch?y script seed. API ï¿½ï¿½?c m? r?ng v?i ï¿½?y ï¿½? CRUD.
 
 ### Files created/modified
 ```
-src/app/api/page-registry/route.ts    — M? r?ng thêm POST (create/upsert), PUT (update by id), DELETE (delete by id)
-src/app/admin/page-registry/page.tsx  — Giao di?n CRUD danh sách trang v?i b?ng, form modal, filter theo nhóm
+src/app/api/page-registry/route.ts    ï¿½ M? r?ng thï¿½m POST (create/upsert), PUT (update by id), DELETE (delete by id)
+src/app/admin/page-registry/page.tsx  ï¿½ Giao di?n CRUD danh sï¿½ch trang v?i b?ng, form modal, filter theo nhï¿½m
 ```
 
 ### Key business logic implemented
-- POST dùng upsert theo pageKey — tránh trùng l?p
-- pageKey ğı?c validate ch? ch?a [a-z0-9._-], t? ğ?ng sinh t? path khi t?o m?i
-- DELETE c?nh báo s? xoá toàn b? PagePermission liên quan (cascade do Prisma schema)
-- Ch? ADMIN m?i có th? truy c?p t?t c? endpoints và trang này
+- POST dï¿½ng upsert theo pageKey ï¿½ trï¿½nh trï¿½ng l?p
+- pageKey ï¿½ï¿½?c validate ch? ch?a [a-z0-9._-], t? ï¿½?ng sinh t? path khi t?o m?i
+- DELETE c?nh bï¿½o s? xoï¿½ toï¿½n b? PagePermission liï¿½n quan (cascade do Prisma schema)
+- Ch? ADMIN m?i cï¿½ th? truy c?p t?t c? endpoints vï¿½ trang nï¿½y
 
 ### API endpoints
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/page-registry | L?y danh sách t?t c? trang |
+| GET | /api/page-registry | L?y danh sï¿½ch t?t c? trang |
 | POST | /api/page-registry | T?o/upsert trang theo pageKey |
 | PUT | /api/page-registry | C?p nh?t trang theo id |
-| DELETE | /api/page-registry?id=xxx | Xoá trang theo id |
+| DELETE | /api/page-registry?id=xxx | Xoï¿½ trang theo id |
 
 ### Known limitations
-- Chıa có xác nh?n n?u xoá trang v?n c?n user ğı?c c?p quy?n truy c?p
-- Chıa h? tr? thêm pageGroup m?i ğ?ng (danh sách group hi?n t?i hard-code trong UI)
+- Chï¿½a cï¿½ xï¿½c nh?n n?u xoï¿½ trang v?n c?n user ï¿½ï¿½?c c?p quy?n truy c?p
+- Chï¿½a h? tr? thï¿½m pageGroup m?i ï¿½?ng (danh sï¿½ch group hi?n t?i hard-code trong UI)
 
 ---
 
@@ -2227,66 +2227,66 @@ src/app/api/kdsx/production-schedule/[id]/segments/[segmentId]/route.ts â€” thÃª
 
 ---
 
-## USER MANAGEMENT — Multi-Factory Assignment for STATISTICIAN
+## USER MANAGEMENT ï¿½ Multi-Factory Assignment for STATISTICIAN
 
 **Status:** ? Completed 2026-05-06
 
 ### What was built
-Thêm tính nãng gán nhi?u nhà máy cho User (ğ?c bi?t là role STATISTICIAN). Trı?c ğây m?i user ch? có th? gán 1 nhà máy qua actoryId. Bây gi? có b?ng pivot user_factories ğ? lıu quan h? nhi?u-nhi?u User <-> Factory.
+Thï¿½m tï¿½nh nï¿½ng gï¿½n nhi?u nhï¿½ mï¿½y cho User (ï¿½?c bi?t lï¿½ role STATISTICIAN). Trï¿½?c ï¿½ï¿½y m?i user ch? cï¿½ th? gï¿½n 1 nhï¿½ mï¿½y qua actoryId. Bï¿½y gi? cï¿½ b?ng pivot user_factories ï¿½? lï¿½u quan h? nhi?u-nhi?u User <-> Factory.
 
 ### Files created/modified
 `
-prisma/schema.prisma                            — Thêm model UserFactory + relation vào User và Factory
-prisma/migrations/20260506000001_.../           — Migration t?o b?ng user_factories
-src/app/api/users/route.ts                      — Thay factoryId b?ng factoryIds[], sync b?ng UserFactory
-src/app/users/page.tsx                          — Select multi-factory (mode="multiple"), hi?n th? nhi?u NM trong b?ng
-src/auth.ts                                     — Load factoryIds t? userFactories vào JWT token và session
-src/lib/permissions.ts                          — Thêm factoryIds vào PermUser, c?p nh?t canEditFactory cho STATISTICIAN
+prisma/schema.prisma                            ï¿½ Thï¿½m model UserFactory + relation vï¿½o User vï¿½ Factory
+prisma/migrations/20260506000001_.../           ï¿½ Migration t?o b?ng user_factories
+src/app/api/users/route.ts                      ï¿½ Thay factoryId b?ng factoryIds[], sync b?ng UserFactory
+src/app/users/page.tsx                          ï¿½ Select multi-factory (mode="multiple"), hi?n th? nhi?u NM trong b?ng
+src/auth.ts                                     ï¿½ Load factoryIds t? userFactories vï¿½o JWT token vï¿½ session
+src/lib/permissions.ts                          ï¿½ Thï¿½m factoryIds vï¿½o PermUser, c?p nh?t canEditFactory cho STATISTICIAN
 `
 
 ### Key business logic implemented
-- UserFactory là b?ng pivot nhi?u-nhi?u gi?a User và Factory, tıõng t? UserProcess
-- actoryId (single) trên b?ng users v?n ğı?c gi? nguyên (backward compat), luôn = actoryIds[0]
-- canEditFactory() cho STATISTICIAN: check actoryIds.includes(targetId) trı?c, fallback actoryId
-- Khi save user, xóa toàn b? userFactory c? r?i insert l?i (delete-and-recreate pattern gi?ng processIds)
-- actoryIds ğı?c bake vào JWT token và session, dùng ğı?c ? c? server-side API và client-side
+- UserFactory lï¿½ b?ng pivot nhi?u-nhi?u gi?a User vï¿½ Factory, tï¿½ï¿½ng t? UserProcess
+- actoryId (single) trï¿½n b?ng users v?n ï¿½ï¿½?c gi? nguyï¿½n (backward compat), luï¿½n = actoryIds[0]
+- canEditFactory() cho STATISTICIAN: check actoryIds.includes(targetId) trï¿½?c, fallback actoryId
+- Khi save user, xï¿½a toï¿½n b? userFactory c? r?i insert l?i (delete-and-recreate pattern gi?ng processIds)
+- actoryIds ï¿½ï¿½?c bake vï¿½o JWT token vï¿½ session, dï¿½ng ï¿½ï¿½?c ? c? server-side API vï¿½ client-side
 
 ### API endpoints
 | Method | Path        | Description |
 |--------|-------------|-------------|
-| GET    | /api/users  | Tr? v? userFactories kèm factory info |
+| GET    | /api/users  | Tr? v? userFactories kï¿½m factory info |
 | POST   | /api/users  | Nh?n actoryIds[], t?o UserFactory records |
-| PUT    | /api/users  | Nh?n actoryIds[], xóa c? và t?o l?i UserFactory records |
+| PUT    | /api/users  | Nh?n actoryIds[], xï¿½a c? vï¿½ t?o l?i UserFactory records |
 
 ### Known limitations
-- Token JWT không t? refresh khi admin thay ğ?i factoryIds c?a user ğang ğãng nh?p (c?n logout/login l?i ğ? c?p nh?t factoryIds trong session)
-- actoryId (single) trên b?ng users v?n ğı?c gi? ğ? tránh breaking change v?i các API khác ğang dùng tr?c ti?p
+- Token JWT khï¿½ng t? refresh khi admin thay ï¿½?i factoryIds c?a user ï¿½ang ï¿½ï¿½ng nh?p (c?n logout/login l?i ï¿½? c?p nh?t factoryIds trong session)
+- actoryId (single) trï¿½n b?ng users v?n ï¿½ï¿½?c gi? ï¿½? trï¿½nh breaking change v?i cï¿½c API khï¿½c ï¿½ang dï¿½ng tr?c ti?p
 
 ---
 
-## K? HO?CH S?N XU?T — Benchmark Fill cho ô chıa nh?p SL
+## K? HO?CH S?N XU?T ï¿½ Benchmark Fill cho ï¿½ chï¿½a nh?p SL
 
 **Status:** ? Completed 2026-05-06
 
 ### What was built
-Khi ô ngày trong lı?i th?c t? chıa có SL nh?p vào, h? th?ng t? ği?n giá tr? ğ?nh m?c t? benchmarkMap v?i n?n xám nh?t và ch? nghiêng xám. Giá tr? này ğı?c tính vào t?ng d?ng và t?ng ngày. Không thay ğ?i DB hay API.
+Khi ï¿½ ngï¿½y trong lï¿½?i th?c t? chï¿½a cï¿½ SL nh?p vï¿½o, h? th?ng t? ï¿½i?n giï¿½ tr? ï¿½?nh m?c t? benchmarkMap v?i n?n xï¿½m nh?t vï¿½ ch? nghiï¿½ng xï¿½m. Giï¿½ tr? nï¿½y ï¿½ï¿½?c tï¿½nh vï¿½o t?ng d?ng vï¿½ t?ng ngï¿½y. Khï¿½ng thay ï¿½?i DB hay API.
 
 ### Files created/modified
 ```
-src/components/kdsx/ActualProductionGrid.tsx          — S?a render ô ngày (benchmark fill), rowTotal, totalActualByDay
-src/components/kdsx/ScheduleComparisonDashboard.tsx   — Thêm prop benchmarkMap, s?a tính thByItem
-src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — Truy?n actualBenchmarkMap vào ScheduleComparisonDashboard
+src/components/kdsx/ActualProductionGrid.tsx          ï¿½ S?a render ï¿½ ngï¿½y (benchmark fill), rowTotal, totalActualByDay
+src/components/kdsx/ScheduleComparisonDashboard.tsx   ï¿½ Thï¿½m prop benchmarkMap, s?a tï¿½nh thByItem
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx ï¿½ Truy?n actualBenchmarkMap vï¿½o ScheduleComparisonDashboard
 ```
 
 ### Key business logic implemented
-- Ô chıa nh?p SL th?c t? ? hi?n giá tr? ğ?nh m?c (ch? xám nghiêng, n?n #f0f0f0), tính vào t?ng
-- Ô ğ? nh?p SL th?c t? ? hi?n SL th?c t? + so sánh màu (xanh/vàng/ğ? so benchmark), kèm s? ğ?nh m?c nh? bên dı?i
-- rowTotal = ? (th?c t? n?u có, ngı?c l?i benchmark) cho t?ng ngày không ph?i ngh?
-- totalActualByDay = tıõng t? nhıng iterate qua gridRows thay v? allMachineIds
-- ScheduleComparisonDashboard.thByItem = t?ng th?c t? + benchmark cho ngày tr?ng, c?ng qua rowCombos t? grid + segments
+- ï¿½ chï¿½a nh?p SL th?c t? ? hi?n giï¿½ tr? ï¿½?nh m?c (ch? xï¿½m nghiï¿½ng, n?n #f0f0f0), tï¿½nh vï¿½o t?ng
+- ï¿½ ï¿½? nh?p SL th?c t? ? hi?n SL th?c t? + so sï¿½nh mï¿½u (xanh/vï¿½ng/ï¿½? so benchmark), kï¿½m s? ï¿½?nh m?c nh? bï¿½n dï¿½?i
+- rowTotal = ? (th?c t? n?u cï¿½, ngï¿½?c l?i benchmark) cho t?ng ngï¿½y khï¿½ng ph?i ngh?
+- totalActualByDay = tï¿½ï¿½ng t? nhï¿½ng iterate qua gridRows thay v? allMachineIds
+- ScheduleComparisonDashboard.thByItem = t?ng th?c t? + benchmark cho ngï¿½y tr?ng, c?ng qua rowCombos t? grid + segments
 
 ### Known limitations
-- T?ng và bi?u ğ? so sánh trong ScheduleComparisonDashboard ph?n ánh c? benchmark fill, có th? gây nh?m l?n n?u benchmark không chính xác
+- T?ng vï¿½ bi?u ï¿½? so sï¿½nh trong ScheduleComparisonDashboard ph?n ï¿½nh c? benchmark fill, cï¿½ th? gï¿½y nh?m l?n n?u benchmark khï¿½ng chï¿½nh xï¿½c
 
 ---
 
@@ -2465,3 +2465,36 @@ prisma/seed-lots-page.js                           â€” Seed pageRegistry for cat
 - LotStatus default = OPEN
 - closedAt tá»± set khi PUT status=CLOSED
 - Lot model dÃ¹ng @@map("lots"), LotMaterialLink dÃ¹ng @@map("lot_material_links")
+
+---
+
+## ITEMS â€” Má»Ÿ quyá»n Sá»­a/XÃ³a máº·t hÃ ng cho SALES & PROCESS_LEADER
+
+**Status:** âœ… Completed 2026-05-09
+
+### What was built
+
+Má»Ÿ rá»™ng quyá»n PUT/DELETE trÃªn Item cho SALES vÃ  PROCESS_LEADER (trÆ°á»›c Ä‘Ã³ chá»‰ ADMIN). TrÆ°á»›c Ä‘Ã³ POST Ä‘Ã£ Ä‘Æ°á»£c má»Ÿ cho 3 role nÃ y, nhÆ°ng PUT/DELETE váº«n cháº·n â†’ trÆ°á»Ÿng cÃ´ng Ä‘oáº¡n khÃ´ng sá»­a/xÃ³a Ä‘Æ°á»£c máº·t hÃ ng. UI cÅ©ng áº©n nÃºt thao tÃ¡c do `canEdit` khÃ´ng bao gá»“m cÃ¡c role má»›i.
+
+### Files created/modified
+
+```
+src/app/api/items/[id]/route.ts    â€” PUT & DELETE: cho phÃ©p ADMIN | SALES | PROCESS_LEADER
+src/app/items/page.tsx             â€” canEdit: thÃªm SALES, PROCESS_LEADER vÃ o Ä‘iá»u kiá»‡n hiá»ƒn thá»‹ nÃºt
+```
+
+### Key business logic implemented
+
+- 3 endpoint Item (POST, PUT, DELETE) hiá»‡n Ä‘á»“ng nháº¥t whitelist role: ADMIN, SALES, PROCESS_LEADER
+- UI dÃ¹ng `session.user.role` (khÃ´ng pháº£i `userRole`) Ä‘á»ƒ check á»Ÿ client side â€” Ä‘Ã£ cÃ³ sáºµn nhá» auth.ts:110
+
+### API endpoints
+
+| Method | Path             | Description                                       |
+| ------ | ---------------- | ------------------------------------------------- |
+| PUT    | /api/items/[id]  | Sá»­a item â€” ADMIN/SALES/PROCESS_LEADER             |
+| DELETE | /api/items/[id]  | XÃ³a item â€” ADMIN/SALES/PROCESS_LEADER (cÃ³ blocker)|
+
+### Known limitations / not yet implemented
+
+- /api/items/import (bulk import) chÆ°a Ä‘Æ°á»£c rÃ  soÃ¡t role trong scope nÃ y

@@ -10,8 +10,15 @@ export async function PUT(
   try {
     const session = await auth();
     const userRole = (session?.user as any)?.userRole as string | undefined;
-    if (userRole !== "ADMIN") {
-      return NextResponse.json({ error: "Chỉ Admin mới được sửa mặt hàng" }, { status: 403 });
+    if (
+      userRole !== "ADMIN" &&
+      userRole !== "SALES" &&
+      userRole !== "PROCESS_LEADER"
+    ) {
+      return NextResponse.json(
+        { error: "Chỉ Admin, Sales, Trưởng công đoạn mới được sửa mặt hàng" },
+        { status: 403 },
+      );
     }
 
     // Await params để lấy ID
@@ -50,9 +57,13 @@ export async function DELETE(
   try {
     const session = await auth();
     const userRole2 = (session?.user as any)?.userRole as string | undefined;
-    if (userRole2 !== "ADMIN") {
+    if (
+      userRole2 !== "ADMIN" &&
+      userRole2 !== "SALES" &&
+      userRole2 !== "PROCESS_LEADER"
+    ) {
       return NextResponse.json(
-        { error: "Chỉ Admin được xóa" },
+        { error: "Chỉ Admin, Sales, Trưởng công đoạn được xóa mặt hàng" },
         { status: 403 },
       );
     }

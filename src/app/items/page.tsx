@@ -223,7 +223,10 @@ export default function ItemsManagementPage() {
         setImportResult(null);
     };
 
-    const canEdit = (session?.user as any)?.role === "ADMIN" ||
+    const userRole = (session?.user as any)?.role;
+    const canEdit = userRole === "ADMIN" ||
+        userRole === "SALES" ||
+        userRole === "PROCESS_LEADER" ||
         ["OPERATOR", "MANAGER"].includes((session?.user as any)?.accessLevel);
 
     // --- 6. Cột bảng ---
