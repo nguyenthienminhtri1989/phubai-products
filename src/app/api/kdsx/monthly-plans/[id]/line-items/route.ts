@@ -63,55 +63,13 @@ export async function POST(
     );
   }
 
-  // =====================================================================
-  // isAutoQty: Tự tính SL = Tổng SL mặt hàng từ KH-SL − các HĐ khác
-  // =====================================================================
-  if (isAutoQty) {
-    const schedule = await prisma.productionSchedule.findUnique({
-      where: {
-        factoryId_yearMonth: {
-          factoryId: plan.factoryId,
-          yearMonth: plan.yearMonth,
-        },
-      },
-      include: { segments: true },
-    });
-
-    const holidays: number[] = (schedule?.holidays as number[]) ?? [];
-    const totalItemKg =
-      schedule?.segments
-        .filter((s) => s.itemId === Number(itemId))
-        .reduce((sum, seg) => {
-          const days = seg.toDay - seg.fromDay + 1;
-          const holsInRange = holidays.filter(
-            (h) => h >= seg.fromDay && h <= seg.toDay,
-          ).length;
-          return sum + seg.kgPerDay * (days - holsInRange);
-        }, 0) ?? 0;
-
-    // Trừ SL các HĐ khác cùng mặt hàng trong plan này
-    const otherQty = await prisma.planLineItem.aggregate({
-      where: {
-        planId,
-        itemId: Number(itemId),
-        isAutoQty: false,
-        // Khi tạo mới thì không có lineItemId để exclude
-      },
-      _sum: { qty: true },
-    });
-
-    const autoQty = Math.max(0, totalItemKg - (otherQty._sum.qty ?? 0));
-
-    if (totalItemKg > 0 && autoQty === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Tổng SL các HĐ khác đã đủ hoặc vượt quá SL kế hoạch mặt hàng này.",
-        },
-        { status: 400 },
-      );
-    }
-    qty = autoQty;
+  // isAutoQty: frontend đã tính qty sẵn từ sản lượng giả định (actual + benchmark)
+  // Backend chỉ cần nhận qty đã tính, không cần tính lại
+  if (isAutoQty && (qty === undefined || qty === null)) {
+    return NextResponse.json(
+      { error: "isAutoQty=true nhưng thiếu qty. Frontend cần tính và gửi qty." },
+      { status: 400 },
+    );
   }
 
   if (qty === undefined || qty === null) {

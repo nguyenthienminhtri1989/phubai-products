@@ -2531,5 +2531,41 @@ Không thêm/sửa endpoint nào. Frontend gọi sẵn:
 
 ### Known limitations / not yet implemented
 
-- Khi user thay đổi `itemId` sau khi đã tick "Tự tính SL", qty không tự tính lại — cần bỏ tick rồi tick lại
 - Logic chỉ chạy cho schedule đầu tiên (`schedules[0]`) của tháng — nếu factory có nhiều schedule trong cùng tháng, chỉ dùng cái đầu
+
+---
+
+## KDSX — Bỏ logic tính autoQty từ ScheduleSegment ở backend, frontend là source of truth
+
+**Status:** ✅ Completed 2026-05-11
+
+### What was built
+
+Backend (POST + PUT line-items) trước đây tính `qty` từ `ProductionSchedule.segments` (KH-SL) khi `isAutoQty=true`, nhưng nguồn dữ liệu này SAI — phải lấy từ sản lượng giả định (actual + benchmark) chứ không phải KH-SL. Đã xóa toàn bộ block tính lại ở backend; backend chỉ validate `qty` phải có khi `isAutoQty=true`. Frontend đã tính `qty` sẵn từ `projectedQtyByItem` và gửi xuống. Bổ sung guard "Chọn loại sợi trước" cho checkbox và onChange cho Select itemId để tự tính lại khi đổi mặt hàng trong lúc isAutoQty=true.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/monthly-plans/[id]/line-items/route.ts             — POST: xóa block tính autoQty từ ScheduleSegment, chỉ validate qty
+src/app/api/kdsx/monthly-plans/[id]/line-items/[lineItemId]/route.ts — PUT: xóa block tính autoQty từ ScheduleSegment, chỉ validate qty
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx                  — checkbox isAutoQty thêm guard "Chọn loại sợi trước", reset qty khi bỏ tick; Select itemId thêm onChange tự tính lại qty khi isAutoQty=true
+```
+
+### Key business logic implemented
+
+- Backend KHÔNG tính `qty` cho `isAutoQty` nữa — chỉ trả 400 nếu thiếu `qty`: `"isAutoQty=true nhưng thiếu qty. Frontend cần tính và gửi qty."`
+- Frontend là source of truth cho `qty` khi `isAutoQty=true` (tính từ actual grid + benchmarkMap của ProductionSchedule)
+- Checkbox isAutoQty: nếu chưa chọn `itemId` → warning "Chọn loại sợi trước" và tự bỏ tick; nếu mặt hàng chưa có data giả định → vẫn tick được nhưng qty=0 và hiện warning
+- Bỏ tick checkbox → qty reset về undefined (user nhập tay)
+- Đổi `itemId` khi `isAutoQty=true` → tự tính lại qty cho mặt hàng mới
+
+### API endpoints
+
+| Method | Path                                                  | Description                                                |
+| ------ | ----------------------------------------------------- | ---------------------------------------------------------- |
+| POST   | /api/kdsx/monthly-plans/[id]/line-items               | Backend không tự tính qty từ ScheduleSegment nữa            |
+| PUT    | /api/kdsx/monthly-plans/[id]/line-items/[lineItemId]  | Backend không tự tính qty từ ScheduleSegment nữa            |
+
+### Known limitations / not yet implemented
+
+- Nếu frontend không fetch được `projectedQtyByItem` (mạng lỗi, schedule không tồn tại), tick "Tự tính SL" sẽ điền qty=0 + warning thay vì lấy từ KH-SL như trước

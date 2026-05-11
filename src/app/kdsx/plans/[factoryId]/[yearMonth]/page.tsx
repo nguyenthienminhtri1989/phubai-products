@@ -1140,6 +1140,18 @@ export default function PlanDetailPage({
               showSearch
               optionFilterProp="label"
               placeholder="Chọn loại sợi"
+              onChange={(val) => {
+                if (isAutoQty && val) {
+                  const totalProjected = projectedQtyByItem[val] ?? 0;
+                  const otherQty = (plan?.lineItems ?? [])
+                    .filter((li) => li.itemId === val && li.id !== editingLineItem?.id)
+                    .reduce((s, li) => s + li.qty, 0);
+                  lineItemForm.setFieldValue(
+                    "qty",
+                    Math.max(0, Math.round(totalProjected - otherQty)),
+                  );
+                }
+              }}
             />
           </Form.Item>
           <Form.Item name="isDP" valuePropName="checked" style={{ marginBottom: 8 }}>
@@ -1159,17 +1171,23 @@ export default function PlanDetailPage({
                 setIsAutoQty(checked);
                 if (checked) {
                   const itemId = lineItemForm.getFieldValue("itemId");
-                  if (itemId && projectedQtyByItem[itemId]) {
-                    const totalProjected = projectedQtyByItem[itemId] ?? 0;
-                    const otherQty = (plan?.lineItems ?? [])
-                      .filter((li) => li.itemId === itemId && li.id !== editingLineItem?.id)
-                      .reduce((s, li) => s + li.qty, 0);
-                    const autoQty = Math.max(0, Math.round(totalProjected - otherQty));
-                    lineItemForm.setFieldValue("qty", autoQty);
-                  } else {
-                    lineItemForm.setFieldValue("qty", 0);
+                  if (!itemId) {
+                    message.warning("Chọn loại sợi trước");
+                    setIsAutoQty(false);
+                    lineItemForm.setFieldValue("isAutoQty", false);
+                    return;
+                  }
+                  const totalProjected = projectedQtyByItem[itemId] ?? 0;
+                  if (totalProjected === 0) {
                     message.warning("Chưa có dữ liệu sản lượng giả định cho mặt hàng này");
                   }
+                  const otherQty = (plan?.lineItems ?? [])
+                    .filter((li) => li.itemId === itemId && li.id !== editingLineItem?.id)
+                    .reduce((s, li) => s + li.qty, 0);
+                  const autoQty = Math.max(0, Math.round(totalProjected - otherQty));
+                  lineItemForm.setFieldValue("qty", autoQty);
+                } else {
+                  lineItemForm.setFieldValue("qty", undefined);
                 }
               }}
             >

@@ -41,44 +41,13 @@ export async function PUT(
 
   let qty = body.qty;
 
-  // =====================================================================
-  // isAutoQty: Tự tính SL = Tổng SL mặt hàng từ KH-SL − các HĐ khác
-  // =====================================================================
-  if (isAutoQty) {
-    const schedule = await prisma.productionSchedule.findUnique({
-      where: {
-        factoryId_yearMonth: {
-          factoryId: plan.factoryId,
-          yearMonth: plan.yearMonth,
-        },
-      },
-      include: { segments: true },
-    });
-
-    const holidays: number[] = (schedule?.holidays as number[]) ?? [];
-    const totalItemKg =
-      schedule?.segments
-        .filter((s) => s.itemId === Number(itemId))
-        .reduce((sum, seg) => {
-          const days = seg.toDay - seg.fromDay + 1;
-          const holsInRange = holidays.filter(
-            (h) => h >= seg.fromDay && h <= seg.toDay,
-          ).length;
-          return sum + seg.kgPerDay * (days - holsInRange);
-        }, 0) ?? 0;
-
-    // Trừ SL các HĐ khác (không phải isAutoQty, không phải record hiện tại)
-    const otherQty = await prisma.planLineItem.aggregate({
-      where: {
-        planId,
-        itemId: Number(itemId),
-        isAutoQty: false,
-        id: { not: Number(lineItemId) },
-      },
-      _sum: { qty: true },
-    });
-
-    qty = Math.max(0, totalItemKg - (otherQty._sum.qty ?? 0));
+  // isAutoQty: frontend đã tính qty sẵn từ sản lượng giả định (actual + benchmark)
+  // Backend chỉ cần nhận qty đã tính, không cần tính lại
+  if (isAutoQty && (qty === undefined || qty === null)) {
+    return NextResponse.json(
+      { error: "isAutoQty=true nhưng thiếu qty. Frontend cần tính và gửi qty." },
+      { status: 400 },
+    );
   }
 
   const inputParam = await prisma.monthlyInputParam.findUnique({
