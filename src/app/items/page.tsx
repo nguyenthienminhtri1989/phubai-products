@@ -232,6 +232,14 @@ export default function ItemsManagementPage() {
     // --- 6. Cột bảng ---
     const columns = [
         {
+            title: "ID",
+            dataIndex: "id",
+            key: "id",
+            align: 'center' as const,
+            width: 70,
+            render: (id: number) => <span style={{ color: '#8c8c8c', fontSize: 12, fontFamily: 'monospace' }}>#{id}</span>
+        },
+        {
             title: "Tên mặt hàng",
             dataIndex: "name",
             key: "name",
