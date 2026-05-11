@@ -218,6 +218,11 @@ export default function MachinesPage() {
     // Columns
     const columns = [
         {
+            title: "ID", dataIndex: "id", key: "id",
+            align: 'center' as const, width: 70,
+            render: (id: number) => <span style={{ color: '#8c8c8c', fontSize: 12, fontFamily: 'monospace' }}>#{id}</span>
+        },
+        {
             title: "Tên máy", dataIndex: "name", width: 120,
             render: (text: string, r: any) => (
                 <b style={{ color: r.isActive ? '#000' : '#ccc' }}>
