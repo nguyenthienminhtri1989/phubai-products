@@ -31,6 +31,13 @@ interface Machine {
     processId: number;
 }
 
+interface Process {
+    id: number;
+    name: string;
+    factoryId: number;
+    factory?: { id: number; name: string };
+}
+
 // ─── Date preset helpers ────────────────────────────────────────────────────────
 const DATE_PRESETS = [
     { label: "Hôm nay", value: "today" },
@@ -71,6 +78,8 @@ export default function MobileReportPage() {
 
     // ─── State ─────────────────────────────────────────────────────────────
     const [machines, setMachines] = useState<Machine[]>([]);
+    const [processes, setProcesses] = useState<Process[]>([]);
+    const [selectedProcesses, setSelectedProcesses] = useState<number[]>([]);
     const [selectedMachines, setSelectedMachines] = useState<number[]>([]);
     const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(getPresetRange("7days"));
     const [activePreset, setActivePreset] = useState("7days");
@@ -108,8 +117,42 @@ export default function MobileReportPage() {
                 }
             })
             .catch(() => message.error("Lỗi tải danh sách máy"));
+
+        fetch("/api/processes")
+            .then((r) => r.json())
+            .then((data: Process[]) => {
+                if (isAdmin) {
+                    setProcesses(data);
+                } else if (userRole === "FACTORY_MANAGER" || userRole === "DIRECTOR") {
+                    if (userFactoryIds.length > 0) {
+                        setProcesses(data.filter((p) => userFactoryIds.includes(p.factoryId)));
+                    } else {
+                        setProcesses(data);
+                    }
+                } else {
+                    setProcesses(data.filter((p) => userProcessIds.includes(p.id)));
+                }
+            })
+            .catch(() => message.error("Lỗi tải danh sách công đoạn"));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status, isAdmin, userRole]);
+
+    // ─── Filtered machines by selected processes ───────────────────────────
+    const filteredMachines = useMemo(() => {
+        if (selectedProcesses.length === 0) return machines;
+        return machines.filter((m) => selectedProcesses.includes(m.processId));
+    }, [machines, selectedProcesses]);
+
+    // Khi đổi công đoạn → loại bỏ máy đã chọn không còn thuộc phạm vi
+    useEffect(() => {
+        if (selectedProcesses.length === 0) return;
+        setSelectedMachines((prev) =>
+            prev.filter((mid) => {
+                const m = machines.find((x) => x.id === mid);
+                return m && selectedProcesses.includes(m.processId);
+            })
+        );
+    }, [selectedProcesses, machines]);
 
     // ─── Date preset handler ────────────────────────────────────────────────
     const handlePreset = (preset: string) => {
@@ -133,6 +176,9 @@ export default function MobileReportPage() {
 
             if (selectedMachines.length > 0) {
                 payload.machineIds = selectedMachines;
+            } else if (selectedProcesses.length > 0) {
+                // Có chọn công đoạn → giới hạn theo công đoạn đã chọn
+                payload.processIds = selectedProcesses;
             } else if (!isAdmin && userProcessIds.length > 0) {
                 // Non-admin: limit to own process when no machine selected
                 payload.processIds = userProcessIds;
@@ -301,6 +347,29 @@ export default function MobileReportPage() {
                         />
                     </div>
 
+                    {/* Process Multiselect */}
+                    <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6 }}>
+                            <AppstoreOutlined style={{ marginRight: 4 }} />
+                            CÔNG ĐOẠN
+                        </div>
+                        <Select
+                            mode="multiple"
+                            allowClear
+                            style={{ width: "100%" }}
+                            placeholder="Tất cả công đoạn"
+                            options={processes.map((p) => ({
+                                label: p.factory ? `${p.name} (${p.factory.name})` : p.name,
+                                value: p.id,
+                            }))}
+                            value={selectedProcesses}
+                            onChange={setSelectedProcesses}
+                            maxTagCount="responsive"
+                            showSearch
+                            optionFilterProp="label"
+                        />
+                    </div>
+
                     {/* Machine Multiselect */}
                     <div style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6 }}>
@@ -312,7 +381,7 @@ export default function MobileReportPage() {
                             allowClear
                             style={{ width: "100%" }}
                             placeholder="Tất cả (để trống = chọn tất cả máy)"
-                            options={machines.map((m) => ({ label: m.name, value: m.id }))}
+                            options={filteredMachines.map((m) => ({ label: m.name, value: m.id }))}
                             value={selectedMachines}
                             onChange={setSelectedMachines}
                             maxTagCount="responsive"

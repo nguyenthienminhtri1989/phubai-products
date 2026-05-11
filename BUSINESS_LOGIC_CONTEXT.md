@@ -2608,3 +2608,39 @@ src/app/production/history/page.tsx          — thêm cột "Thao tác" (ADMIN)
 - Không log audit trail khi ADMIN sửa/xóa — chưa lưu vết ai sửa, lúc nào, sửa gì
 - Không kiểm tra dữ liệu liên quan trước khi xóa (vd: nếu bản ghi đã được dùng trong allocation/báo cáo) — admin tự chịu trách nhiệm
 - Hardcode role ADMIN thay vì dùng `canEdit` từ hệ phân quyền — nếu sau này muốn cho role khác có quyền, phải sửa cả backend lẫn frontend
+
+---
+
+## KDSX — Dòng sợi isAutoQty tự cập nhật qty theo sản lượng giả định
+
+**Status:** ✅ Completed 2026-05-11
+
+### What was built
+
+Dòng sợi có `isAutoQty=true` trong kế hoạch tháng (DRAFT) nay tự đồng bộ qty theo sản lượng giả định (actual ProductionLog + benchmark) ở 2 thời điểm: (1) khi mở trang chi tiết kế hoạch, frontend phát hiện chênh lệch >1kg sẽ tự PUT cập nhật từng dòng; (2) khi bấm "Tính lại tất cả", backend recalculate cũng tự tính projectedQtyByItem rồi áp dụng `qty = projected - otherQty` cho các dòng isAutoQty.
+
+### Files created/modified
+
+```
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx                — thêm useEffect tự PUT cập nhật qty cho dòng isAutoQty (DRAFT, ngưỡng chênh >1kg)
+src/app/api/kdsx/monthly-plans/[id]/recalculate/route.ts           — tự tính projectedQtyByItem từ ProductionSchedule.segments + ProductionLog + benchmark, áp dụng qty mới cho dòng isAutoQty trước khi calculateLineItem
+```
+
+### Key business logic implemented
+
+- Công thức autoQty: `qty = max(0, round(projectedQtyByItem[itemId] - sum(qty các dòng cùng itemId không phải dòng đang xét)))`
+- Chỉ tự cập nhật khi plan ở trạng thái DRAFT — SUBMITTED/APPROVED không sửa
+- Ngưỡng chênh lệch frontend: >1kg mới gọi PUT (tránh PUT vô ích do làm tròn)
+- Backend recalculate dùng cùng thuật toán projected như frontend: actual nếu có, ngược lại bù `empiricalOutputPerDay` cho lastRow của mỗi máy ở những ngày chưa có dữ liệu (`day > combo.lastDay && !daysWithData.has(day) && isLastRow`)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/kdsx/monthly-plans/[id]/recalculate | Tính lại toàn bộ lineItems; với dòng isAutoQty tự cập nhật qty từ projectedQtyByItem |
+| PUT  | /api/kdsx/monthly-plans/[id]/line-items/[lineItemId] | Frontend gọi cho từng dòng isAutoQty cần đồng bộ (qty mới + giữ nguyên itemId/salesOrderItemId/unitPriceUsd/note) |
+
+### Known limitations
+
+- Frontend chỉ chạy useEffect 1 lần khi `projectedQtyByItem` hoặc `plan.id` đổi — nếu user mở modal sửa rồi đóng mà chưa reload trang, dòng isAutoQty mới thêm không trigger lại cho tới khi fetchPlan() chạy
+- Recalculate backend không trả về projectedQtyByItem cho debug — chỉ trả `{ updated }`

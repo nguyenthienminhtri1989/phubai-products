@@ -344,6 +344,52 @@ export default function PlanDetailPage({
       .catch(() => {});
   }, [fetchPlan, fetchActual, fetchItems, yearMonth, factoryId]);
 
+  // Tự cập nhật qty cho dòng isAutoQty khi projectedQtyByItem thay đổi
+  useEffect(() => {
+    if (!plan || Object.keys(projectedQtyByItem).length === 0) return;
+    if (plan.status !== "DRAFT") return;
+
+    const autoLines = plan.lineItems.filter((li) => li.isAutoQty);
+    if (autoLines.length === 0) return;
+
+    const updates: Array<{ li: PlanLineItem; newQty: number }> = [];
+    for (const li of autoLines) {
+      const totalProjected = projectedQtyByItem[li.itemId] ?? 0;
+      const otherQty = plan.lineItems
+        .filter((other) => other.itemId === li.itemId && other.id !== li.id)
+        .reduce((s, other) => s + other.qty, 0);
+      const newQty = Math.max(0, Math.round(totalProjected - otherQty));
+      if (Math.abs(newQty - li.qty) > 1) {
+        updates.push({ li, newQty });
+      }
+    }
+
+    if (updates.length === 0) return;
+
+    Promise.all(
+      updates.map((u) =>
+        fetch(`/api/kdsx/monthly-plans/${plan.id}/line-items/${u.li.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemId: u.li.itemId,
+            salesOrderItemId: u.li.salesOrderItemId,
+            qty: u.newQty,
+            unitPriceUsd: u.li.unitPriceUsd,
+            isAutoQty: true,
+            note: u.li.note,
+          }),
+        }),
+      ),
+    )
+      .then(() => {
+        message.info(`Đã cập nhật SL cho ${updates.length} dòng tự tính`);
+        fetchPlan();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectedQtyByItem, plan?.id]);
+
 
   // Tính tổng
   const totalRevenue = plan?.lineItems.reduce((s, li) => s + (li.revenueVnd ?? 0), 0) ?? 0;
