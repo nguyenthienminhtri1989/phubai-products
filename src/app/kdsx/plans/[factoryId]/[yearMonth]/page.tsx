@@ -53,6 +53,7 @@ interface SalesOrderItem {
   id: number;
   itemId: number;
   unitPrice: number;
+  plannedQty: number;
   order: { id: number; orderNo: string };
 }
 interface PlanLineItem {
@@ -1134,22 +1135,38 @@ export default function PlanDetailPage({
           style={{ marginBottom: 16 }}
         />
         <Form form={lineItemForm} layout="vertical">
-          <Form.Item name="itemId" label="Loại sợi" rules={[{ required: true }]}>
+          <Form.Item
+            name="salesOrderItemId"
+            label="Hợp đồng"
+            rules={[{ required: !isDP, message: "Vui lòng chọn hợp đồng hoặc đánh dấu Dự phòng" }]}
+          >
             <Select
-              options={items.map((i) => ({ label: i.name, value: i.id }))}
+              options={salesOrderItems.map((oi) => ({
+                label: `${oi.order.orderNo} — ${items.find((i) => i.id === oi.itemId)?.name ?? oi.itemId} — ${oi.unitPrice} USD/kg`,
+                value: oi.id,
+              }))}
               showSearch
               optionFilterProp="label"
-              placeholder="Chọn loại sợi"
+              placeholder={isDP ? "Không áp dụng (Dự phòng)" : "Chọn dòng HĐ"}
+              allowClear
+              disabled={isDP}
               onChange={(val) => {
-                if (isAutoQty && val) {
-                  const totalProjected = projectedQtyByItem[val] ?? 0;
+                if (!val) return;
+                const selected = salesOrderItems.find((oi) => oi.id === val);
+                if (!selected) return;
+                // Auto-fill itemId, qty (plannedQty), unitPriceUsd
+                lineItemForm.setFieldsValue({
+                  itemId: selected.itemId,
+                  qty: selected.plannedQty,
+                  unitPriceUsd: selected.unitPrice,
+                });
+                // Also update isAutoQty projected qty if needed
+                if (isAutoQty) {
+                  const totalProjected = projectedQtyByItem[selected.itemId] ?? 0;
                   const otherQty = (plan?.lineItems ?? [])
-                    .filter((li) => li.itemId === val && li.id !== editingLineItem?.id)
+                    .filter((li) => li.itemId === selected.itemId && li.id !== editingLineItem?.id)
                     .reduce((s, li) => s + li.qty, 0);
-                  lineItemForm.setFieldValue(
-                    "qty",
-                    Math.max(0, Math.round(totalProjected - otherQty)),
-                  );
+                  lineItemForm.setFieldValue("qty", Math.max(0, Math.round(totalProjected - otherQty)));
                 }
               }}
             />
@@ -1194,21 +1211,24 @@ export default function PlanDetailPage({
               Tự tính SL từ sản lượng giả định (TH + định mức)
             </Checkbox>
           </Form.Item>
-          <Form.Item
-            name="salesOrderItemId"
-            label="Hợp đồng"
-            rules={[{ required: !isDP, message: "Vui lòng chọn hợp đồng hoặc đánh dấu Dự phòng" }]}
-          >
+          <Form.Item name="itemId" label="Loại sợi" rules={[{ required: true }]}>
             <Select
-              options={salesOrderItems.map((oi) => ({
-                label: `${oi.order.orderNo} — ${items.find((i) => i.id === oi.itemId)?.name ?? oi.itemId} — ${oi.unitPrice} USD/kg`,
-                value: oi.id,
-              }))}
+              options={items.map((i) => ({ label: i.name, value: i.id }))}
               showSearch
               optionFilterProp="label"
-              placeholder={isDP ? "Không áp dụng (Dự phòng)" : "Chọn dòng HĐ"}
-              allowClear
-              disabled={isDP}
+              placeholder="Chọn loại sợi"
+              onChange={(val) => {
+                if (isAutoQty && val) {
+                  const totalProjected = projectedQtyByItem[val] ?? 0;
+                  const otherQty = (plan?.lineItems ?? [])
+                    .filter((li) => li.itemId === val && li.id !== editingLineItem?.id)
+                    .reduce((s, li) => s + li.qty, 0);
+                  lineItemForm.setFieldValue(
+                    "qty",
+                    Math.max(0, Math.round(totalProjected - otherQty)),
+                  );
+                }
+              }}
             />
           </Form.Item>
           <Row gutter={16}>
