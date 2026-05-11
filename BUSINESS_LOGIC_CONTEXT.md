@@ -2569,3 +2569,42 @@ src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx                  — checkbo
 ### Known limitations / not yet implemented
 
 - Nếu frontend không fetch được `projectedQtyByItem` (mạng lỗi, schedule không tồn tại), tick "Tự tính SL" sẽ điền qty=0 + warning thay vì lấy từ KH-SL như trước
+
+---
+
+## PRODUCTION — Sửa/Xóa bản ghi production_logs cho ADMIN trên trang Lịch sử
+
+**Status:** ✅ Completed 2026-05-11
+
+### What was built
+
+Trang `/production/history` bổ sung chức năng sửa và xóa từng bản ghi `production_logs` (tên mặt hàng, chỉ số đầu/cuối, sản lượng, hiệu suất, ghi chú) **chỉ dành cho ADMIN**. Backend hard-delete, kiểm tra unique constraint khi đổi mặt hàng. Frontend ẩn cột "Thao tác" với user không phải ADMIN.
+
+### Files created/modified
+
+```
+src/app/api/production/history/[id]/route.ts — MỚI: PATCH (sửa) + DELETE (xóa) — chỉ ADMIN
+src/app/production/history/page.tsx          — thêm cột "Thao tác" (ADMIN), Modal sửa, Popconfirm xóa
+```
+
+### Key business logic implemented
+
+- Cả PATCH và DELETE check `userRole === "ADMIN"` → 403 nếu không phải ADMIN
+- PATCH chỉ update các field có trong body (partial update): `itemId`, `startIndex`, `endIndex`, `finalOutput`, `efficiency`, `note`
+- Khi đổi `itemId`, kiểm tra unique constraint `(machineId, recordDate, shift, itemId)` — nếu trùng với bản ghi khác → trả 409 "Đã có bản ghi khác cho máy/ngày/ca/mặt hàng này"
+- Backend KHÔNG tự tính lại `finalOutput` từ `endIndex - startIndex` — vì admin chủ yếu sửa máy `formulaType=1` (nhập trực tiếp, `endIndex = finalOutput`, không theo công thức trừ)
+- DELETE là hard delete (không soft delete)
+- Frontend: `isAdmin = (session?.user as any)?.userRole === "ADMIN"` — cột "Thao tác" và Modal sửa chỉ render khi `isAdmin === true` (double-layer với backend)
+
+### API endpoints
+
+| Method | Path                          | Description                                     |
+| ------ | ----------------------------- | ----------------------------------------------- |
+| PATCH  | /api/production/history/[id]  | ADMIN sửa 1 bản ghi production_logs             |
+| DELETE | /api/production/history/[id]  | ADMIN hard-delete 1 bản ghi                     |
+
+### Known limitations / not yet implemented
+
+- Không log audit trail khi ADMIN sửa/xóa — chưa lưu vết ai sửa, lúc nào, sửa gì
+- Không kiểm tra dữ liệu liên quan trước khi xóa (vd: nếu bản ghi đã được dùng trong allocation/báo cáo) — admin tự chịu trách nhiệm
+- Hardcode role ADMIN thay vì dùng `canEdit` từ hệ phân quyền — nếu sau này muốn cho role khác có quyền, phải sửa cả backend lẫn frontend

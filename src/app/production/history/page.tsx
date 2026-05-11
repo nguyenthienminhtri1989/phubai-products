@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Card, DatePicker, Select, Button, Table, Tag, Row, Col, Statistic, Space, message, Divider } from "antd";
-import { SearchOutlined, FileExcelOutlined, ReloadOutlined, FilterOutlined, BarChartOutlined } from "@ant-design/icons";
+import { Card, DatePicker, Select, Button, Table, Tag, Row, Col, Statistic, Space, message, Divider, Modal, Form, InputNumber, Input, Popconfirm } from "antd";
+import { SearchOutlined, FileExcelOutlined, ReloadOutlined, FilterOutlined, BarChartOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
+import { useSession } from "next-auth/react";
 import { getItemColor } from "@/utils/itemColors";
 // Thư viện biểu đồ
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -12,9 +13,17 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 const { RangePicker } = DatePicker;
 
 export default function ProductionHistoryPage() {
+    const { data: session } = useSession();
+    const isAdmin = (session?.user as any)?.userRole === "ADMIN";
+
     // --- 1. STATE DỮ LIỆU ---
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+
+    // --- STATE SỬA/XÓA (ADMIN) ---
+    const [editingLog, setEditingLog] = useState<any | null>(null);
+    const [editForm] = Form.useForm();
+    const [savingEdit, setSavingEdit] = useState(false);
 
     // State Phân trang & Thống kê Server trả về
     const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
@@ -148,6 +157,53 @@ export default function ProductionHistoryPage() {
         XLSX.writeFile(wb, `SanLuong_${dayjs().format("DDMM_HHmm")}.xlsx`);
     };
 
+    // --- HANDLER: Sửa / Xóa (ADMIN) ---
+    const openEdit = (log: any) => {
+        setEditingLog(log);
+        editForm.setFieldsValue({
+            itemId: log.item?.id ?? log.itemId,
+            startIndex: log.startIndex,
+            endIndex: log.endIndex,
+            finalOutput: log.finalOutput,
+            efficiency: log.efficiency,
+            note: log.note,
+        });
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingLog) return;
+        try {
+            const values = await editForm.validateFields();
+            setSavingEdit(true);
+            const res = await fetch(`/api/production/history/${editingLog.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                message.error(err.error || "Lỗi cập nhật");
+                return;
+            }
+            message.success("Đã cập nhật bản ghi");
+            setEditingLog(null);
+            handleSearch(pagination.current);
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const handleDeleteLog = async (logId: number) => {
+        const res = await fetch(`/api/production/history/${logId}`, { method: "DELETE" });
+        if (!res.ok) {
+            const err = await res.json();
+            message.error(err.error || "Không thể xóa");
+            return;
+        }
+        message.success("Đã xóa bản ghi");
+        handleSearch(pagination.current);
+    };
+
     const columns = [
         { title: "Ngày", dataIndex: "recordDate", sorter: true, render: (d: string) => dayjs(d).format("DD/MM/YYYY") },
         { title: "Ca", dataIndex: "shift", width: 60, align: 'center' as const, sorter: true, render: (s: number) => <Tag color="blue">{s}</Tag> },
@@ -174,6 +230,30 @@ export default function ProductionHistoryPage() {
         { title: "Đầu", dataIndex: "startIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
         { title: "Cuối", dataIndex: "endIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
         { title: "Người nhập", dataIndex: ["createdBy", "fullName"], width: 150, ellipsis: true, sorter: true, responsive: ['lg'] as any },
+        ...(isAdmin ? [{
+            title: "Thao tác",
+            key: "action",
+            width: 110,
+            align: 'center' as const,
+            render: (_: unknown, row: unknown) => {
+                const r = row as { id: number; recordDate: string; shift: number; machine?: { name?: string }; item?: { name?: string } };
+                return (
+                <Space size={4}>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} />
+                    <Popconfirm
+                        title="Xóa bản ghi này?"
+                        description={`${dayjs(r.recordDate).format("DD/MM/YYYY")} — Ca ${r.shift} — ${r.machine?.name} — ${r.item?.name}`}
+                        onConfirm={() => handleDeleteLog(r.id)}
+                        okText="Xóa"
+                        cancelText="Hủy"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                </Space>
+                );
+            },
+        }] : []),
     ];
 
     return (
@@ -333,6 +413,57 @@ export default function ProductionHistoryPage() {
                     scroll={{ x: 1000 }} // Cho phép cuộn ngang trên mobile
                 />
             </Card>
+
+            {/* --- MODAL SỬA BẢN GHI (ADMIN) --- */}
+            <Modal
+                title={editingLog ? `Sửa bản ghi — ${dayjs(editingLog.recordDate).format("DD/MM/YYYY")} — Ca ${editingLog.shift} — ${editingLog.machine?.name}` : "Sửa bản ghi"}
+                open={!!editingLog}
+                onOk={handleSaveEdit}
+                onCancel={() => setEditingLog(null)}
+                confirmLoading={savingEdit}
+                okText="Lưu"
+                cancelText="Hủy"
+                width={560}
+                destroyOnClose
+            >
+                <Form form={editForm} layout="vertical">
+                    <Form.Item name="itemId" label="Mặt hàng" rules={[{ required: true, message: "Chọn mặt hàng" }]}>
+                        <Select
+                            showSearch
+                            optionFilterProp="label"
+                            options={items.map(i => ({ label: i.name, value: i.id }))}
+                            placeholder="Chọn mặt hàng"
+                        />
+                    </Form.Item>
+                    <Row gutter={12}>
+                        <Col span={12}>
+                            <Form.Item name="startIndex" label="Chỉ số đầu">
+                                <InputNumber style={{ width: "100%" }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="endIndex" label="Chỉ số cuối">
+                                <InputNumber style={{ width: "100%" }} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                    <Row gutter={12}>
+                        <Col span={12}>
+                            <Form.Item name="finalOutput" label="Sản lượng (kg)" rules={[{ required: true, message: "Nhập sản lượng" }]}>
+                                <InputNumber style={{ width: "100%" }} min={0} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="efficiency" label="Hiệu suất (%)">
+                                <InputNumber style={{ width: "100%" }} min={0} max={200} step={0.1} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                    <Form.Item name="note" label="Ghi chú">
+                        <Input.TextArea rows={2} />
+                    </Form.Item>
+                </Form>
+            </Modal>
         </div>
     );
 }
