@@ -172,6 +172,9 @@ export default function PlanDetailPage({
   const [cottonTypes, setCottonTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
   const [peTypes, setPeTypes] = useState<Array<{ id: number; code: string; name: string; priceUsd: number | null }>>([]);
 
+  // Sản lượng giả định per item từ ProductionSchedule (actual + benchmark)
+  const [projectedQtyByItem, setProjectedQtyByItem] = useState<Record<number, number>>({});
+
   // Submit checklist modal
   const [submitCheckModal, setSubmitCheckModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -260,7 +263,85 @@ export default function PlanDetailPage({
           setPeTypes(data.pe ?? []);
         }
       });
-  }, [fetchPlan, fetchActual, fetchItems, yearMonth]);
+
+    // Fetch schedule → actual grid → tính projected qty per item
+    fetch(`/api/kdsx/production-schedule?factoryId=${factoryId}&yearMonth=${yearMonth}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(async (schedules: any[]) => {
+        if (!Array.isArray(schedules) || schedules.length === 0) return;
+        const scheduleId = schedules[0].id;
+        const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const grid = data.grid ?? {};
+        const benchmarkMap = data.benchmarkMap ?? {};
+
+        // Tập day có dữ liệu thực tế (>0) bất kỳ
+        const daysWithData = new Set<number>();
+        for (const mid of Object.keys(grid)) {
+          for (const dayStr of Object.keys(grid[Number(mid)])) {
+            const dayData = grid[Number(mid)][Number(dayStr)];
+            if (dayData && Object.values(dayData).some((kg: any) => kg > 0)) {
+              daysWithData.add(Number(dayStr));
+            }
+          }
+        }
+
+        // Tìm tất cả combo (machineId-itemId)
+        const combos = new Map<string, { machineId: number; itemId: number; lastDay: number }>();
+        for (const mid of Object.keys(grid)) {
+          const machineId = Number(mid);
+          for (const dayStr of Object.keys(grid[machineId])) {
+            const day = Number(dayStr);
+            const dayData = grid[machineId][day];
+            for (const iid of Object.keys(dayData)) {
+              const itemId = Number(iid);
+              if (dayData[itemId] <= 0) continue;
+              const key = `${machineId}-${itemId}`;
+              const existing = combos.get(key);
+              if (!existing) combos.set(key, { machineId, itemId, lastDay: day });
+              else if (day > existing.lastDay) existing.lastDay = day;
+            }
+          }
+        }
+
+        // Tìm lastRow per machine
+        const lastRowPerMachine = new Map<number, string>();
+        for (const [key, combo] of combos) {
+          const existing = lastRowPerMachine.get(combo.machineId);
+          if (!existing || combo.lastDay > (combos.get(existing)?.lastDay ?? 0)) {
+            lastRowPerMachine.set(combo.machineId, key);
+          }
+        }
+
+        // Tính tổng per item
+        const [, month] = yearMonth.split("-").map(Number);
+        const totalDays = new Date(Number(yearMonth.split("-")[0]), month, 0).getDate();
+        const qtyByItem: Record<number, number> = {};
+
+        for (const [key, combo] of combos) {
+          const bmKg = benchmarkMap[key] ?? 0;
+          const isLastRow = lastRowPerMachine.get(combo.machineId) === key;
+
+          for (let day = 1; day <= totalDays; day++) {
+            const actual = grid[combo.machineId]?.[day]?.[combo.itemId] ?? 0;
+            if (actual > 0) {
+              qtyByItem[combo.itemId] = (qtyByItem[combo.itemId] ?? 0) + actual;
+            } else if (
+              bmKg > 0 &&
+              !daysWithData.has(day) &&
+              day > combo.lastDay &&
+              isLastRow
+            ) {
+              qtyByItem[combo.itemId] = (qtyByItem[combo.itemId] ?? 0) + bmKg;
+            }
+          }
+        }
+
+        setProjectedQtyByItem(qtyByItem);
+      })
+      .catch(() => {});
+  }, [fetchPlan, fetchActual, fetchItems, yearMonth, factoryId]);
 
 
   // Tính tổng
@@ -1074,11 +1155,25 @@ export default function PlanDetailPage({
           <Form.Item name="isAutoQty" valuePropName="checked" style={{ marginBottom: 8 }}>
             <Checkbox
               onChange={(e) => {
-                setIsAutoQty(e.target.checked);
-                if (e.target.checked) lineItemForm.setFieldValue("qty", undefined);
+                const checked = e.target.checked;
+                setIsAutoQty(checked);
+                if (checked) {
+                  const itemId = lineItemForm.getFieldValue("itemId");
+                  if (itemId && projectedQtyByItem[itemId]) {
+                    const totalProjected = projectedQtyByItem[itemId] ?? 0;
+                    const otherQty = (plan?.lineItems ?? [])
+                      .filter((li) => li.itemId === itemId && li.id !== editingLineItem?.id)
+                      .reduce((s, li) => s + li.qty, 0);
+                    const autoQty = Math.max(0, Math.round(totalProjected - otherQty));
+                    lineItemForm.setFieldValue("qty", autoQty);
+                  } else {
+                    lineItemForm.setFieldValue("qty", 0);
+                    message.warning("Chưa có dữ liệu sản lượng giả định cho mặt hàng này");
+                  }
+                }
               }}
             >
-              Tự tính SL = Tổng SL mặt hàng − các HĐ khác
+              Tự tính SL từ sản lượng giả định (TH + định mức)
             </Checkbox>
           </Form.Item>
           <Form.Item
@@ -1100,8 +1195,13 @@ export default function PlanDetailPage({
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="qty" label="Số lượng (kg)" rules={[{ required: !isAutoQty, message: "Nhập SL hoặc dùng Tự tính" }]}>
-                <InputNumber min={0} style={{ width: "100%" }} disabled={isAutoQty} placeholder={isAutoQty ? "Tự tính từ lịch SX" : ""} />
+              <Form.Item name="qty" label="Số lượng (kg)" rules={[{ required: true }]}>
+                <InputNumber
+                  min={0}
+                  style={{ width: "100%" }}
+                  readOnly={isAutoQty}
+                  placeholder={isAutoQty ? "Đã tự tính" : ""}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>

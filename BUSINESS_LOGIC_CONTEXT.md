@@ -2498,3 +2498,38 @@ src/app/items/page.tsx             — canEdit: thêm SALES, PROCESS_LEADER vào
 ### Known limitations / not yet implemented
 
 - /api/items/import (bulk import) chưa được rà soát role trong scope này
+
+---
+
+## KDSX — "Tự tính SL" frontend tính từ sản lượng giả định (TH + định mức)
+
+**Status:** ✅ Completed 2026-05-11
+
+### What was built
+
+Trên trang chi tiết kế hoạch tháng (KDSX), khi user tick checkbox "Tự tính SL" trong modal thêm/sửa dòng sợi, frontend sẽ tự tính `qty` ngay tại client = (tổng sản lượng giả định của mặt hàng đó từ ProductionSchedule) − (SL các dòng HĐ khác cùng mặt hàng đã có trong plan). Ô qty chuyển sang readonly (vẫn hiển thị giá trị) thay vì disable hoàn toàn. Backend không thay đổi — chỉ nhận `qty` đã tính sẵn.
+
+### Files created/modified
+
+```
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx — thêm state projectedQtyByItem, fetch schedule/actual grid trong useEffect, tính projected qty per item theo logic ActualProductionGrid (actual + benchmark cho lastRow), sửa onChange checkbox isAutoQty để tính qty client-side, đổi InputNumber qty từ disabled sang readOnly
+```
+
+### Key business logic implemented
+
+- Sản lượng giả định per item = Σ(actual qty mỗi ngày) + Σ(benchmark kg cho ngày chưa có data, day > combo.lastDay, chỉ áp cho lastRow của machine)
+- Khi tick "Tự tính SL": `qty = max(0, round(totalProjected − Σ qty các lineItem khác cùng itemId trong plan, loại trừ chính dòng đang sửa))`
+- Nếu chưa có dữ liệu giả định cho mặt hàng → set qty=0 và hiện warning
+- qty input dùng `readOnly` (không `disabled`) để vẫn hiện giá trị đã tự tính cho user thấy
+- Backend không cần đổi: `qty` từ form gửi thẳng, `isAutoQty` chỉ là flag
+
+### API endpoints
+
+Không thêm/sửa endpoint nào. Frontend gọi sẵn:
+- GET /api/kdsx/production-schedule?factoryId=&yearMonth=
+- GET /api/kdsx/production-schedule/[id]/actual
+
+### Known limitations / not yet implemented
+
+- Khi user thay đổi `itemId` sau khi đã tick "Tự tính SL", qty không tự tính lại — cần bỏ tick rồi tick lại
+- Logic chỉ chạy cho schedule đầu tiên (`schedules[0]`) của tháng — nếu factory có nhiều schedule trong cùng tháng, chỉ dùng cái đầu
