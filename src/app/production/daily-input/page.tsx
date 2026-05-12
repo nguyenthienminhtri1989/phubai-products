@@ -16,6 +16,7 @@ interface Machine {
     processId: number;
     spindleCount?: number;
     currentItem?: { id: number; name: string };
+    currentLot?: { id: number; lotNumber: string } | null;
     currentNE?: number;
     todayLog?: {
         id: number;
@@ -622,6 +623,11 @@ export default function DailyInputPage() {
                                         {/* Ưu tiên hiển thị mặt hàng thực tế của log ca đang xem, fallback về mặt hàng hiện tại */}
                                         {(m.todayLog?.item?.name ?? m.currentItem?.name) || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
                                     </div>
+                                    {m.currentLot?.lotNumber && (
+                                        <div style={{ fontSize: 11, color: '#fa8c16', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            Lô: <b>{m.currentLot.lotNumber}</b>
+                                        </div>
+                                    )}
                                     <div style={{ marginTop: 6, textAlign: 'right', fontWeight: 'bold', fontSize: isMobile ? 15 : 16 }}>
                                         {isDone
                                             ? <span style={{ color: 'green' }}>{m.todayLog?.finalOutput} <small>kg</small></span>

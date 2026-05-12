@@ -58,6 +58,7 @@ export async function POST(request: Request) {
         include: {
           machine: { include: { process: { include: { factory: true } } } },
           item: true,
+          lot: { select: { id: true, lotNumber: true } },
           createdBy: { select: { fullName: true } },
         },
         orderBy: (() => {

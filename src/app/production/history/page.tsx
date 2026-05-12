@@ -145,6 +145,7 @@ export default function ProductionHistoryPage() {
             "Công đoạn": log.machine?.process?.name,
             "Máy": log.machine?.name,
             "Mặt hàng": log.item?.name,
+            "Lô": log.lot?.lotNumber ?? "",
             "Chỉ số đầu": log.startIndex,
             "Chỉ số cuối": log.endIndex,
             "Sản lượng (kg)": log.finalOutput,
@@ -210,6 +211,14 @@ export default function ProductionHistoryPage() {
         { title: "Công đoạn", dataIndex: ["machine", "process", "name"], sorter: true, responsive: ['lg'] as any }, // Ẩn trên mobile
         { title: "Máy", dataIndex: ["machine", "name"], width: 100, sorter: true, render: (t: string) => <b>{t}</b> },
         { title: "Mặt hàng", dataIndex: ["item", "name"], sorter: true, render: (t: string) => <Tag color={getItemColor(t)} style={{ fontWeight: 600 }}>{t}</Tag> },
+        {
+            title: "Lô",
+            dataIndex: ["lot", "lotNumber"],
+            key: "lot",
+            width: 110,
+            render: (val: string | undefined) =>
+                val ? <Tag color="orange">{val}</Tag> : <span style={{ color: '#ccc' }}>—</span>,
+        },
         {
             title: "Sản lượng",
             dataIndex: "finalOutput",

@@ -50,6 +50,7 @@ interface RowData {
   itemId: number;
   itemName: string;
   originalItemId: number;
+  currentLotNumber?: string | null;
   startIndex: number;
   endIndex: number | null;
   inputNE: number;
@@ -94,6 +95,7 @@ interface MachineStatus {
   spindleCount: number;
   currentNE?: number;
   currentItem?: { id: number; name: string } | null;
+  currentLot?: { id: number; lotNumber: string } | null;
   todayLog: ProductionLogEntry | null;
   todayLogs: ProductionLogEntry[];
   allowMultiItemPerShift?: boolean;
@@ -265,6 +267,7 @@ export default function DailyInputGridPage() {
               itemId: a.item.id,
               itemName: itemLabel,
               originalItemId: a.item.id,
+              currentLotNumber: m.currentLot?.lotNumber ?? null,
               startIndex: 0,
               endIndex: existingLog?.endIndex ?? null,
               inputNE: 0,
@@ -290,6 +293,7 @@ export default function DailyInputGridPage() {
             itemId: m.currentItem?.id ?? 0,
             itemName: m.currentItem?.name ?? "Chưa gán",
             originalItemId: m.currentItem?.id ?? 0,
+            currentLotNumber: m.currentLot?.lotNumber ?? null,
             startIndex: lastLogMap.get(m.id) ?? 0,
             endIndex: null,
             inputNE: m.currentNE ?? 30,
@@ -310,6 +314,7 @@ export default function DailyInputGridPage() {
               itemId: log.itemId ?? m.currentItem?.id ?? 0,
               itemName: log.item?.name ?? m.currentItem?.name ?? "Chưa gán",
               originalItemId: log.itemId ?? m.currentItem?.id ?? 0,
+              currentLotNumber: m.currentLot?.lotNumber ?? null,
               startIndex: log.startIndex ?? 0,
               endIndex: log.endIndex ?? null,
               inputNE: log.inputNE ?? m.currentNE ?? 30,
@@ -366,6 +371,7 @@ export default function DailyInputGridPage() {
       itemId: 0,
       itemName: "Chưa gán",
       originalItemId: 0,
+      currentLotNumber: parentRow.currentLotNumber ?? null,
       startIndex: smartStartIndex,
       endIndex: null,
       inputNE: parentRow.inputNE,
@@ -661,6 +667,15 @@ export default function DailyInputGridPage() {
           </Space>
         );
       },
+    },
+    {
+      title: "Lô",
+      key: "lot",
+      width: 100,
+      render: (_: unknown, r: RowData) =>
+        r.currentLotNumber
+          ? <Tag color="orange" style={{ fontSize: 11 }}>{r.currentLotNumber}</Tag>
+          : <span style={{ color: '#ccc' }}>—</span>,
     },
     {
       title: () => <span>Chỉ số <span style={{ color: "#999", fontWeight: 400 }}>TRƯỚC</span></span>,
@@ -1060,15 +1075,15 @@ export default function DailyInputGridPage() {
           scroll={{ x: 1000 }}
           summary={() => (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={6}>
+              <Table.Summary.Cell index={0} colSpan={7}>
                 <b>Tổng cộng Ca {shift}</b>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={6}>
+              <Table.Summary.Cell index={7}>
                 <b style={{ color: "#1677ff", fontSize: 15 }}>
                   {totalKg.toLocaleString("vi-VN")} kg
                 </b>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={7} colSpan={5} />
+              <Table.Summary.Cell index={8} colSpan={5} />
             </Table.Summary.Row>
           )}
         />

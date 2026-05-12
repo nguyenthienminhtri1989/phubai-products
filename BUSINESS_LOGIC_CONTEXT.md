@@ -2675,3 +2675,38 @@ Không thay đổi (giữ nguyên `/api/kdsx/monthly-plans/[id]/recalculate` và
 ### Known limitations
 
 - Nếu user thêm/sửa dòng khác cùng `itemId` trong cùng kế hoạch, liveQty của dòng isAutoQty sẽ thay đổi ngay nhưng chỉ persist khi bấm "Tính lại tất cả".
+
+---
+
+## Production — Hiển thị cột "Lô" trên các trang nhập/xem sản lượng
+
+**Status:** ✅ Completed 2026-05-12
+
+### What was built
+
+Hoàn tất phần UI còn lại của Lot Management: thêm cột/hiển thị **tên lô** trên các trang nhập SL (mobile cards + grid) và trang lịch sử/báo cáo, để công nhân và quản lý thấy ngay lô đang chạy trên từng máy / từng bản ghi ProductionLog.
+
+### Files created/modified
+
+```
+src/app/api/production/history/route.ts          — include lot { id, lotNumber } trong findMany
+src/app/api/production/daily-status/route.ts     — include currentLot { id, lotNumber } cho machine
+src/app/production/history/page.tsx              — thêm cột "Lô" sau "Mặt hàng" + cột "Lô" trong Excel export
+src/app/production/daily-input-grid/page.tsx     — thêm field currentLotNumber vào RowData, cột "Lô" trước "Chỉ số TRƯỚC", cập nhật colSpan summary row (6→7, 7→8)
+src/app/production/daily-input/page.tsx          — hiển thị "Lô: <lotNumber>" dưới tên mặt hàng trên thẻ máy (màu cam #fa8c16)
+```
+
+### Key business logic implemented
+
+- ProductionLog đã có `lotId` (tự lấy từ `Machine.currentLotId` lúc tạo log) — UI nay phơi giá trị này
+- Mobile cards & grid hiển thị `machine.currentLot.lotNumber` (read-only) — không cho sửa lô từ form nhập SL; muốn đổi lô phải vào trang điều phối máy / Lot Management
+- Bảng history hiển thị `log.lot.lotNumber` cho từng bản ghi quá khứ (lô lúc log được tạo, snapshot qua `lotId` chứ không phải lô hiện hành của máy)
+
+### API endpoints
+
+Không endpoint mới — chỉ mở rộng include trong 2 endpoint có sẵn.
+
+### Known limitations
+
+- Trang `/production/mobile-report` (báo cáo grouping) chưa thêm hiển thị lô — UI đã đông và group view không có cột; bỏ qua theo gợi ý "có thể không cần cột" trong yêu cầu.
+- Excel export trên grid page chưa được cập nhật (trang này không có nút xuất Excel, chỉ có trên `/production/history` — đã cập nhật).

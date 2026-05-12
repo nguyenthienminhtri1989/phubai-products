@@ -152,6 +152,12 @@ interface SidebarGroup {
 
 const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
+    key: "group-reports",
+    label: "BÁO CÁO",
+    icon: <LineChartOutlined style={{ fontSize: 10 }} />,
+    pageKeys: ["report.history", "report.production"],
+  },
+  {
     key: "group-sx",
     label: "SẢN XUẤT",
     icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
@@ -160,6 +166,15 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       "sx.line-setup", "sx.line-diagram", "sx.qr-machines",
       "sx.machine-stops", "sx.stop-history", "sx.maintenance",
       "benchmark.versions", "benchmark.capacity", "benchmark.comparison",
+    ],
+  },
+  {
+    key: "group-kdsx",
+    label: "KINH DOANH",
+    icon: <BarChartOutlined style={{ fontSize: 10 }} />,
+    pageKeys: [
+      "kdsx.dashboard", "kdsx.customers", "kdsx.sales-orders", "kdsx.production-schedule", "kdsx.order-progress",
+      "kdsx.plans", "kdsx.actuals", "kdsx.sales-tracking", "kdsx.daily-input",
     ],
   },
   {
@@ -173,21 +188,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "ĐIỆN NĂNG",
     icon: <ThunderboltOutlined style={{ fontSize: 10 }} />,
     pageKeys: ["energy.prices", "energy.daily-input", "energy.reports", "energy.live"],
-  },
-  {
-    key: "group-kdsx",
-    label: "KINH DOANH",
-    icon: <BarChartOutlined style={{ fontSize: 10 }} />,
-    pageKeys: [
-      "kdsx.dashboard", "kdsx.customers", "kdsx.sales-orders", "kdsx.production-schedule", "kdsx.order-progress",
-      "kdsx.plans", "kdsx.actuals", "kdsx.sales-tracking", "kdsx.daily-input",
-    ],
-  },
-  {
-    key: "group-reports",
-    label: "BÁO CÁO",
-    icon: <LineChartOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["report.history", "report.production"],
   },
   {
     key: "group-catalog",

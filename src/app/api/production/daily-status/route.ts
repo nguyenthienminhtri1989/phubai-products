@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       },
       include: {
         currentItem: true,
+        currentLot: { select: { id: true, lotNumber: true } },
         // Kỹ thuật: Include luôn log của Ca/Ngày đang chọn
         productionLogs: {
           where: {
