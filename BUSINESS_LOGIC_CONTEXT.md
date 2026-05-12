@@ -2644,3 +2644,34 @@ src/app/api/kdsx/monthly-plans/[id]/recalculate/route.ts           — tự tín
 
 - Frontend chỉ chạy useEffect 1 lần khi `projectedQtyByItem` hoặc `plan.id` đổi — nếu user mở modal sửa rồi đóng mà chưa reload trang, dòng isAutoQty mới thêm không trigger lại cho tới khi fetchPlan() chạy
 - Recalculate backend không trả về projectedQtyByItem cho debug — chỉ trả `{ updated }`
+
+---
+
+## KDSX — isAutoQty hiển thị live qty, chỉ lưu khi bấm "Tính lại tất cả"
+
+**Status:** ✅ Completed 2026-05-12
+
+### What was built
+
+Thay đổi hành vi dòng `isAutoQty` trên trang chi tiết kế hoạch tháng: UI hiển thị qty mới nhất (tính realtime từ `projectedQtyByItem`) với màu cam + tag "⚡ Đã thay đổi" + tooltip khi khác qty đã lưu. DB không còn tự ghi đè khi `projectedQtyByItem` thay đổi — chỉ cập nhật khi user bấm "Tính lại tất cả".
+
+### Files created/modified
+
+```
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx       — cột "SL (kg)" render liveQty; xóa useEffect tự PUT line-items
+```
+
+### Key business logic implemented
+
+- Cột "SL (kg)" cho dòng `isAutoQty`: tính `liveQty = max(0, round(projected[itemId] - sum(otherLineItems.qty cùng item)))`; nếu `|liveQty - savedQty| > 1` → hiển thị màu cam #fa8c16 + tag "⚡ Đã thay đổi" + tooltip hiện qty đã lưu
+- Bỏ hoàn toàn cơ chế auto-PUT khi `projectedQtyByItem` thay đổi (trước đây tự ghi đè DB → vi phạm nguyên tắc "lưu có chủ đích")
+- POST `/api/kdsx/monthly-plans/[id]/line-items` đã enforce: `isAutoQty=true` mà thiếu `qty` → 400 (frontend tự tính và gửi qty)
+- Endpoint `/recalculate` tính lại qty cho dòng isAutoQty bằng cùng công thức `projected - other` (đồng nhất với frontend)
+
+### API endpoints
+
+Không thay đổi (giữ nguyên `/api/kdsx/monthly-plans/[id]/recalculate` và `/line-items`).
+
+### Known limitations
+
+- Nếu user thêm/sửa dòng khác cùng `itemId` trong cùng kế hoạch, liveQty của dòng isAutoQty sẽ thay đổi ngay nhưng chỉ persist khi bấm "Tính lại tất cả".

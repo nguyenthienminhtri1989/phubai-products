@@ -344,52 +344,8 @@ export default function PlanDetailPage({
       .catch(() => {});
   }, [fetchPlan, fetchActual, fetchItems, yearMonth, factoryId]);
 
-  // Tự cập nhật qty cho dòng isAutoQty khi projectedQtyByItem thay đổi
-  useEffect(() => {
-    if (!plan || Object.keys(projectedQtyByItem).length === 0) return;
-    if (plan.status !== "DRAFT") return;
-
-    const autoLines = plan.lineItems.filter((li) => li.isAutoQty);
-    if (autoLines.length === 0) return;
-
-    const updates: Array<{ li: PlanLineItem; newQty: number }> = [];
-    for (const li of autoLines) {
-      const totalProjected = projectedQtyByItem[li.itemId] ?? 0;
-      const otherQty = plan.lineItems
-        .filter((other) => other.itemId === li.itemId && other.id !== li.id)
-        .reduce((s, other) => s + other.qty, 0);
-      const newQty = Math.max(0, Math.round(totalProjected - otherQty));
-      if (Math.abs(newQty - li.qty) > 1) {
-        updates.push({ li, newQty });
-      }
-    }
-
-    if (updates.length === 0) return;
-
-    Promise.all(
-      updates.map((u) =>
-        fetch(`/api/kdsx/monthly-plans/${plan.id}/line-items/${u.li.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemId: u.li.itemId,
-            salesOrderItemId: u.li.salesOrderItemId,
-            qty: u.newQty,
-            unitPriceUsd: u.li.unitPriceUsd,
-            isAutoQty: true,
-            note: u.li.note,
-          }),
-        }),
-      ),
-    )
-      .then(() => {
-        message.info(`Đã cập nhật SL cho ${updates.length} dòng tự tính`);
-        fetchPlan();
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectedQtyByItem, plan?.id]);
-
+  // Lưu ý: KHÔNG tự PUT cập nhật qty của dòng isAutoQty mỗi khi projected thay đổi.
+  // UI sẽ hiện qty mới nhất (cam + tag "Đã thay đổi") còn DB chỉ cập nhật khi user bấm "Tính lại tất cả".
 
   // Tính tổng
   const totalRevenue = plan?.lineItems.reduce((s, li) => s + (li.revenueVnd ?? 0), 0) ?? 0;
@@ -714,12 +670,32 @@ export default function PlanDetailPage({
     },
     {
       title: "SL (kg)", dataIndex: "qty", key: "qty",
-      render: (v: number, r: PlanLineItem) => (
-        <Space size={4}>
-          <span>{fmtQty(v)}</span>
-          {r.isAutoQty && <Tag color="blue" style={{ fontSize: 10, padding: "0 4px" }}>AUTO</Tag>}
-        </Space>
-      ),
+      render: (v: number, r: PlanLineItem) => {
+        if (!r.isAutoQty) return <span>{fmtQty(v)}</span>;
+
+        const totalProjected = projectedQtyByItem[r.itemId] ?? 0;
+        const otherQty = (plan?.lineItems ?? [])
+          .filter((li) => li.itemId === r.itemId && li.id !== r.id)
+          .reduce((s, li) => s + li.qty, 0);
+        const liveQty = Math.max(0, Math.round(totalProjected - otherQty));
+        const changed = Math.abs(liveQty - v) > 1;
+
+        return (
+          <Space size={4}>
+            {changed ? (
+              <Tooltip title={`Đã lưu: ${fmtQty(v)} kg — Bấm "Tính lại tất cả" để cập nhật`}>
+                <span style={{ color: "#fa8c16", fontWeight: 700 }}>{fmtQty(liveQty)}</span>
+              </Tooltip>
+            ) : (
+              <span>{fmtQty(v)}</span>
+            )}
+            <Tag color="blue" style={{ fontSize: 10, padding: "0 4px" }}>AUTO</Tag>
+            {changed && (
+              <Tag color="orange" style={{ fontSize: 10, padding: "0 4px" }}>⚡ Đã thay đổi</Tag>
+            )}
+          </Space>
+        );
+      },
     },
     { title: "Giá (USD/kg)", dataIndex: "unitPriceUsd", key: "price" },
     { title: "Doanh thu (đ)", key: "rev", render: (_: unknown, r: PlanLineItem) => fmtVnd(r.revenueVnd) },
