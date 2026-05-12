@@ -63,6 +63,10 @@ export default function DailyInputPage() {
     const [quickAssignItemId, setQuickAssignItemId] = useState<number | null>(null);
     const [showQuickAssign, setShowQuickAssign] = useState(false);
 
+    // Gán / thay đổi số lô ngay trong modal
+    const [quickAssignLotNumber, setQuickAssignLotNumber] = useState<string>('');
+    const [showQuickAssignLot, setShowQuickAssignLot] = useState(false);
+
     // Cảnh báo ca thiếu
     const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
     const [warningDismissed, setWarningDismissed] = useState(false);
@@ -244,6 +248,10 @@ export default function DailyInputPage() {
         setQuickAssignItemId(machine.currentItem?.id ?? null);
         setShowQuickAssign(!machine.currentItem); // tự động mở nếu chưa gán
 
+        // Khởi tạo số lô từ máy
+        setQuickAssignLotNumber(machine.currentLot?.lotNumber ?? '');
+        setShowQuickAssignLot(false);
+
         const initValues: any = {
             isReset: false,
             isStopped: false,
@@ -382,6 +390,48 @@ export default function DailyInputPage() {
                     setCurrentMachine(prev => prev ? { ...prev, currentItem: newItem } : prev);
                     setMachines(prev => prev.map(m =>
                         m.id === currentMachine?.id ? { ...m, currentItem: newItem } : m
+                    ));
+                }
+            }
+
+            // Nếu số lô thay đổi → cập nhật currentLotId trên máy
+            const prevLotNumber = currentMachine?.currentLot?.lotNumber ?? '';
+            const newLotNumber = quickAssignLotNumber.trim();
+            if (newLotNumber !== prevLotNumber && currentMachine) {
+                let newLotId: number | null = null;
+                if (newLotNumber) {
+                    // Lookup lot theo lotNumber (exact match trong kết quả search)
+                    const lotRes = await fetch(`/api/lots?search=${encodeURIComponent(newLotNumber)}`);
+                    if (lotRes.ok) {
+                        const lots: { id: number; lotNumber: string }[] = await lotRes.json();
+                        const found = lots.find(l => l.lotNumber === newLotNumber);
+                        if (found) {
+                            newLotId = found.id;
+                        } else {
+                            message.warning(`Không tìm thấy lô "${newLotNumber}" trong hệ thống. Số lô sẽ không được cập nhật.`);
+                        }
+                    }
+                }
+                // Chỉ gọi PUT nếu tìm thấy lot hoặc user xóa (newLotNumber = '')
+                if (newLotId !== null || newLotNumber === '') {
+                    const machine = currentMachine;
+                    await fetch(`/api/machines/${machine.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: machine.name,
+                            processId: machine.processId,
+                            formulaType: machine.formulaType,
+                            spindleCount: machine.spindleCount,
+                            isActive: true,
+                            currentLotId: newLotId,
+                        }),
+                    });
+                    // Cập nhật local state
+                    const updatedLot = newLotId ? { id: newLotId, lotNumber: newLotNumber } : null;
+                    setCurrentMachine(prev => prev ? { ...prev, currentLot: updatedLot } : prev);
+                    setMachines(prev => prev.map(m =>
+                        m.id === currentMachine.id ? { ...m, currentLot: updatedLot } : m
                     ));
                 }
             }
@@ -644,7 +694,7 @@ export default function DailyInputPage() {
             {/* MODAL NHẬP LIỆU */}
             <Modal
                 open={isModalOpen}
-                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); setShowQuickAssign(false); setQuickAssignItemId(null); }}
+                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); setShowQuickAssign(false); setQuickAssignItemId(null); setShowQuickAssignLot(false); setQuickAssignLotNumber(''); }}
                 footer={null}
                 width={isMobile ? '96vw' : 500}
                 style={isMobile ? { top: 8 } : undefined}
@@ -735,6 +785,50 @@ export default function DailyInputPage() {
                             {quickAssignItemId && quickAssignItemId !== currentMachine?.currentItem?.id && (
                                 <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 6 }}>
                                     Khi lưu sản lượng sẽ tự cập nhật điều phối máy sang mặt hàng này.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Số lô hàng ── */}
+                    {!showQuickAssignLot ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, background: '#fff7e6', borderRadius: 8, padding: '8px 12px' }}>
+                            <span style={{ fontSize: 12, color: '#666' }}>Lô hàng:</span>
+                            {quickAssignLotNumber
+                                ? <Tag color="orange" style={{ margin: 0 }}>{quickAssignLotNumber}</Tag>
+                                : <span style={{ color: '#ccc', fontSize: 12 }}>—</span>}
+                            {!isReadOnly && (
+                                <Button
+                                    type="link" size="small"
+                                    style={{ padding: 0, marginLeft: 'auto', color: '#d46b08', fontSize: 12 }}
+                                    onClick={() => setShowQuickAssignLot(true)}
+                                >
+                                    ✏️ Thay đổi
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{
+                            marginBottom: 14, padding: '10px 12px', borderRadius: 8,
+                            background: '#fffbe6', border: '1px solid #faad14',
+                        }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#d48806' }}>✏️ Thay đổi số lô hàng</div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <Input
+                                    autoFocus
+                                    style={{ flex: 1 }}
+                                    placeholder="Nhập số lô..."
+                                    value={quickAssignLotNumber}
+                                    onChange={e => setQuickAssignLotNumber(e.target.value)}
+                                    onPressEnter={() => setShowQuickAssignLot(false)}
+                                    allowClear
+                                />
+                                <Button size="small" onClick={() => setShowQuickAssignLot(false)}>Xong</Button>
+                                <Button size="small" onClick={() => { setQuickAssignLotNumber(currentMachine?.currentLot?.lotNumber ?? ''); setShowQuickAssignLot(false); }}>Hủy</Button>
+                            </div>
+                            {quickAssignLotNumber !== (currentMachine?.currentLot?.lotNumber ?? '') && (
+                                <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 6 }}>
+                                    Số lô sẽ được cập nhật trực tiếp trên máy khi lưu.
                                 </div>
                             )}
                         </div>

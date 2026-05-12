@@ -2710,3 +2710,36 @@ Không endpoint mới — chỉ mở rộng include trong 2 endpoint có sẵn.
 
 - Trang `/production/mobile-report` (báo cáo grouping) chưa thêm hiển thị lô — UI đã đông và group view không có cột; bỏ qua theo gợi ý "có thể không cần cột" trong yêu cầu.
 - Excel export trên grid page chưa được cập nhật (trang này không có nút xuất Excel, chỉ có trên `/production/history` — đã cập nhật).
+
+---
+
+## PRODUCTION — Sửa lô (lotId) trong modal sửa bản ghi lịch sử sản xuất
+
+**Status:** ✅ Completed 2026-05-12
+
+### What was built
+
+Cho phép ADMIN sửa trường `lotId` của bản ghi `production_logs` qua modal "Sửa bản ghi" tại trang `/production/history`, tương tự cách đang cho sửa `itemId`. Có thể đổi sang lô khác hoặc bỏ trống.
+
+### Files created/modified
+
+```
+src/app/api/production/history/[id]/route.ts  — PATCH nay nhận lotId (null/số), validate Lot tồn tại, include lot trong response
+src/app/production/history/page.tsx           — load danh sách /api/lots, thêm Form.Item Select "Lô" trong modal sửa
+```
+
+### Key business logic implemented
+
+- `lotId` là optional: gửi `null`/`""` → set `lot` = null; gửi số → validate Lot tồn tại trước khi update.
+- Không enforce ràng buộc lô phải cùng item — ADMIN tự chịu trách nhiệm khi gắn lô.
+- Không đụng tới unique constraint `(machineId, recordDate, shift, itemId)` (lô không tham gia).
+
+### API endpoints
+
+| Method | Path                              | Description                              |
+| ------ | --------------------------------- | ---------------------------------------- |
+| PATCH  | /api/production/history/[id]      | Thêm field `lotId` (optional, nullable)  |
+
+### Known limitations
+
+- Select hiện load toàn bộ lots (không filter theo factory/item của bản ghi) — phù hợp khi số lô còn nhỏ; cần phân trang/search nếu danh sách lớn.

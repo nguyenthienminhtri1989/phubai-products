@@ -75,6 +75,21 @@ export async function PATCH(
   if (body.note !== undefined) {
     data.note = body.note ?? null;
   }
+  if (body.lotId !== undefined) {
+    if (body.lotId === null || body.lotId === "") {
+      data.lotId = null;
+    } else {
+      const newLotId = parseInt(body.lotId);
+      if (isNaN(newLotId)) {
+        return NextResponse.json({ error: "lotId không hợp lệ" }, { status: 400 });
+      }
+      const lotExists = await prisma.lot.findUnique({ where: { id: newLotId }, select: { id: true } });
+      if (!lotExists) {
+        return NextResponse.json({ error: "Lô không tồn tại" }, { status: 400 });
+      }
+      data.lotId = newLotId;
+    }
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Không có dữ liệu để cập nhật" }, { status: 400 });
@@ -85,6 +100,7 @@ export async function PATCH(
     data,
     include: {
       item: { select: { id: true, name: true } },
+      lot: { select: { id: true, lotNumber: true } },
       machine: {
         select: {
           id: true,

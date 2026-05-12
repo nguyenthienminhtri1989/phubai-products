@@ -156,6 +156,7 @@ export default function DailyInputGridPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
+  const [editingLotKey, setEditingLotKey] = useState<string | null>(null);
   const [machineAssignments, setMachineAssignments] = useState<Record<number, MachineAssignment[]>>({});
 
   // Phân quyền
@@ -212,6 +213,7 @@ export default function DailyInputGridPage() {
     }
     setFetching(true);
     setEditingItemKey(null);
+    setEditingLotKey(null);
     try {
       const dateStr = date.format("YYYY-MM-DD");
 
@@ -228,7 +230,7 @@ export default function DailyInputGridPage() {
           try {
             const aRes = await fetch(`/api/machines/${m.id}/assignments`);
             if (aRes.ok) assignmentMap[m.id] = await aRes.json();
-          } catch {}
+          } catch { }
         }
       }
       setMachineAssignments(assignmentMap);
@@ -671,11 +673,58 @@ export default function DailyInputGridPage() {
     {
       title: "Lô",
       key: "lot",
-      width: 100,
-      render: (_: unknown, r: RowData) =>
-        r.currentLotNumber
-          ? <Tag color="orange" style={{ fontSize: 11 }}>{r.currentLotNumber}</Tag>
-          : <span style={{ color: '#ccc' }}>—</span>,
+      width: 130,
+      render: (_: unknown, r: RowData, i: number) => {
+        const isEditingLot = editingLotKey === r.rowKey;
+
+        if (isEditingLot) {
+          return (
+            <Input
+              autoFocus
+              size="small"
+              style={{ width: 110 }}
+              defaultValue={r.currentLotNumber ?? ""}
+              placeholder="Số lô..."
+              onPressEnter={e => {
+                const val = (e.target as HTMLInputElement).value.trim() || null;
+                setRows(prev => {
+                  const next = [...prev];
+                  next[i] = { ...next[i], currentLotNumber: val, isDirty: true };
+                  return next;
+                });
+                setEditingLotKey(null);
+              }}
+              onBlur={e => {
+                const val = e.target.value.trim() || null;
+                setRows(prev => {
+                  const next = [...prev];
+                  next[i] = { ...next[i], currentLotNumber: val, isDirty: true };
+                  return next;
+                });
+                setEditingLotKey(null);
+              }}
+            />
+          );
+        }
+
+        return (
+          <Space size={4}>
+            {r.currentLotNumber
+              ? <Tag color="orange" style={{ fontSize: 11 }}>{r.currentLotNumber}</Tag>
+              : <span style={{ color: '#ccc', fontSize: 12 }}>—</span>}
+            {!isReadOnly && (
+              <Tooltip title="Thay đổi số lô">
+                <Button
+                  type="text" size="small"
+                  icon={<EditOutlined style={{ fontSize: 12, color: "#aaa" }} />}
+                  onClick={() => setEditingLotKey(r.rowKey)}
+                  style={{ padding: "0 2px", height: 20 }}
+                />
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: () => <span>Chỉ số <span style={{ color: "#999", fontWeight: 400 }}>TRƯỚC</span></span>,

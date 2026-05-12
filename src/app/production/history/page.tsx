@@ -35,6 +35,7 @@ export default function ProductionHistoryPage() {
     const [processes, setProcesses] = useState<any[]>([]);
     const [machines, setMachines] = useState<any[]>([]);
     const [items, setItems] = useState<any[]>([]);
+    const [lots, setLots] = useState<any[]>([]);
 
     // --- 3. STATE BỘ LỌC ---
     const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(7, 'day'), dayjs()]);
@@ -48,14 +49,15 @@ export default function ProductionHistoryPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [f, p, m, i] = await Promise.all([
+                const [f, p, m, i, l] = await Promise.all([
                     fetch("/api/factories").then(r => r.json()),
                     fetch("/api/processes").then(r => r.json()),
                     // Tạm dùng endpoint backup để lấy list máy, hoặc bạn có thể tạo endpoint /api/machines riêng
                     fetch("/api/machines").then(r => r.json()),
-                    fetch("/api/items").then(r => r.json())
+                    fetch("/api/items").then(r => r.json()),
+                    fetch("/api/lots").then(r => r.json())
                 ]);
-                setFactories(f); setProcesses(p); setMachines(m); setItems(i);
+                setFactories(f); setProcesses(p); setMachines(m); setItems(i); setLots(Array.isArray(l) ? l : []);
             } catch (e) { console.error(e); }
         };
         fetchData();
@@ -163,6 +165,7 @@ export default function ProductionHistoryPage() {
         setEditingLog(log);
         editForm.setFieldsValue({
             itemId: log.item?.id ?? log.itemId,
+            lotId: log.lot?.id ?? log.lotId ?? null,
             startIndex: log.startIndex,
             endIndex: log.endIndex,
             finalOutput: log.finalOutput,
@@ -442,6 +445,18 @@ export default function ProductionHistoryPage() {
                             optionFilterProp="label"
                             options={items.map(i => ({ label: i.name, value: i.id }))}
                             placeholder="Chọn mặt hàng"
+                        />
+                    </Form.Item>
+                    <Form.Item name="lotId" label="Lô">
+                        <Select
+                            showSearch
+                            allowClear
+                            optionFilterProp="label"
+                            options={lots.map(l => ({
+                                label: l.item?.name ? `${l.lotNumber} — ${l.item.name}` : l.lotNumber,
+                                value: l.id,
+                            }))}
+                            placeholder="Chọn lô (có thể bỏ trống)"
                         />
                     </Form.Item>
                     <Row gutter={12}>
