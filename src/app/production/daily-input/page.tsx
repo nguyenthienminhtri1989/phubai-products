@@ -32,6 +32,7 @@ interface Machine {
 }
 
 interface Item { id: number; name: string; }
+interface LotOption { id: number; lotNumber: string; item?: { id: number; name: string } | null; status?: string; }
 
 interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
@@ -49,6 +50,7 @@ export default function DailyInputPage() {
     const [factories, setFactories] = useState<Factory[]>([]);
     const [processes, setProcesses] = useState<Process[]>([]);
     const [items, setItems] = useState<Item[]>([]);
+    const [lots, setLots] = useState<LotOption[]>([]);
     const [loading, setLoading] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const [totalOutput3Ca, setTotalOutput3Ca] = useState(0);
@@ -115,12 +117,13 @@ export default function DailyInputPage() {
 
     const fetchMetadata = async () => {
         try {
-            const [resFac, resPro, resItems] = await Promise.all([
-                fetch('/api/factories'), fetch('/api/processes'), fetch('/api/items')
+            const [resFac, resPro, resItems, resLots] = await Promise.all([
+                fetch('/api/factories'), fetch('/api/processes'), fetch('/api/items'), fetch('/api/lots')
             ]);
             if (resFac.ok) setFactories(await resFac.json());
             if (resPro.ok) setProcesses(await resPro.json());
             if (resItems.ok) setItems(await resItems.json());
+            if (resLots.ok) setLots(await resLots.json());
         } catch (e) { message.error("Lỗi tải danh mục"); }
     };
 
@@ -814,16 +817,26 @@ export default function DailyInputPage() {
                         }}>
                             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#d48806' }}>✏️ Thay đổi số lô hàng</div>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <Input
+                                <Select
                                     autoFocus
-                                    style={{ flex: 1 }}
-                                    placeholder="Nhập số lô..."
-                                    value={quickAssignLotNumber}
-                                    onChange={e => setQuickAssignLotNumber(e.target.value)}
-                                    onPressEnter={() => setShowQuickAssignLot(false)}
+                                    showSearch
                                     allowClear
+                                    style={{ flex: 1 }}
+                                    placeholder="Chọn lô hàng..."
+                                    optionFilterProp="label"
+                                    value={quickAssignLotNumber || undefined}
+                                    onChange={val => {
+                                        setQuickAssignLotNumber(val ?? '');
+                                        setShowQuickAssignLot(false);
+                                    }}
+                                    onBlur={() => setShowQuickAssignLot(false)}
+                                    options={lots
+                                        .filter(l => !quickAssignItemId || !l.item || l.item.id === quickAssignItemId)
+                                        .map(l => ({
+                                            label: l.item?.name ? `${l.lotNumber} — ${l.item.name}` : l.lotNumber,
+                                            value: l.lotNumber,
+                                        }))}
                                 />
-                                <Button size="small" onClick={() => setShowQuickAssignLot(false)}>Xong</Button>
                                 <Button size="small" onClick={() => { setQuickAssignLotNumber(currentMachine?.currentLot?.lotNumber ?? ''); setShowQuickAssignLot(false); }}>Hủy</Button>
                             </div>
                             {quickAssignLotNumber !== (currentMachine?.currentLot?.lotNumber ?? '') && (

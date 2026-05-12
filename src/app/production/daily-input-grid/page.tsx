@@ -67,6 +67,7 @@ interface RowData {
 interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
 interface ItemOption { id: number; name: string; }
+interface LotOption { id: number; lotNumber: string; item?: { id: number; name: string } | null; status?: string }
 
 interface ProductionLogEntry {
   id: number;
@@ -146,6 +147,7 @@ export default function DailyInputGridPage() {
   const [factories, setFactories] = useState<Factory[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [items, setItems] = useState<ItemOption[]>([]);
+  const [lots, setLots] = useState<LotOption[]>([]);
 
   const [factoryId, setFactoryId] = useState<number | undefined>();
   const [processId, setProcessId] = useState<number | undefined>();
@@ -182,10 +184,12 @@ export default function DailyInputGridPage() {
       fetch("/api/factories").then(r => r.json()),
       fetch("/api/processes").then(r => r.json()),
       fetch("/api/items").then(r => r.json()),
-    ]).then(([facs, procs, its]: [Factory[], Process[], ItemOption[]]) => {
+      fetch("/api/lots").then(r => r.json()),
+    ]).then(([facs, procs, its, lts]: [Factory[], Process[], ItemOption[], LotOption[]]) => {
       setFactories(Array.isArray(facs) ? facs : []);
       setProcesses(Array.isArray(procs) ? procs : []);
       setItems(Array.isArray(its) ? its : []);
+      setLots(Array.isArray(lts) ? lts : []);
     }).catch(() => message.error("Lỗi tải danh mục"));
   }, []);
 
@@ -678,31 +682,33 @@ export default function DailyInputGridPage() {
         const isEditingLot = editingLotKey === r.rowKey;
 
         if (isEditingLot) {
+          const lotOptions = lots
+            .filter(l => !r.itemId || !l.item || l.item.id === r.itemId)
+            .map(l => ({
+              label: l.item?.name ? `${l.lotNumber} — ${l.item.name}` : l.lotNumber,
+              value: l.lotNumber,
+            }));
           return (
-            <Input
+            <Select
               autoFocus
               size="small"
-              style={{ width: 110 }}
-              defaultValue={r.currentLotNumber ?? ""}
-              placeholder="Số lô..."
-              onPressEnter={e => {
-                const val = (e.target as HTMLInputElement).value.trim() || null;
+              showSearch
+              allowClear
+              defaultOpen
+              style={{ width: 120 }}
+              placeholder="Chọn lô..."
+              optionFilterProp="label"
+              defaultValue={r.currentLotNumber ?? undefined}
+              options={lotOptions}
+              onChange={val => {
                 setRows(prev => {
                   const next = [...prev];
-                  next[i] = { ...next[i], currentLotNumber: val, isDirty: true };
+                  next[i] = { ...next[i], currentLotNumber: val ?? null, isDirty: true };
                   return next;
                 });
                 setEditingLotKey(null);
               }}
-              onBlur={e => {
-                const val = e.target.value.trim() || null;
-                setRows(prev => {
-                  const next = [...prev];
-                  next[i] = { ...next[i], currentLotNumber: val, isDirty: true };
-                  return next;
-                });
-                setEditingLotKey(null);
-              }}
+              onBlur={() => setEditingLotKey(null)}
             />
           );
         }
