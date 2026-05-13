@@ -2813,3 +2813,43 @@ src/app/production/daily-input-grid/page.tsx     — handleSave phân nhánh má
 ### Known limitations
 
 - Ghi ngược lô chỉ dùng primary row làm đại diện; nếu UI cho phép đặt lô khác nhau ở sub-row sau này, cần mở rộng
+
+---
+
+## DAILY INPUT (Mobile) — Hỗ trợ máy multi-item
+
+**Status:** ✅ Completed 2026-05-13
+
+### What was built
+
+Trang `/production/daily-input` (mobile, nhập từng máy qua modal) giờ phân nhánh theo loại máy: máy multi-item (`allowMultiItemPerShift = true`) hiển thị N ô nhập riêng — mỗi ô 1 mặt hàng theo assignments — và ghi ngược thay đổi mặt hàng vào `machine_item_assignments` (qua PATCH). Máy thường giữ nguyên flow cũ.
+
+### Files created/modified
+
+```
+src/app/production/daily-input/page.tsx                       — thêm UI multi-item, state, handleSaveMultiItem
+src/app/api/machines/[id]/assignments/route.ts                — (đã có sẵn) PATCH oldItemId→newItemId
+src/app/api/production/daily-status/route.ts                  — (đã có sẵn) trả allowMultiItemPerShift + todayLogs
+```
+
+### Key business logic implemented
+
+- Máy multi-item: 1 ProductionLog per (machine, shift, itemId) — tận dụng unique constraint sẵn có
+- Đổi mặt hàng trên máy multi-item → PATCH assignment (không gọi `/api/machines/batch`)
+- Ghi ngược lô hàng dùng chung flow với máy thường (PUT `/api/machines/[id]` với currentLotId)
+- Khi `endIndex <= 0` và không `isStopped`: bỏ qua dòng đó (không tạo log rỗng)
+- Card hiển thị tổng kg cộng dồn từ `todayLogs` cho máy multi-item
+
+### API endpoints
+
+| Method | Path                                | Description                                  |
+| ------ | ----------------------------------- | -------------------------------------------- |
+| PATCH  | /api/machines/[id]/assignments      | Đổi 1 assignment (oldItemId → newItemId)     |
+| GET    | /api/production/daily-status        | Trả machines kèm allowMultiItemPerShift + todayLogs |
+| POST   | /api/production/daily-input         | Lưu 1 ProductionLog (gọi N lần cho multi-item)|
+
+### Known limitations
+
+- Máy multi-item dùng formulaType = 1 (nhập thẳng kg); không hỗ trợ tính theo cọc/NE per item
+- Số lô áp dụng cho toàn máy, không phân theo từng mặt hàng
+- Không hỗ trợ "Đổi hàng giữa ca" cho máy multi-item (đã có nhiều ô sẵn)
