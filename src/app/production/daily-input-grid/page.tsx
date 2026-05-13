@@ -51,6 +51,7 @@ interface RowData {
   itemName: string;
   originalItemId: number;
   currentLotNumber?: string | null;
+  originalLotNumber?: string | null;
   startIndex: number;
   endIndex: number | null;
   inputNE: number;
@@ -264,7 +265,7 @@ export default function DailyInputGridPage() {
         if (m.allowMultiItemPerShift && assignments && assignments.length > 0) {
           assignments.forEach((a, idx) => {
             const existingLog = logs.find(l => l.itemId === a.itemId);
-            const itemLabel = `${a.item.name}${a.fromSpindle ? ` (cọc ${a.fromSpindle}-${a.toSpindle})` : ""}`;
+            const itemLabel = a.item.name;
             newRows.push({
               machineId: m.id,
               machineName: m.name,
@@ -274,6 +275,7 @@ export default function DailyInputGridPage() {
               itemName: itemLabel,
               originalItemId: a.item.id,
               currentLotNumber: m.currentLot?.lotNumber ?? null,
+              originalLotNumber: m.currentLot?.lotNumber ?? null,
               startIndex: 0,
               endIndex: existingLog?.endIndex ?? null,
               inputNE: 0,
@@ -300,6 +302,7 @@ export default function DailyInputGridPage() {
             itemName: m.currentItem?.name ?? "Chưa gán",
             originalItemId: m.currentItem?.id ?? 0,
             currentLotNumber: m.currentLot?.lotNumber ?? null,
+            originalLotNumber: m.currentLot?.lotNumber ?? null,
             startIndex: lastLogMap.get(m.id) ?? 0,
             endIndex: null,
             inputNE: m.currentNE ?? 30,
@@ -321,6 +324,7 @@ export default function DailyInputGridPage() {
               itemName: log.item?.name ?? m.currentItem?.name ?? "Chưa gán",
               originalItemId: log.itemId ?? m.currentItem?.id ?? 0,
               currentLotNumber: m.currentLot?.lotNumber ?? null,
+              originalLotNumber: m.currentLot?.lotNumber ?? null,
               startIndex: log.startIndex ?? 0,
               endIndex: log.endIndex ?? null,
               inputNE: log.inputNE ?? m.currentNE ?? 30,
@@ -490,21 +494,57 @@ export default function DailyInputGridPage() {
     try {
       const dateStr = date.format("YYYY-MM-DD");
 
-      // Cập nhật điều phối nếu mặt hàng thay đổi (chỉ primary rows)
-      const itemChangedRows = dirty.filter(r => !r.isSubRow && r.itemId !== r.originalItemId && r.itemId !== 0);
+      // Cập nhật điều phối nếu mặt hàng thay đổi
+      const itemChangedRows = dirty.filter(
+        r => r.itemId !== r.originalItemId && r.itemId !== 0 && r.originalItemId !== 0
+      );
       for (const r of itemChangedRows) {
-        const res = await fetch("/api/machines/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ machineIds: [r.machineId], itemId: r.itemId }),
-        });
-        if (!res.ok) {
-          const data: { error?: string } = await res.json();
-          throw new Error(`Không thể cập nhật điều phối máy ${r.machineName}: ${data.error ?? ""}`);
+        const isMultiItem = !!machineAssignments[r.machineId];
+
+        if (isMultiItem) {
+          const res = await fetch(`/api/machines/${r.machineId}/assignments`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ oldItemId: r.originalItemId, newItemId: r.itemId }),
+          });
+          if (!res.ok) {
+            const data: { error?: string } = await res.json();
+            throw new Error(`Lỗi cập nhật assignment máy ${r.machineName}: ${data.error ?? ""}`);
+          }
+        } else if (!r.isSubRow) {
+          const res = await fetch("/api/machines/batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ machineIds: [r.machineId], itemId: r.itemId }),
+          });
+          if (!res.ok) {
+            const data: { error?: string } = await res.json();
+            throw new Error(`Không thể cập nhật điều phối máy ${r.machineName}: ${data.error ?? ""}`);
+          }
         }
       }
       if (itemChangedRows.length > 0) {
         message.info(`Đã cập nhật điều phối cho ${itemChangedRows.length} máy đổi mặt hàng`);
+      }
+
+      // Ghi ngược lô hàng nếu thay đổi (1 request/máy — primary row đại diện)
+      const lotChangedRows = dirty.filter(
+        r => !r.isSubRow && (r.currentLotNumber ?? null) !== (r.originalLotNumber ?? null)
+      );
+      for (const r of lotChangedRows) {
+        const lot = r.currentLotNumber ? lots.find(l => l.lotNumber === r.currentLotNumber) : null;
+        const lotId = lot?.id ?? null;
+        const res = await fetch(`/api/machines/${r.machineId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentLotId: lotId }),
+        });
+        if (!res.ok) {
+          console.error(`Lỗi cập nhật lô cho máy ${r.machineName}`);
+        }
+      }
+      if (lotChangedRows.length > 0) {
+        message.info(`Đã cập nhật lô cho ${lotChangedRows.length} máy`);
       }
 
       const results = await Promise.allSettled(
@@ -554,14 +594,20 @@ export default function DailyInputGridPage() {
       setRows(prev => prev.map(r => {
         if (!r.isDirty) return r;
         const newId = rowKeyToLogId.get(r.rowKey);
-        return { ...r, isDirty: false, originalItemId: r.itemId, existingLogId: newId ?? r.existingLogId };
+        return {
+          ...r,
+          isDirty: false,
+          originalItemId: r.itemId,
+          originalLotNumber: r.currentLotNumber ?? null,
+          existingLogId: newId ?? r.existingLogId,
+        };
       }));
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "Lỗi lưu dữ liệu");
     } finally {
       setLoading(false);
     }
-  }, [rows, date, shift]);
+  }, [rows, date, shift, lots, machineAssignments]);
 
   // ============================================================
   // Xóa log của 1 primary row

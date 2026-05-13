@@ -2779,3 +2779,37 @@ src/app/api/lots/[id]/route.ts     — PUT bỏ xử lý itemId
 
 - Cột `Lot.itemId` trong DB vẫn còn (nullable) cho các lô cũ; dữ liệu cũ không bị thay đổi
 - API GET vẫn `include: { item }` — không ảnh hưởng vì field nullable, có thể dọn sau
+
+---
+
+## NHẬP SẢN LƯỢNG — Ghi ngược Mặt hàng & Lô hàng về trang Điều phối máy
+
+**Status:** ✅ Completed 2026-05-13
+
+### What was built
+
+Khi user đổi mặt hàng hoặc lô hàng trên trang nhập sản lượng (`/production/daily-input-grid`) rồi Lưu, thay đổi được ghi ngược về trang điều phối máy (`/machines`). Hỗ trợ cả máy thường (1 mặt hàng/ca) lẫn máy multi-item (nhiều mặt hàng/ca). Bỏ hiển thị cọc (cọc X-Y) trong nhãn mặt hàng của máy multi-item.
+
+### Files created/modified
+
+```
+src/app/api/machines/[id]/assignments/route.ts   — thêm PATCH: đổi 1 assignment (oldItemId → newItemId)
+src/app/production/daily-input-grid/page.tsx     — handleSave phân nhánh máy thường/multi-item; thêm ghi ngược lô; thêm field originalLotNumber; bỏ hiển thị cọc
+```
+
+### Key business logic implemented
+
+- Máy multi-item đổi mặt hàng → PATCH `/api/machines/{id}/assignments` với `{ oldItemId, newItemId }`, validate trùng (conflict) trả 400
+- Máy thường đổi mặt hàng → tái dùng `POST /api/machines/batch` (logic cũ giữ nguyên, chỉ cho primary row)
+- Đổi lô → `PUT /api/machines/{id}` với `{ currentLotId }`; 1 request/máy (lấy primary row đại diện); lỗi lô không chặn lưu sản lượng
+- Reset `originalItemId` + `originalLotNumber` sau khi lưu thành công để không re-trigger ghi ngược
+
+### API endpoints
+
+| Method | Path                              | Description                          |
+| ------ | --------------------------------- | ------------------------------------ |
+| PATCH  | /api/machines/[id]/assignments    | Đổi 1 assignment cho máy multi-item  |
+
+### Known limitations
+
+- Ghi ngược lô chỉ dùng primary row làm đại diện; nếu UI cho phép đặt lô khác nhau ở sub-row sau này, cần mở rộng

@@ -70,3 +70,62 @@ export async function PUT(
     return NextResponse.json({ error: e.message || "Lỗi cập nhật assignments" }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const machineId = parseInt(id);
+  if (isNaN(machineId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+
+  try {
+    const body = await req.json();
+    const { oldItemId, newItemId } = body;
+
+    if (!oldItemId || !newItemId) {
+      return NextResponse.json(
+        { error: "Thiếu oldItemId hoặc newItemId" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await prisma.machineItemAssignment.findUnique({
+      where: { machineId_itemId: { machineId, itemId: oldItemId } },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Không tìm thấy assignment cần cập nhật" },
+        { status: 404 }
+      );
+    }
+
+    const conflict = await prisma.machineItemAssignment.findUnique({
+      where: { machineId_itemId: { machineId, itemId: newItemId } },
+    });
+    if (conflict) {
+      return NextResponse.json(
+        { error: "Mặt hàng mới đã được gán cho máy này rồi" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await prisma.machineItemAssignment.update({
+      where: { id: existing.id },
+      data: { itemId: newItemId },
+      include: { item: { select: { id: true, name: true } } },
+    });
+
+    return NextResponse.json(updated);
+  } catch (e: any) {
+    console.error("Assignment PATCH error:", e);
+    return NextResponse.json(
+      { error: e.message || "Lỗi cập nhật" },
+      { status: 500 }
+    );
+  }
+}
