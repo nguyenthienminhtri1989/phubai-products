@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Table,
   Button,
@@ -156,6 +156,7 @@ export default function DailyInputGridPage() {
   const [shift, setShift] = useState<number>(1);
 
   const [rows, setRows] = useState<RowData[]>([]);
+  const endIndexRefs = useRef<Array<{ focus: () => void } | null>>([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
@@ -832,6 +833,7 @@ export default function DailyInputGridPage() {
       width: 140,
       render: (_: unknown, r: RowData, i: number) => (
         <InputNumber
+          ref={el => { endIndexRefs.current[i] = el as unknown as { focus: () => void } | null; }}
           size="small"
           style={{
             width: 120,
@@ -851,6 +853,10 @@ export default function DailyInputGridPage() {
             });
           }}
           onPaste={e => handlePaste(e, i)}
+          onPressEnter={() => {
+            const nextIdx = rows.findIndex((_, j) => j > i);
+            if (nextIdx !== -1) endIndexRefs.current[nextIdx]?.focus();
+          }}
         />
       ),
     },
