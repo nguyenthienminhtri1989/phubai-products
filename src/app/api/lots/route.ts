@@ -53,18 +53,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { lotNumber, lotType, itemId, factoryId, salesOrderItemId, note, rawLotIds } = body;
+    const { lotNumber, lotType, factoryId, salesOrderItemId, note, rawLotIds } = body;
 
     if (!lotNumber || !lotType || !factoryId) {
       return NextResponse.json(
         { error: "Thiếu thông tin bắt buộc: lotNumber, lotType, factoryId" },
-        { status: 400 }
-      );
-    }
-
-    if (lotType === "YARN" && !itemId) {
-      return NextResponse.json(
-        { error: "Lô sợi (YARN) phải chọn mặt hàng" },
         { status: 400 }
       );
     }
@@ -74,7 +67,6 @@ export async function POST(request: Request) {
         data: {
           lotNumber,
           lotType,
-          itemId: itemId ? parseInt(itemId) : null,
           factoryId: parseInt(factoryId),
           salesOrderItemId: salesOrderItemId ? parseInt(salesOrderItemId) : null,
           note: note || null,

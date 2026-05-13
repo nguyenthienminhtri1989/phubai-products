@@ -19,7 +19,6 @@ interface LotData {
   lotNumber: string;
   lotType: "RAW_COTTON" | "RAW_FIBER" | "YARN";
   status: "OPEN" | "CLOSED" | "SHIPPED";
-  item?: { id: number; name: string } | null;
   factory: { id: number; name: string };
   salesOrderItem?: { id: number; order: { id: number; orderNo: string } } | null;
   rawMaterials: { id: number; rawLot: { id: number; lotNumber: string; lotType: string } }[];
@@ -47,7 +46,6 @@ export default function LotsPage() {
 
   // Catalog data
   const [factories, setFactories] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
   const [salesOrderItems, setSalesOrderItems] = useState<any[]>([]);
   const [rawCottonLots, setRawCottonLots] = useState<any[]>([]);
   const [rawFiberLots, setRawFiberLots] = useState<any[]>([]);
@@ -101,9 +99,8 @@ export default function LotsPage() {
 
   const fetchCatalogs = async () => {
     try {
-      const [fRes, iRes] = await Promise.all([fetch("/api/factories"), fetch("/api/items")]);
+      const fRes = await fetch("/api/factories");
       if (fRes.ok) setFactories(await fRes.json());
-      if (iRes.ok) setItems(await iRes.json());
     } catch { /* ignore */ }
   };
 
@@ -150,7 +147,6 @@ export default function LotsPage() {
       lotNumber: lot.lotNumber,
       lotType: lot.lotType,
       factoryId: lot.factory.id,
-      itemId: lot.item?.id,
       salesOrderItemId: lot.salesOrderItem?.id,
       status: lot.status,
       note: lot.note,
@@ -227,10 +223,6 @@ export default function LotsPage() {
         const t = LOT_TYPE_LABELS[v];
         return <Tag color={t?.color}>{t?.label || v}</Tag>;
       },
-    },
-    {
-      title: "Mặt hàng", key: "item", width: 140,
-      render: (_: any, r: LotData) => r.item ? <Tag color="blue">{r.item.name}</Tag> : <span style={{ color: "#bbb" }}>—</span>,
     },
     {
       title: "Nhà máy", key: "factory", width: 100,
@@ -422,15 +414,6 @@ export default function LotsPage() {
 
           {formLotType === "YARN" && (
             <>
-              <Form.Item name="itemId" label="Mặt hàng (*)" rules={[{ required: true, message: "Lô sợi phải chọn mặt hàng" }]}>
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Chọn mặt hàng..."
-                  options={items.map((i) => ({ label: `${i.name}${i.ne ? ` (NE ${i.ne})` : ""}`, value: i.id }))}
-                />
-              </Form.Item>
-
               <Form.Item name="salesOrderItemId" label="Hợp đồng (optional)">
                 <Select
                   showSearch

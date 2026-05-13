@@ -58,7 +58,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { lotNumber, status, note, salesOrderItemId, rawLotIds, itemId } = body;
+    const { lotNumber, status, note, salesOrderItemId, rawLotIds } = body;
 
     const updateData: any = {};
     if (lotNumber !== undefined) updateData.lotNumber = lotNumber;
@@ -69,7 +69,6 @@ export async function PUT(
     if (note !== undefined) updateData.note = note || null;
     if (salesOrderItemId !== undefined)
       updateData.salesOrderItemId = salesOrderItemId ? parseInt(salesOrderItemId) : null;
-    if (itemId !== undefined) updateData.itemId = itemId ? parseInt(itemId) : null;
 
     const lot = await prisma.$transaction(async (tx) => {
       // Replace raw material links if provided

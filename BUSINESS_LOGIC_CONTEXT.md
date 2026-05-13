@@ -2743,3 +2743,39 @@ src/app/production/history/page.tsx           — load danh sách /api/lots, th�
 ### Known limitations
 
 - Select hiện load toàn bộ lots (không filter theo factory/item của bản ghi) — phù hợp khi số lô còn nhỏ; cần phân trang/search nếu danh sách lớn.
+
+---
+
+## LOT MANAGEMENT — Bỏ liên kết mặt hàng trên Lot
+
+**Status:** ✅ Completed 2026-05-13
+
+### What was built
+
+Gỡ bỏ trường `itemId` khỏi UI tạo/sửa lô và bỏ xử lý `itemId` trong API POST/PUT của lot. Lot không còn gắn với mặt hàng cụ thể — mặt hàng được xác định ở Machine.currentItemId và ProductionLog.itemId. Schema giữ nguyên (Lot.itemId vẫn là Int? nullable, không migrate).
+
+### Files created/modified
+
+```
+src/app/lots/page.tsx              — bỏ form field "Mặt hàng", bỏ cột "Mặt hàng" trong bảng, bỏ state items
+src/app/api/lots/route.ts          — POST không nhận/ghi itemId, bỏ validate "YARN phải có itemId"
+src/app/api/lots/[id]/route.ts     — PUT bỏ xử lý itemId
+```
+
+### Key business logic implemented
+
+- Lot nguyên liệu (bông/xơ) và lô sợi (YARN) đều không gắn với Item nữa khi tạo qua UI
+- Cùng 1 lô bông có thể dùng cho nhiều mặt hàng khác nhau — mặt hàng tracking đã chuyển sang Machine.currentItemId & ProductionLog.itemId
+- Schema strictly additive: Lot.itemId giữ nguyên nullable, không xóa cột (tuân nguyên tắc không xóa field)
+
+### API endpoints
+
+| Method | Path           | Description                                       |
+| ------ | -------------- | ------------------------------------------------- |
+| POST   | /api/lots      | Tạo lô — không còn nhận itemId                    |
+| PUT    | /api/lots/[id] | Cập nhật lô — bỏ xử lý itemId trong body          |
+
+### Known limitations
+
+- Cột `Lot.itemId` trong DB vẫn còn (nullable) cho các lô cũ; dữ liệu cũ không bị thay đổi
+- API GET vẫn `include: { item }` — không ảnh hưởng vì field nullable, có thể dọn sau
