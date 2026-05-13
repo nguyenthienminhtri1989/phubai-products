@@ -282,15 +282,15 @@ export default function MachinesPage() {
                         />
                     )}
                     <Button size="small" icon={<EditOutlined />} onClick={() => {
-                            setEditingMachine(r);
-                            form.setFieldsValue({ ...r, currentLotId: r.currentLotId ?? undefined });
-                            setIsModalOpen(true);
-                            // Tải danh sách lô sợi đang mở
-                            fetch('/api/lots?lotType=YARN&status=OPEN')
-                                .then(res => res.json())
-                                .then(data => setYarnLots(Array.isArray(data) ? data : []))
-                                .catch(() => {});
-                        }} />
+                        setEditingMachine(r);
+                        form.setFieldsValue({ ...r, currentLotId: r.currentLotId ?? undefined });
+                        setIsModalOpen(true);
+                        // Tải danh sách lô sợi đang mở
+                        fetch('/api/lots?lotType=YARN&status=OPEN')
+                            .then(res => res.json())
+                            .then(data => setYarnLots(Array.isArray(data) ? data : []))
+                            .catch(() => { });
+                    }} />
                     {isAdmin && (
                         <Popconfirm title="Xóa máy này?" onConfirm={() => handleDelete(r.id)}>
                             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -481,7 +481,7 @@ export default function MachinesPage() {
                 width={680}
             >
                 <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
-                    Cấu hình từng mặt hàng chạy trên máy <b>{multiItemMachine?.name}</b> theo từng nhóm cọc.
+                    Cấu hình danh sách mặt hàng chạy trên máy <b>{multiItemMachine?.name}</b>.
                 </div>
                 <Divider style={{ margin: '8px 0 16px' }} />
                 <Form
@@ -495,8 +495,6 @@ export default function MachinesPage() {
                                 {/* Header */}
                                 <Row gutter={8} style={{ marginBottom: 6, fontWeight: 600, fontSize: 12, color: '#888' }}>
                                     <Col flex="1">Mặt hàng</Col>
-                                    <Col style={{ width: 100 }}>Cọc từ</Col>
-                                    <Col style={{ width: 100 }}>Cọc đến</Col>
                                     <Col style={{ width: 36 }}></Col>
                                 </Row>
 
@@ -515,24 +513,6 @@ export default function MachinesPage() {
                                                     placeholder="Chọn mặt hàng..."
                                                     options={items.map(i => ({ label: i.name, value: i.id }))}
                                                 />
-                                            </Form.Item>
-                                        </Col>
-                                        <Col style={{ width: 100 }}>
-                                            <Form.Item
-                                                {...restField}
-                                                name={[name, 'fromSpindle']}
-                                                style={{ margin: 0 }}
-                                            >
-                                                <InputNumber placeholder="Từ cọc" style={{ width: '100%' }} min={1} />
-                                            </Form.Item>
-                                        </Col>
-                                        <Col style={{ width: 100 }}>
-                                            <Form.Item
-                                                {...restField}
-                                                name={[name, 'toSpindle']}
-                                                style={{ margin: 0 }}
-                                            >
-                                                <InputNumber placeholder="Đến cọc" style={{ width: '100%' }} min={1} />
                                             </Form.Item>
                                         </Col>
                                         <Col style={{ width: 36, textAlign: 'center' }}>
@@ -558,7 +538,7 @@ export default function MachinesPage() {
                     </Form.List>
 
                     <Button type="primary" htmlType="submit" block loading={multiItemSaving}>
-                        Lưu phân công
+                        Lưu cấu hình
                     </Button>
                 </Form>
             </Modal>
