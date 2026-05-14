@@ -2853,3 +2853,36 @@ src/app/api/production/daily-status/route.ts                  — (đã có sẵ
 - Máy multi-item dùng formulaType = 1 (nhập thẳng kg); không hỗ trợ tính theo cọc/NE per item
 - Số lô áp dụng cho toàn máy, không phân theo từng mặt hàng
 - Không hỗ trợ "Đổi hàng giữa ca" cho máy multi-item (đã có nhiều ô sẵn)
+
+---
+
+## KD-SX — Sản lượng TH real-time trong summary
+
+**Status:** ✅ Completed 2026-05-14
+
+### What was built
+
+API `/api/kdsx/summary` giờ tính sản lượng TH real-time từ `ProductionLog` thay vì đọc từ snapshot. Các cột tiền (doanh thu/chi phí/lợi nhuận) TH vẫn đọc snapshot, hiện `null` nếu snapshot chưa được refresh.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/summary/route.ts  — TH.totalQtyKg sum finalOutput từ ProductionLog theo tháng, group theo factory qua Machine.process.factoryId
+```
+
+### Key business logic implemented
+
+- TH sản lượng = SUM(`ProductionLog.finalOutput`) WHERE `recordDate` trong tháng, group theo `Machine.process.factoryId`
+- `th` không bao giờ null nữa — luôn có `totalQtyKg` (mặc định 0)
+- Các cột tiền TH (`totalRevenueVnd`, `totalCostVnd`, `totalProfitVnd`) = null nếu snapshot TH chưa tồn tại → frontend hiện `-`
+- KH vẫn đọc nguyên từ snapshot, không đổi
+
+### API endpoints
+
+| Method | Path                | Description                                |
+| ------ | ------------------- | ------------------------------------------ |
+| GET    | /api/kdsx/summary   | KH từ snapshot, TH sản lượng real-time     |
+
+### Known limitations
+
+- Doanh thu/chi phí/lợi nhuận TH vẫn cần chạy `refreshSummarySnapshot()` mới có số
