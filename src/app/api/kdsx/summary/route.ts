@@ -25,36 +25,50 @@ export async function GET(req: NextRequest) {
     orderBy: [{ factoryId: "asc" }, { type: "asc" }],
   });
 
-  // 2. TH — Sản lượng: tính real-time từ ProductionLog
-  const [startDate, endDate] = (() => {
-    const [year, month] = yearMonth.split("-").map(Number);
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 1); // exclusive
-    return [start, end];
-  })();
+  // 2. TH — Sản lượng real-time từ ProductionLog
+  // Chỉ lấy máy có trong segments của ProductionSchedule tháng này
+  const [year, month] = yearMonth.split("-").map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1); // exclusive
 
-  const thQtyByMachine = await prisma.productionLog.groupBy({
+  const schedules = await prisma.productionSchedule.findMany({
+    where: { yearMonth },
+    select: {
+      factoryId: true,
+      segments: { select: { machineId: true } },
+    },
+  });
+
+  // Build map: factoryId → machineIds (chỉ máy trong segments)
+  const factoryMachineIds = new Map<number, number[]>();
+  for (const sched of schedules) {
+    const ids = [...new Set(sched.segments.map((s) => s.machineId))];
+    factoryMachineIds.set(sched.factoryId, ids);
+  }
+
+  const allSegmentMachineIds = [
+    ...new Set(schedules.flatMap((s) => s.segments.map((s2) => s2.machineId))),
+  ];
+
+  const logsByMachine = await prisma.productionLog.groupBy({
     by: ["machineId"],
     where: {
+      machineId: { in: allSegmentMachineIds },
       recordDate: { gte: startDate, lt: endDate },
     },
     _sum: { finalOutput: true },
   });
 
-  const machineIds = thQtyByMachine.map((r) => r.machineId);
-  const machines = await prisma.machine.findMany({
-    where: { id: { in: machineIds } },
-    select: {
-      id: true,
-      process: { select: { factoryId: true } },
-    },
-  });
-  const machineToFactory = new Map(
-    machines.map((m) => [m.id, m.process.factoryId]),
-  );
+  // Map machineId → factoryId từ factoryMachineIds (không cần query Machine)
+  const machineToFactory = new Map<number, number>();
+  for (const [factoryId, machineIds] of factoryMachineIds) {
+    for (const machineId of machineIds) {
+      machineToFactory.set(machineId, factoryId);
+    }
+  }
 
   const thQtyMap = new Map<number, number>();
-  for (const row of thQtyByMachine) {
+  for (const row of logsByMachine) {
     const factoryId = machineToFactory.get(row.machineId);
     if (!factoryId) continue;
     thQtyMap.set(

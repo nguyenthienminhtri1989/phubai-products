@@ -2886,3 +2886,29 @@ src/app/api/kdsx/summary/route.ts  — TH.totalQtyKg sum finalOutput từ Produc
 ### Known limitations
 
 - Doanh thu/chi phí/lợi nhuận TH vẫn cần chạy `refreshSummarySnapshot()` mới có số
+
+---
+
+## KD-SX — Filter sản lượng TH theo segments của ProductionSchedule
+
+**Status:** ✅ Completed 2026-05-14
+
+### What was built
+
+Sửa `/api/kdsx/summary` để TH sản lượng chỉ cộng từ máy có trong `ProductionSchedule.segments` của tháng đó, khớp đúng với cách `ActualProductionGrid` tính. Trước đó cộng tất cả máy trong nhà máy → lệch số với grid.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/summary/route.ts  — query ProductionSchedule lấy segmentMachineIds, filter ProductionLog.machineId IN segments; bỏ query Machine.findMany
+```
+
+### Key business logic implemented
+
+- TH sản lượng dashboard = SUM(`ProductionLog.finalOutput`) WHERE `machineId IN ProductionSchedule.segments[].machineId` của tháng, group theo `ProductionSchedule.factoryId`
+- Nhà máy chưa tạo schedule cho tháng đó → `totalQtyKg = 0`
+- Map `machineId → factoryId` lấy trực tiếp từ schedule.segments, không cần query Machine
+
+### Known limitations
+
+- Nếu sau khi nhập sản lượng mà sửa schedule (xóa machine khỏi segments) → log của machine đó sẽ không còn được cộng vào TH dashboard
