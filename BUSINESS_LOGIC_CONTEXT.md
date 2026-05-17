@@ -2912,3 +2912,48 @@ src/app/api/kdsx/summary/route.ts  — query ProductionSchedule lấy segmentMac
 ### Known limitations
 
 - Nếu sau khi nhập sản lượng mà sửa schedule (xóa machine khỏi segments) → log của machine đó sẽ không còn được cộng vào TH dashboard
+
+---
+
+## KDSX — Multi-Schedule mỗi tháng + isPrimary
+
+**Status:** ✅ Completed 2026-05-17
+
+### What was built
+
+Cho phép 1 nhà máy tạo nhiều ProductionSchedule trong cùng 1 tháng (VD: KH sợi con, KH sợi ống). Mỗi tháng chỉ có 1 schedule `isPrimary = true` được dùng làm nguồn TH-Sản lượng cho Dashboard và làm nguồn cho `sync` (MonthlyActual) + `recalculate` (MonthlyPlan).
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                                  — thêm name + isPrimary, đổi unique constraint
+prisma/migrations/20260517000001_schedule_multi_with_primary/         — migration thủ công bảo toàn data cũ
+src/app/api/kdsx/production-schedule/route.ts                         — POST nhận name, auto-set primary cho schedule đầu tiên
+src/app/api/kdsx/production-schedule/[id]/route.ts                    — PUT nhận name + isPrimary, tự unset primary cũ
+src/app/api/kdsx/production-schedule/[id]/set-primary/route.ts        — route mới, toggle primary trong transaction
+src/app/api/kdsx/summary/route.ts                                     — chỉ lấy segments từ schedule isPrimary
+src/app/api/kdsx/monthly-actuals/[id]/sync/route.ts                   — chuyển sang findFirst({ isPrimary: true })
+src/app/api/kdsx/monthly-plans/[id]/recalculate/route.ts              — chuyển sang findFirst({ isPrimary: true })
+src/app/kdsx/production-schedule/page.tsx                             — thêm cột Tên KH + cột Chính + nút Đặt chính, form thêm field name
+```
+
+### Key business logic implemented
+
+- Unique constraint mới: `(factoryId, yearMonth, name)` — bỏ `(factoryId, yearMonth)`
+- Schedule đầu tiên trong 1 tháng tự động được set `isPrimary = true`
+- Set primary cho schedule khác = transaction: bỏ primary các schedule còn lại + set primary cho schedule được chọn (atomic)
+- TH-Sản lượng (summary route) + sync (MonthlyActual) + recalculate (MonthlyPlan) đều chỉ đọc từ schedule có `isPrimary = true`
+- Data cũ sau migration: tất cả schedule hiện có được set `isPrimary = true`, `name = ""`
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/kdsx/production-schedule | Body thêm `name`. Tạo schedule, auto primary nếu là schedule đầu của tháng |
+| PUT | /api/kdsx/production-schedule/[id] | Body có thể có `name` + `isPrimary` |
+| POST | /api/kdsx/production-schedule/[id]/set-primary | Đặt schedule này làm primary của tháng |
+
+### Known limitations
+
+- Khi xóa schedule đang là `isPrimary`, không tự động chọn schedule khác làm primary thay thế — phải user tự đặt lại
+- UI chi tiết schedule (`/kdsx/production-schedule/[id]`) chưa hiển thị/sửa được `name` và `isPrimary` từ trang chi tiết, chỉ làm được từ danh sách

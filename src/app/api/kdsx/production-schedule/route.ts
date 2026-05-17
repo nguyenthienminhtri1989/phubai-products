@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 // POST /api/kdsx/production-schedule
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { factoryId, yearMonth, note } = body;
+  const { factoryId, yearMonth, name = "", note } = body;
 
   if (!factoryId || !yearMonth) {
     return NextResponse.json(
@@ -73,19 +73,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Kiểm tra trùng (factoryId, yearMonth)
+  // Kiểm tra trùng (factoryId, yearMonth, name)
   const existing = await prisma.productionSchedule.findUnique({
-    where: { factoryId_yearMonth: { factoryId, yearMonth } },
+    where: { factoryId_yearMonth_name: { factoryId, yearMonth, name } },
   });
   if (existing) {
     return NextResponse.json(
-      { error: `Đã có kế hoạch SX tháng ${yearMonth} cho nhà máy này` },
+      {
+        error: `Đã có kế hoạch tên "${name || "(không tên)"}" cho nhà máy này trong tháng ${yearMonth}`,
+      },
       { status: 409 }
     );
   }
 
+  // Schedule đầu tiên trong tháng → tự động làm primary
+  const existingInMonth = await prisma.productionSchedule.count({
+    where: { factoryId, yearMonth },
+  });
+  const isPrimary = existingInMonth === 0;
+
   const schedule = await prisma.productionSchedule.create({
-    data: { factoryId, yearMonth, note: note || null },
+    data: { factoryId, yearMonth, name, note: note || null, isPrimary },
     include: {
       factory: { select: { id: true, name: true } },
     },

@@ -43,7 +43,7 @@ export async function PUT(
   const { id: idStr } = await params;
   const id = parseInt(idStr);
   const body = await req.json();
-  const { note, holidays, itemColors } = body;
+  const { note, holidays, itemColors, name, isPrimary } = body;
 
   const existing = await prisma.productionSchedule.findUnique({
     where: { id },
@@ -55,12 +55,26 @@ export async function PUT(
     );
   }
 
+  // Nếu set isPrimary = true → bỏ primary của các schedule khác cùng nhà máy cùng tháng
+  if (isPrimary === true) {
+    await prisma.productionSchedule.updateMany({
+      where: {
+        factoryId: existing.factoryId,
+        yearMonth: existing.yearMonth,
+        id: { not: id },
+      },
+      data: { isPrimary: false },
+    });
+  }
+
   const updated = await prisma.productionSchedule.update({
     where: { id },
     data: {
       ...(note !== undefined && { note }),
       ...(holidays !== undefined && { holidays }),
       ...(itemColors !== undefined && { itemColors }),
+      ...(name !== undefined && { name }),
+      ...(isPrimary !== undefined && { isPrimary }),
     },
   });
 

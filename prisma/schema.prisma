@@ -1306,6 +1306,8 @@ model ProductionSchedule {
   factoryId Int
   factory   Factory    @relation(fields: [factoryId], references: [id])
   yearMonth String // "2026-04"
+  name      String     @default("") // Tên kế hoạch do user đặt (VD: "KH sợi ống T5")
+  isPrimary Boolean    @default(false) // Schedule chính được dùng cho TH-Sản lượng Dashboard
   status    PlanStatus @default(DRAFT) // tái dùng enum PlanStatus sẵn có
   note      String?
 
@@ -1321,7 +1323,7 @@ model ProductionSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([factoryId, yearMonth])
+  @@unique([factoryId, yearMonth, name])
   @@index([factoryId])
   @@map("production_schedules")
 }

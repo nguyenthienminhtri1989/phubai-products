@@ -36,8 +36,8 @@ export async function POST(
   // =====================================================================
   // Bước 1: Lấy Production Schedule + tính SL kết hợp KH+TH theo mặt hàng
   // =====================================================================
-  const schedule = await prisma.productionSchedule.findUnique({
-    where: { factoryId_yearMonth: { factoryId, yearMonth } },
+  const schedule = await prisma.productionSchedule.findFirst({
+    where: { factoryId, yearMonth, isPrimary: true },
     include: { segments: true },
   });
 

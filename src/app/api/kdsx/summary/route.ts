@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const endDate = new Date(year, month, 1); // exclusive
 
   const schedules = await prisma.productionSchedule.findMany({
-    where: { yearMonth },
+    where: { yearMonth, isPrimary: true },
     select: {
       factoryId: true,
       segments: { select: { machineId: true } },

@@ -6,6 +6,7 @@ import {
   Button,
   Modal,
   Form,
+  Input,
   Select,
   DatePicker,
   Tag,
@@ -24,6 +25,8 @@ import {
   EyeOutlined,
   DeleteOutlined,
   CalendarOutlined,
+  StarOutlined,
+  StarFilled,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import type { ColumnsType } from "antd/es/table";
@@ -41,6 +44,8 @@ interface Schedule {
   factoryId: number;
   factory: { id: number; name: string };
   yearMonth: string;
+  name: string;
+  isPrimary: boolean;
   status: "DRAFT" | "SUBMITTED" | "APPROVED";
   note?: string | null;
   totalKg: number;
@@ -97,6 +102,7 @@ export default function ProductionSchedulePage() {
         body: JSON.stringify({
           factoryId: values.factoryId,
           yearMonth,
+          name: values.name,
           note: values.note,
         }),
       });
@@ -115,6 +121,18 @@ export default function ProductionSchedulePage() {
       // validation error
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const handleSetPrimary = async (id: number) => {
+    const res = await fetch(`/api/kdsx/production-schedule/${id}/set-primary`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      message.success("Đã đặt làm kế hoạch chính");
+      fetchSchedules();
+    } else {
+      message.error("Lỗi cập nhật");
     }
   };
 
@@ -146,6 +164,38 @@ export default function ProductionSchedulePage() {
           {name}
         </Text>
       ),
+    },
+    {
+      title: "Tên kế hoạch",
+      dataIndex: "name",
+      key: "name",
+      render: (name: string) =>
+        name ? <Text>{name}</Text> : <Text type="secondary">(không tên)</Text>,
+    },
+    {
+      title: "Chính",
+      dataIndex: "isPrimary",
+      key: "isPrimary",
+      align: "center",
+      width: 110,
+      render: (isPrimary: boolean, record: Schedule) =>
+        isPrimary ? (
+          <Tooltip title="Schedule chính — đang dùng cho Dashboard TH-Sản lượng">
+            <Tag color="gold" icon={<StarFilled />}>
+              Chính
+            </Tag>
+          </Tooltip>
+        ) : (
+          <Tooltip title="Đặt làm schedule chính">
+            <Button
+              size="small"
+              icon={<StarOutlined />}
+              onClick={() => handleSetPrimary(record.id)}
+            >
+              Đặt chính
+            </Button>
+          </Tooltip>
+        ),
     },
     {
       title: "Tháng",
@@ -336,6 +386,18 @@ export default function ProductionSchedulePage() {
             <Select
               placeholder="Chọn nhà máy..."
               options={factories.map((f) => ({ value: f.id, label: f.name }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="Tên kế hoạch"
+            name="name"
+            rules={[{ required: true, message: "Nhập tên kế hoạch" }]}
+            tooltip="VD: KH sợi ống T5/2026, KH sợi con T4/2026"
+          >
+            <Input
+              placeholder="VD: KH máy sợi ống, KH máy sợi con..."
+              maxLength={100}
             />
           </Form.Item>
 

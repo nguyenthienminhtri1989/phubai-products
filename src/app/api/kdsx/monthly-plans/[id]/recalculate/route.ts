@@ -59,12 +59,11 @@ export async function POST(
 
   // 2b. Tính projectedQtyByItem từ actual grid + benchmark (cùng logic với frontend)
   const projectedQtyByItem: Record<number, number> = {};
-  const schedule = await prisma.productionSchedule.findUnique({
+  const schedule = await prisma.productionSchedule.findFirst({
     where: {
-      factoryId_yearMonth: {
-        factoryId: plan.factoryId,
-        yearMonth: plan.yearMonth,
-      },
+      factoryId: plan.factoryId,
+      yearMonth: plan.yearMonth,
+      isPrimary: true,
     },
     include: { segments: true },
   });
