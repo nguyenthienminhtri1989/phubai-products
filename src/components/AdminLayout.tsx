@@ -95,11 +95,11 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "energy.live", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/live", label: "Giám sát trực tiếp", icon: <DashboardOutlined /> },
   // KINH DOANH
   { pageKey: "kdsx.dashboard", pageGroup: "KINH DOANH", path: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
+  { pageKey: "kdsx.production-schedule", pageGroup: "KINH DOANH", path: "/kdsx/production-schedule", label: "Kế hoạch & Thực hiện", icon: <CalendarOutlined /> },
+  { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.customers", pageGroup: "KINH DOANH", path: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
   { pageKey: "kdsx.sales-orders", pageGroup: "KINH DOANH", path: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
-  { pageKey: "kdsx.production-schedule", pageGroup: "KINH DOANH", path: "/kdsx/production-schedule", label: "Kế hoạch & Thực hiện", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.order-progress", pageGroup: "KINH DOANH", path: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
-  { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
   // { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
