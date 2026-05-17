@@ -107,6 +107,7 @@ export default function ProductionSchedulePage() {
         }),
       });
       const data = await res.json();
+      console.log("API response:", res.status, data); // DEBUG
       if (!res.ok) {
         message.error(data.error ?? "Lỗi tạo kế hoạch");
         return;
