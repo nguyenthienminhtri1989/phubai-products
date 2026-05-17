@@ -88,7 +88,7 @@ export default function ProductionSchedulePage() {
     fetch("/api/factories")
       .then((r) => r.json())
       .then((data) => setFactories(Array.isArray(data) ? data : data.factories ?? []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleCreate = async () => {
@@ -117,8 +117,9 @@ export default function ProductionSchedulePage() {
       fetchSchedules();
       // Chuyển sang trang chi tiết
       router.push(`/kdsx/production-schedule/${data.id}`);
-    } catch {
-      // validation error
+    } catch (err) {
+      console.error("handleCreate error:", err);
+      message.error("Lỗi không xác định khi tạo kế hoạch");// validation error
     } finally {
       setCreateLoading(false);
     }
