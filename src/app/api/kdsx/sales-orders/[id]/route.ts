@@ -127,6 +127,9 @@ export async function PUT(
         sellingCostRate: item.sellingCostRate ?? null,
         deliveredQty: item.deliveredQty ?? 0,
         note: item.note ?? null,
+        priorityOverride: item.priorityOverride ?? null,
+        deferToMonth: item.deferToMonth ?? null,
+        wasteRecoveryRate: item.wasteRecoveryRate ?? null,
       })),
     });
   }

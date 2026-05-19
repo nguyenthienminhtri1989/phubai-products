@@ -37,6 +37,9 @@ interface SalesOrderItem {
   sellingCostRate: number | null;
   deliveredQty: number;
   note: string | null;
+  priorityOverride: number | null;
+  deferToMonth: string | null;
+  wasteRecoveryRate: number | null;
 }
 interface SalesOrder {
   id: number;
@@ -119,6 +122,9 @@ export default function SalesOrdersPage() {
         sellingCostRate: it.sellingCostRate != null ? it.sellingCostRate * 100 : null,
         deliveredQty: it.deliveredQty ?? 0,
         note: it.note,
+        priorityOverride: it.priorityOverride ?? null,
+        deferToMonth: it.deferToMonth ? dayjs(it.deferToMonth, "YYYY-MM") : null,
+        wasteRecoveryRate: it.wasteRecoveryRate ?? null,
       })),
     });
     setModalOpen(true);
@@ -144,6 +150,9 @@ export default function SalesOrdersPage() {
         items: values.items?.map((item: any) => ({
           ...item,
           sellingCostRate: item.sellingCostRate != null ? item.sellingCostRate / 100 : null,
+          deferToMonth: item.deferToMonth ? item.deferToMonth.format("YYYY-MM") : null,
+          priorityOverride: item.priorityOverride ?? null,
+          wasteRecoveryRate: item.wasteRecoveryRate ?? null,
         })),
       };
       const url = editing ? `/api/kdsx/sales-orders/${editing.id}` : "/api/kdsx/sales-orders";
@@ -387,6 +396,41 @@ export default function SalesOrdersPage() {
                       </Form.Item>
                       <Form.Item {...restField} name={[name, "note"]}>
                         <Input placeholder="Ghi chú" style={{ width: 130 }} />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "priorityOverride"]}
+                        tooltip="Số nhỏ = ưu tiên cao. Để trống = tự động theo deadline/ngày ký"
+                      >
+                        <InputNumber
+                          min={1}
+                          placeholder="Ưu tiên"
+                          style={{ width: 90 }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "deferToMonth"]}
+                        tooltip="Tạm loại HĐ này khỏi tháng hiện tại, chỉ xuất hiện từ tháng được chọn"
+                      >
+                        <DatePicker
+                          picker="month"
+                          format="YYYY-MM"
+                          placeholder="Hoãn đến"
+                          style={{ width: 120 }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "wasteRecoveryRate"]}
+                        tooltip="VD: 0.18 = thu hồi 0.18 USD/kg phế. Để trống = dùng định mức chung"
+                      >
+                        <InputNumber
+                          min={0}
+                          step={0.01}
+                          placeholder="Phế (USD/kg)"
+                          style={{ width: 120 }}
+                        />
                       </Form.Item>
                       <Button danger onClick={() => remove(name)}>Xóa</Button>
                     </Space>

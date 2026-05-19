@@ -2957,3 +2957,67 @@ src/app/kdsx/production-schedule/page.tsx                             — thêm 
 
 - Khi xóa schedule đang là `isPrimary`, không tự động chọn schedule khác làm primary thay thế — phải user tự đặt lại
 - UI chi tiết schedule (`/kdsx/production-schedule/[id]`) chưa hiển thị/sửa được `name` và `isPrimary` từ trang chi tiết, chỉ làm được từ danh sách
+
+---
+
+## KD-SX V2 — Revenue Refactor (Phase 1–7)
+
+**Status:** ✅ Completed 2026-05-19
+
+### What was built
+
+Refactor hoàn toàn module tính doanh thu/lợi nhuận: thay vì tính từ MonthlyPlan/MonthlyActual (snapshot tĩnh), v2 tính trực tiếp từ ProductionLog realtime qua allocation waterfall. Trang Dashboard mới `/kdsx/revenue` cho sếp xem DT/LN hôm nay, MTD, và ước tính cả tháng.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                    — thêm fields SalesOrderItem, FixedCostEntry, MonthlyInputParam; DEPRECATED 5 models
+src/lib/allocation-engine-v2.ts                        — engine phân bổ SL từ ProductionLog → HĐ (waterfall)
+src/lib/kdsx/calculator-v2.ts                          — tính DT/CP/LN từ AllocationResult
+src/app/api/v2/dashboard/revenue/route.ts              — GET today+MTD+projected PnL
+src/app/api/v2/dashboard/revenue-all/route.ts          — GET tổng hợp tất cả NM
+src/app/api/v2/contracts/progress/route.ts             — GET tiến độ HĐ
+src/app/api/v2/fixed-costs/route.ts                    — GET/PUT chi phí cố định standalone
+src/app/api/v2/fixed-costs/copy-from-previous/route.ts — POST copy CP từ tháng trước
+src/app/api/v2/production-matrix/route.ts              — GET ma trận SL theo ngày
+src/app/kdsx/revenue/page.tsx                          — Dashboard DT/LN mới (tab dashboard + tab CP cố định)
+src/app/kdsx/page.tsx                                  — thêm Alert banner dẫn sang trang mới
+src/app/kdsx/sales-orders/page.tsx                     — thêm 3 fields: priorityOverride, deferToMonth, wasteRecoveryRate
+src/app/api/kdsx/sales-orders/[id]/route.ts            — PUT lưu 3 fields mới
+src/components/AdminLayout.tsx                         — thêm kdsx.revenue vào sidebar, ẩn plans/actuals/dashboard cũ
+```
+
+### Key business logic implemented
+
+- Waterfall allocation: rót SL vào HĐ theo thứ tự priorityOverride → deadline → signedDate → orderId
+- deferToMonth: HĐ bị hoãn không xuất hiện trong tháng hiện tại nếu deferToMonth > yearMonth
+- wasteRecoveryRate per-item: override định mức chung, dùng trong công thức Phế = qty × rate × wasteAdjustmentFactor × exchangeRate
+- FixedCostEntry v2: dùng factoryId + yearMonth thay vì monthlyPlanId/monthlyActualId
+- REAL mode: CP cố định chia tỷ lệ theo ngày đã qua trong tháng
+- PROJECTION mode: SL tương lai = benchmark EMPIRICAL × số máy × ngày còn lại (fallback: trung bình thực tế)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/v2/dashboard/revenue | DT/LN 1 NM (today+MTD+projected) |
+| GET | /api/v2/dashboard/revenue-all | Tổng hợp tất cả NM |
+| GET | /api/v2/contracts/progress | Tiến độ HĐ + waterfall allocation |
+| GET | /api/v2/fixed-costs | 14 dòng CP cố định |
+| PUT | /api/v2/fixed-costs | Upsert CP cố định |
+| POST | /api/v2/fixed-costs/copy-from-previous | Copy CP từ tháng trước |
+| GET | /api/v2/production-matrix | Ma trận SL theo item × ngày |
+
+### Known limitations
+
+- AllocationLine dùng `orderItemId` (không phải `salesOrderItemId`) do rename trong quá trình dev
+- `prisma db push` thay vì `migrate dev` (non-interactive env) — không có migration file v2_revenue_refactor
+- Giá cotton lấy bản gần nhất duy nhất (không phân biệt loại AUS/USA/Brazil) — cần cải thiện sau
+- Dashboard chưa có nút "Chốt tháng" (snapshot cuối tháng)
+- Chưa có export Excel
+
+### Data notes
+
+- FixedCostEntry: 14 records đã migrate từ MonthlyPlan → factoryId=2, yearMonth=2027-05
+- Dev DB: toàn bộ bảng KD đều trống (ProductionLog=0, SalesOrder=0) — cần nhập dữ liệu thật để test
+- PageRegistry: thêm entry `kdsx.revenue` trực tiếp vào DB

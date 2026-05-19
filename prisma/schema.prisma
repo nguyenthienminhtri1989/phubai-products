@@ -72,6 +72,8 @@ model Factory {
   // Lot management
   lots Lot[]
 
+  fixedCostEntries FixedCostEntry[]
+
   @@map("factories")
 }
 
@@ -876,6 +878,9 @@ model SalesOrderItem {
   deliveredQty    Float     @default(0) // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
   deliveryDate    DateTime? @db.Date // deadline riêng nếu khác HĐ
   allocatedQty    Float     @default(0) // cached, cập nhật tự động
+  priorityOverride  Int?      // Ưu tiên thủ công: số nhỏ = ưu tiên cao. NULL = tự động theo deadline/signDate
+  deferToMonth      String?   // "YYYY-MM" — hoãn HĐ đến tháng này. NULL = active ngay
+  wasteRecoveryRate Float?    // Tỷ lệ phế thu hồi (VD: 0.18 = 0.18 USD/kg). Override per-item nếu cần
   note            String?
 
   planLineItems   PlanLineItem[]
@@ -927,6 +932,8 @@ model MonthlyInputParam {
   // Giá phế liệu (VNĐ/kg)
   wastePrice Float?
 
+  wasteAdjustmentFactor Float? @default(0.95) // Hệ số điều chỉnh phế thu hồi (0.95, 0.92...). Thay đổi theo tháng.
+
   note String?
 
   createdAt DateTime @default(now())
@@ -975,6 +982,7 @@ model RawMaterialRate {
 
 // --- Nhóm Kế hoạch (KH) ---
 
+// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
 // 6. Kế hoạch tháng
 model MonthlyPlan {
   id        Int        @id @default(autoincrement())
@@ -995,6 +1003,7 @@ model MonthlyPlan {
   @@map("monthly_plans")
 }
 
+// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
 // 7. Chi tiết từng dòng sợi trong kế hoạch
 model PlanLineItem {
   id     Int         @id @default(autoincrement())
@@ -1047,16 +1056,22 @@ model FixedCostEntry {
   monthlyActualId Int?
   monthlyActual   MonthlyActual? @relation(fields: [monthlyActualId], references: [id], onDelete: Cascade)
 
+  factoryId  Int?     // FK → Factory. NULL cho records cũ (legacy)
+  yearMonth  String?  // "YYYY-MM". NULL cho records cũ (legacy)
+  factory    Factory? @relation(fields: [factoryId], references: [id])
+
   amountVnd Float // Số tiền (VNĐ)
   note      String?
 
   @@index([monthlyPlanId])
   @@index([monthlyActualId])
+  @@unique([factoryId, yearMonth, costType], map: "fixed_cost_factory_month_type")
   @@map("fixed_cost_entries")
 }
 
 // --- Nhóm Thực hiện (TH) ---
 
+// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
 // 9. Thực hiện tháng
 model MonthlyActual {
   id        Int     @id @default(autoincrement())
@@ -1076,6 +1091,7 @@ model MonthlyActual {
   @@map("monthly_actuals")
 }
 
+// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
 // 10. Chi tiết từng dòng sợi thực hiện
 model ActualLineItem {
   id       Int           @id @default(autoincrement())
@@ -1241,6 +1257,7 @@ model KdDailyInput {
 
 // --- Dashboard Cache ---
 
+// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
 // 11. Cache tổng hợp 3 nhà máy cho dashboard Ban GĐ
 model MonthlySummarySnapshot {
   id        Int          @id @default(autoincrement())
