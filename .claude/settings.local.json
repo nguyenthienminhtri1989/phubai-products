@@ -13,7 +13,16 @@
       "Bash(node:*)",
       "Bash(xargs grep:*)",
       "Bash(/d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/BUSINESS_LOGIC_CONTEXT.md:*)",
-      "Bash(ls /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app/api/items 2>/dev/null || echo \"no items api\"\ngrep -r \"fetch.*\\\\/api\\\\/items\" /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app --include=\"*.tsx\" | head -3)"
+      "Bash(ls /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app/api/items 2>/dev/null || echo \"no items api\"\ngrep -r \"fetch.*\\\\/api\\\\/items\" /d/DU-AN-PHAN-MEM/PHUBAI-PRODUCTS/phubai-products/src/app --include=\"*.tsx\" | head -3)",
+      "Bash(set DATABASE_URL=)",
+      "Bash(findstr /i \"DATABASE\")",
+      "Bash(set DATABASE_URL=postgresql://postgres:123456@localhost:5432/phubai_erp_db?schema=public)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:123456@localhost:5432/phubai_erp_db?schema=public\" npx prisma migrate dev --name v2_revenue_refactor)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:123456@localhost:5432/phubai_erp_db?schema=public\" npx prisma migrate dev --name v2_revenue_refactor --create-only)",
+      "PowerShell($env:DATABASE_URL = \"postgresql://postgres:123456@localhost:5432/phubai_erp_db?schema=public\"; Set-Location \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.claude\\\\worktrees\\\\recursing-blackburn-f3514b\"; npx prisma migrate dev --name v2_revenue_refactor --create-only 2>&1)",
+      "Bash(cp \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.env\" \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.claude\\\\worktrees\\\\recursing-blackburn-f3514b\\\\.env\" 2>&1 && echo \"Copied\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

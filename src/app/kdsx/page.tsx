@@ -14,6 +14,7 @@ import {
   Button,
   Space,
   Tooltip,
+  Alert,
 } from "antd";
 import { ReloadOutlined, ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -175,9 +176,22 @@ export default function KdsxDashboardPage() {
 
   return (
     <div>
+      <Alert
+        type="info"
+        showIcon
+        closable
+        message="Đã có Dashboard Doanh thu – Lợi nhuận mới"
+        description={
+          <span>
+            Trang này sẽ được ẩn trong thời gian tới.{" "}
+            <a href="/kdsx/revenue">Bấm vào đây để xem Dashboard mới →</a>
+          </span>
+        }
+        style={{ marginBottom: 16 }}
+      />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>
-          Dashboard KH Kinh doanh - SX
+          Dashboard KH Kinh doanh - SX (Cũ)
         </Title>
         <Space>
           <Select
