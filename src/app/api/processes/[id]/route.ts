@@ -18,7 +18,7 @@ export async function PUT(
     const idString = data.id; // Gán id dạng chuỗi cho idString
     const id = parseInt(idString); // Biến đổi chuỗi thành số
     const body = await request.json(); // Lấy dữ liệu từ Client gửi lên
-    const { name, factoryId } = body; // Destructuring
+    const { name, factoryId, isRevenueProcess } = body; // Destructuring
 
     // Gọi Prisma ra cập nhật dữ liệu
     // Đồng thời gán dữ liệu mới update cho biến updated để báo về client
@@ -27,6 +27,9 @@ export async function PUT(
       data: {
         name: name,
         factoryId: parseInt(factoryId),
+        ...(isRevenueProcess !== undefined && {
+          isRevenueProcess: Boolean(isRevenueProcess),
+        }),
       },
       include: { factory: true },
     });

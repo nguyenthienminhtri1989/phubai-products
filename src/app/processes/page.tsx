@@ -12,6 +12,8 @@ import {
   Card,
   Select,
   Tag,
+  Switch,
+  Tooltip,
 } from "antd";
 import {
   PlusOutlined,
@@ -31,6 +33,7 @@ interface Process {
   id: number;
   name: string;
   factoryId: number;
+  isRevenueProcess?: boolean;
   factory?: Factory; // Dữ liệu quan hệ
 }
 
@@ -160,6 +163,18 @@ export default function ProcessPage() {
         <Tag color="blue">{factory?.name || "N/A"}</Tag>
       ),
     },
+    {
+      title: (
+        <Tooltip title="Công đoạn cuối có sản lượng dùng để tính doanh thu (thường là công đoạn ống). Dashboard chỉ tính SL của công đoạn này.">
+          <span>CĐ doanh thu</span>
+        </Tooltip>
+      ),
+      dataIndex: "isRevenueProcess",
+      width: 130,
+      align: "center" as const,
+      render: (v: boolean) =>
+        v ? <Tag color="gold">Doanh thu</Tag> : <span style={{ color: "#bfbfbf" }}>—</span>,
+    },
     ...(canEdit ? [{
       title: "Hành động",
       key: "action",
@@ -174,6 +189,7 @@ export default function ProcessPage() {
               form.setFieldsValue({
                 name: record.name,
                 factoryId: record.factoryId,
+                isRevenueProcess: !!record.isRevenueProcess,
               });
               setIsModalOpen(true);
             }}
@@ -266,6 +282,19 @@ export default function ProcessPage() {
             rules={[{ required: true, message: "Nhập tên công đoạn!" }]}
           >
             <Input placeholder="Ví dụ: Bông chải, Ghép thô..." />
+          </Form.Item>
+
+          <Form.Item
+            name="isRevenueProcess"
+            label={
+              <Tooltip title="Bật cho công đoạn cuối có SL dùng tính doanh thu (thường là công đoạn ống). Mỗi nhà máy chỉ nên bật 1 công đoạn.">
+                <span>Công đoạn tính doanh thu</span>
+              </Tooltip>
+            }
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch checkedChildren="Có" unCheckedChildren="Không" />
           </Form.Item>
 
           <div style={{ textAlign: "right", marginTop: 20 }}>

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, factoryId } = body;
+    const { name, factoryId, isRevenueProcess } = body;
 
     if (!name || !factoryId) {
       return NextResponse.json(
@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       data: {
         name: name,
         factoryId: parseInt(factoryId),
+        isRevenueProcess: Boolean(isRevenueProcess),
       },
       include: { factory: true }, // // Trả về kèm thông tin nhà máy để frontend hiển thị ngay
     });

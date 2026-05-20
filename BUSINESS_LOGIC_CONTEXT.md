@@ -3088,3 +3088,34 @@ src/lib/allocation-engine-v2.ts             — firstDay/lastDay/today chuyển 
 
 ### Known limitations
 - Các file ngoài scope v2 (allocation-engine.ts cũ, kdsx/*) chưa được audit timezone trong lần fix này
+
+---
+
+## CÔNG ĐOẠN — Đánh dấu công đoạn tính doanh thu
+
+**Status:** ✅ Completed 2026-05-20
+
+### What was built
+Thêm field `isRevenueProcess` vào model `Process` và UI quản lý công đoạn (`/processes`) để Admin có thể đánh dấu công đoạn cuối (thường là ống) làm nguồn SL tính doanh thu. Dashboard v2 production-matrix đã lọc theo cờ này.
+
+### Files created/modified
+```
+prisma/schema.prisma                                                  — thêm field isRevenueProcess Boolean @default(false) vào Process
+prisma/migrations/20260520000004_add_is_revenue_process_to_process/   — ADD COLUMN IF NOT EXISTS (vì DB local đã có sẵn cột do db push trước đó)
+src/app/api/processes/route.ts                                        — POST nhận isRevenueProcess
+src/app/api/processes/[id]/route.ts                                   — PUT nhận isRevenueProcess
+src/app/processes/page.tsx                                            — thêm cột "CĐ doanh thu" + Switch trong form
+```
+
+### Key business logic implemented
+- Mỗi nhà máy nên chỉ bật `isRevenueProcess = true` cho 1 công đoạn (UI chưa enforce, dùng tooltip nhắc)
+- Mặc định `false` cho tất cả công đoạn cũ — Admin phải vào bật thủ công sau khi deploy, nếu không matrix sẽ trống
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | /api/processes | Tạo công đoạn, accept isRevenueProcess (optional, default false) |
+| PUT    | /api/processes/[id] | Cập nhật, isRevenueProcess optional — chỉ update khi truyền lên |
+
+### Known limitations
+- Chưa enforce unique 1 công đoạn doanh thu / nhà máy — nếu Admin bật 2 công đoạn, matrix sẽ cộng SL của cả hai (sai)
