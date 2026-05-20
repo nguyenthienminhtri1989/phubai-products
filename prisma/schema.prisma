@@ -1056,9 +1056,9 @@ model FixedCostEntry {
   monthlyActualId Int?
   monthlyActual   MonthlyActual? @relation(fields: [monthlyActualId], references: [id], onDelete: Cascade)
 
-  factoryId  Int?     // FK → Factory. NULL cho records cũ (legacy)
-  yearMonth  String?  // "YYYY-MM". NULL cho records cũ (legacy)
-  factory    Factory? @relation(fields: [factoryId], references: [id])
+  factoryId  Int      // FK → Factory
+  yearMonth  String   // "YYYY-MM"
+  factory    Factory  @relation(fields: [factoryId], references: [id])
 
   amountVnd Float // Số tiền (VNĐ)
   note      String?

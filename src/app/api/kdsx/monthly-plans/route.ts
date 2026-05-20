@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
           create: ALL_FIXED_COST_TYPES.map((costType) => ({
             costType,
             amountVnd: 0,
+            factoryId: Number(factoryId),
+            yearMonth,
           })),
         },
       },

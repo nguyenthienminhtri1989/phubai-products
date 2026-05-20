@@ -69,6 +69,21 @@ export async function POST(req: NextRequest) {
   const actualIdNum = monthlyActualId ? parseInt(monthlyActualId) : undefined;
   const where = planIdNum ? { monthlyPlanId: planIdNum } : { monthlyActualId: actualIdNum! };
 
+  // Lấy factoryId + yearMonth từ parent plan/actual (bắt buộc cho FixedCostEntry)
+  let factoryId: number;
+  let yearMonth: string;
+  if (planIdNum) {
+    const plan = await prisma.monthlyPlan.findUnique({ where: { id: planIdNum }, select: { factoryId: true, yearMonth: true } });
+    if (!plan) return NextResponse.json({ error: "MonthlyPlan không tồn tại" }, { status: 404 });
+    factoryId = plan.factoryId;
+    yearMonth = plan.yearMonth;
+  } else {
+    const actual = await prisma.monthlyActual.findUnique({ where: { id: actualIdNum! }, select: { factoryId: true, yearMonth: true } });
+    if (!actual) return NextResponse.json({ error: "MonthlyActual không tồn tại" }, { status: 404 });
+    factoryId = actual.factoryId;
+    yearMonth = actual.yearMonth;
+  }
+
   // Lấy các entry hiện có để biết cái nào update / create
   const existing = await prisma.fixedCostEntry.findMany({ where });
   const existingMap = new Map(existing.map((e) => [e.costType as string, e]));
@@ -87,6 +102,8 @@ export async function POST(req: NextRequest) {
         costType: entry.costType as FixedCostType,
         amountVnd: Number(entry.amountVnd),
         note: entry.note ?? null,
+        factoryId,
+        yearMonth,
         ...(planIdNum ? { monthlyPlanId: planIdNum } : { monthlyActualId: actualIdNum }),
       },
     });
