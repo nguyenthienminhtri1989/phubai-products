@@ -73,6 +73,9 @@ export default function MachinesPage() {
     // Danh sách lô cho modal phân công multi-item
     const [assignmentLots, setAssignmentLots] = useState<any[]>([]);
 
+    // Watch assignments realtime để Select lô luôn lấy đúng itemId cùng dòng
+    const watchedAssignments: any[] = Form.useWatch('assignments', multiItemForm) ?? [];
+
     const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
     const pagePermissions: { pageKey: string; canView: boolean; canEdit: boolean }[] =
@@ -568,36 +571,27 @@ export default function MachinesPage() {
                                                 />
                                             </Form.Item>
                                         </Col>
-                                        {/* Select lô — dùng shouldUpdate để re-render khi đổi itemId */}
+                                        {/* Select lô — options lọc theo itemId cùng dòng */}
                                         <Col style={{ width: 190 }}>
                                             <Form.Item
-                                                shouldUpdate={(prev, cur) =>
-                                                    prev?.assignments?.[name]?.itemId !== cur?.assignments?.[name]?.itemId
-                                                }
-                                                noStyle
+                                                {...restField}
+                                                name={[name, 'lotId']}
+                                                style={{ margin: 0 }}
                                             >
-                                                {() => {
-                                                    const selectedItemId = multiItemForm.getFieldValue(['assignments', name, 'itemId']);
-                                                    const options = assignmentLots
-                                                        .filter((l: any) => !selectedItemId || l.itemId === selectedItemId)
-                                                        .map((l: any) => ({ value: l.id, label: l.lotNumber }));
-                                                    return (
-                                                        <Form.Item
-                                                            {...restField}
-                                                            name={[name, 'lotId']}
-                                                            style={{ margin: 0 }}
-                                                        >
-                                                            <Select
-                                                                allowClear
-                                                                showSearch
-                                                                optionFilterProp="label"
-                                                                placeholder="Chọn lô..."
-                                                                options={options}
-                                                                disabled={!selectedItemId}
-                                                            />
-                                                        </Form.Item>
-                                                    );
-                                                }}
+                                                <Select
+                                                    allowClear
+                                                    showSearch
+                                                    optionFilterProp="label"
+                                                    placeholder="Chọn lô..."
+                                                    disabled={!watchedAssignments[name]?.itemId}
+                                                    options={assignmentLots
+                                                        .filter((l: any) =>
+                                                            !watchedAssignments[name]?.itemId ||
+                                                            l.itemId === watchedAssignments[name]?.itemId
+                                                        )
+                                                        .map((l: any) => ({ value: l.id, label: l.lotNumber }))
+                                                    }
+                                                />
                                             </Form.Item>
                                         </Col>
                                         {/* Nút xóa */}
