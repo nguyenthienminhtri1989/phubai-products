@@ -33,6 +33,33 @@ import type { ColumnsType } from "antd/es/table";
 
 const { Title, Text } = Typography;
 
+// ===== PASTEL ROW COLORS =====
+const ROW_COLORS = [
+  "#E3F2FD", // xanh dương nhạt
+  "#FCE4EC", // hồng nhạt
+  "#FFF9C4", // vàng nhạt
+  "#F3E5F5", // tím nhạt
+  "#FFF3E0", // cam nhạt
+  "#E8F5E9", // xanh lá nhạt
+  "#E0F7FA", // cyan nhạt
+  "#FBE9E7", // đỏ cam nhạt
+  "#F1F8E9", // lime nhạt
+  "#EDE7F6", // indigo nhạt
+];
+// Tổng column: đậm hơn 1 chút
+const ROW_COLORS_DARK = [
+  "#BBDEFB",
+  "#F8BBD0",
+  "#FFF176",
+  "#E1BEE7",
+  "#FFE0B2",
+  "#C8E6C9",
+  "#B2EBF2",
+  "#FFCCBC",
+  "#DCEDC8",
+  "#D1C4E9",
+];
+
 // ===== FORMAT HELPERS =====
 
 function fmtKg(kg: number) {
@@ -415,33 +442,139 @@ export default function RevenueDashboard() {
   ];
 
   // ===== MATRIX COLUMNS =====
+  const todayObj = dayjs();
+  const todayDay = yearMonth === todayObj.format("YYYY-MM") ? todayObj.date() : -1;
+  const isSunday = (day: number) =>
+    dayjs(`${yearMonth}-${String(day).padStart(2, "0")}`).day() === 0;
+
+  const matrixItems = matrix?.items ?? [];
+  const itemIndexMap = new Map<number, number>();
+  matrixItems.forEach((item, idx) => itemIndexMap.set(item.itemId, idx));
+
   const matrixColumns: ColumnsType<{ itemId: number; itemName: string }> = [
     {
       title: "Mặt hàng",
       dataIndex: "itemName",
       key: "itemName",
       fixed: "left",
-      width: 180,
+      width: 160,
+      onHeaderCell: () => ({
+        style: {
+          position: "sticky" as const,
+          left: 0,
+          zIndex: 2,
+          background: "#fafafa",
+          borderRight: "2px solid #d9d9d9",
+          fontSize: 12,
+          padding: "4px 8px",
+        },
+      }),
+      onCell: (_: unknown, rowIdx) => {
+        const bg = ROW_COLORS[(rowIdx ?? 0) % ROW_COLORS.length];
+        return {
+          style: {
+            position: "sticky" as const,
+            left: 0,
+            zIndex: 1,
+            background: bg,
+            borderRight: "2px solid #d9d9d9",
+            fontWeight: 600,
+            fontSize: 12,
+            padding: "3px 8px",
+            whiteSpace: "nowrap" as const,
+          },
+        };
+      },
     },
     ...(matrix?.days ?? []).map((day) => ({
-      title: String(day),
+      title: (() => {
+        const isToday = day === todayDay;
+        const isSun = isSunday(day);
+        return (
+          <span
+            style={{
+              display: "inline-block",
+              width: "100%",
+              textAlign: "center" as const,
+              fontWeight: isToday ? 700 : 400,
+              color: isToday ? "#fff" : isSun ? "#cf1322" : undefined,
+              background: isToday ? "#1677ff" : undefined,
+              borderRadius: isToday ? 4 : undefined,
+              padding: isToday ? "1px 4px" : undefined,
+            }}
+          >
+            {day}
+          </span>
+        );
+      })(),
       key: `day-${day}`,
       align: "right" as const,
-      width: 55,
+      width: 52,
+      onHeaderCell: () => ({
+        style: {
+          fontSize: 12,
+          padding: "4px 2px",
+          textAlign: "center" as const,
+          background: day === todayDay ? "#e6f4ff" : undefined,
+        },
+      }),
+      onCell: (_: unknown, rowIdx: number | undefined) => {
+        const bg = ROW_COLORS[(rowIdx ?? 0) % ROW_COLORS.length];
+        return {
+          style: {
+            background: bg,
+            fontSize: 12,
+            padding: "3px 4px",
+          },
+        };
+      },
       render: (_: unknown, row: { itemId: number }) => {
         const v = matrix?.data?.[row.itemId]?.[day];
-        return v ? new Intl.NumberFormat("vi-VN").format(Math.round(v)) : "";
+        if (!v || v === 0) {
+          return <span style={{ color: "#d9d9d9" }}>–</span>;
+        }
+        return (
+          <span style={{ fontWeight: 500 }}>
+            {new Intl.NumberFormat("vi-VN").format(Math.round(v))}
+          </span>
+        );
       },
     })),
     {
-      title: "Tổng",
+      title: <Text strong style={{ fontSize: 12 }}>Tổng</Text>,
       key: "total",
       align: "right" as const,
       fixed: "right" as const,
-      width: 90,
+      width: 85,
+      onHeaderCell: () => ({
+        style: {
+          fontSize: 12,
+          padding: "4px 6px",
+          background: "#e6e6e6",
+          fontWeight: 700,
+        },
+      }),
+      onCell: (_: unknown, rowIdx) => {
+        const bg = ROW_COLORS_DARK[(rowIdx ?? 0) % ROW_COLORS_DARK.length];
+        return {
+          style: {
+            background: bg,
+            fontSize: 12,
+            padding: "3px 6px",
+            fontWeight: 700,
+          },
+        };
+      },
       render: (_: unknown, row: { itemId: number }) => {
         const v = matrix?.totals?.[row.itemId] ?? 0;
-        return <Text strong>{new Intl.NumberFormat("vi-VN").format(Math.round(v))}</Text>;
+        if (!v || v === 0) {
+          return <span style={{ color: "#bfbfbf" }}>–</span>;
+        }
+        return (
+          <Text strong style={{ fontSize: 12 }}>
+            {new Intl.NumberFormat("vi-VN").format(Math.round(v))}
+          </Text>
+        );
       },
     },
   ];
@@ -520,13 +653,32 @@ export default function RevenueDashboard() {
             size="small"
             title={<Text strong>Ma trận sản lượng thực hiện (kg/ngày)</Text>}
           >
+            <style>{`
+              .matrix-table .ant-table-cell {
+                font-size: 12px !important;
+                padding: 3px 4px !important;
+              }
+              .matrix-table .ant-table-thead > tr > th {
+                font-size: 12px !important;
+                padding: 4px 4px !important;
+              }
+              .matrix-table .ant-table-row:hover > td {
+                background: rgba(0,0,0,0.06) !important;
+              }
+              .matrix-table .ant-table-cell-fix-left,
+              .matrix-table .ant-table-cell-fix-right {
+                z-index: 2;
+              }
+            `}</style>
             <Table
-              dataSource={matrix?.items ?? []}
+              className="matrix-table"
+              dataSource={matrixItems}
               columns={matrixColumns}
               rowKey="itemId"
               size="small"
               pagination={false}
               scroll={{ x: "max-content" }}
+              bordered
             />
           </Card>
         </Spin>
