@@ -22,7 +22,13 @@
       "PowerShell($env:DATABASE_URL = \"postgresql://postgres:123456@localhost:5432/phubai_erp_db?schema=public\"; Set-Location \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.claude\\\\worktrees\\\\recursing-blackburn-f3514b\"; npx prisma migrate dev --name v2_revenue_refactor --create-only 2>&1)",
       "Bash(cp \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.env\" \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\.claude\\\\worktrees\\\\recursing-blackburn-f3514b\\\\.env\" 2>&1 && echo \"Copied\")",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(npm ls *)",
+      "Bash(del \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\_test_prisma.js\")",
+      "PowerShell(Remove-Item \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\_test_prisma.js\" -Confirm:$false)",
+      "Bash(npx next *)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/api/factories\" -UseBasicAuth -ErrorAction Stop; Write-Output \"Status: $\\($r.StatusCode\\)\"; Write-Output $r.Content.Substring\\(0, [Math]::Min\\(300, $r.Content.Length\\)\\) } catch { Write-Output \"Error: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(Get-Process -Name \"node\" | Where-Object { $_.CommandLine -match \"next\" -or $_.MainWindowTitle -match \"next\" } | Select-Object Id, ProcessName, StartTime | Format-Table)"
     ]
   }
 }

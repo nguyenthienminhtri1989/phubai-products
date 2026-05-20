@@ -19,6 +19,9 @@ import {
   message,
   Tag,
   Divider,
+  Collapse,
+  Alert,
+  Form,
 } from "antd";
 import {
   ReloadOutlined,
@@ -185,6 +188,13 @@ export default function RevenueDashboard() {
   const [savingFC, setSavingFC] = useState(false);
   const [copyingFC, setCopyingFC] = useState(false);
 
+  // Thông số tháng state
+  const [paramsExist, setParamsExist] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [warehouseFee, setWarehouseFee] = useState<number>(0.02);
+  const [wasteAdjustmentFactor, setWasteAdjustmentFactor] = useState<number>(0.95);
+  const [savingParams, setSavingParams] = useState(false);
+
   // Load factories
   useEffect(() => {
     fetch("/api/factories")
@@ -205,8 +215,9 @@ export default function RevenueDashboard() {
       fetch(`/api/v2/contracts/progress?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
       fetch(`/api/v2/production-matrix?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
       fetch(`/api/v2/fixed-costs?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
+      fetch(`/api/kdsx/input-params?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
     ])
-      .then(([dash, contractData, matrixData, fcData]) => {
+      .then(([dash, contractData, matrixData, fcData, paramData]) => {
         if (dash.error) {
           message.warning("Dashboard: " + dash.error);
         } else {
@@ -219,6 +230,18 @@ export default function RevenueDashboard() {
         const edits: Record<string, number> = {};
         costs.forEach((c: FixedCostLine) => { edits[c.costType] = c.amountVnd; });
         setFixedCostEdits(edits);
+
+        if (paramData && paramData.exchangeRate) {
+          setParamsExist(true);
+          setExchangeRate(paramData.exchangeRate);
+          setWarehouseFee(paramData.warehouseFee ?? 0.02);
+          setWasteAdjustmentFactor(paramData.wasteAdjustmentFactor ?? 0.95);
+        } else {
+          setParamsExist(false);
+          setExchangeRate(null);
+          setWarehouseFee(0.02);
+          setWasteAdjustmentFactor(0.95);
+        }
       })
       .catch(() => message.error("Lỗi tải dữ liệu"))
       .finally(() => setLoading(false));
@@ -265,6 +288,35 @@ export default function RevenueDashboard() {
       message.error(err instanceof Error ? err.message : "Lỗi copy");
     } finally {
       setCopyingFC(false);
+    }
+  }
+
+  async function saveInputParams() {
+    if (!factoryId || !yearMonth) return;
+    if (!exchangeRate || exchangeRate <= 0) {
+      message.warning("Vui lòng nhập tỷ giá USD/VND");
+      return;
+    }
+    setSavingParams(true);
+    try {
+      const res = await fetch("/api/kdsx/input-params", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          factoryId,
+          yearMonth,
+          exchangeRate,
+          warehouseFee,
+          wasteAdjustmentFactor,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      message.success("Đã lưu thông số tháng");
+      loadData();
+    } catch (err: unknown) {
+      message.error(err instanceof Error ? err.message : "Lỗi lưu thông số");
+    } finally {
+      setSavingParams(false);
     }
   }
 
@@ -477,6 +529,86 @@ export default function RevenueDashboard() {
               scroll={{ x: "max-content" }}
             />
           </Card>
+        </Spin>
+      ),
+    },
+    {
+      key: "monthly-params",
+      label: "Thông số tháng",
+      children: (
+        <Spin spinning={loading}>
+          {!paramsExist && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Chưa nhập tỷ giá tháng này. Dashboard không thể tính DT/LN."
+              style={{ marginBottom: 12 }}
+            />
+          )}
+          <Collapse
+            defaultActiveKey={["params"]}
+            items={[
+              {
+                key: "params",
+                label: <Text strong>Thông số tháng {yearMonth}</Text>,
+                extra: (
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={savingParams}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      saveInputParams();
+                    }}
+                    size="small"
+                  >
+                    Lưu
+                  </Button>
+                ),
+                children: (
+                  <Form layout="vertical" style={{ maxWidth: 480 }}>
+                    <Form.Item label="Tỷ giá USD/VND" required>
+                      <InputNumber
+                        value={exchangeRate}
+                        onChange={(v) => setExchangeRate(v)}
+                        formatter={(v) =>
+                          v ? new Intl.NumberFormat("vi-VN").format(Number(v)) : ""
+                        }
+                        parser={(v) =>
+                          Number((v ?? "").replace(/[^0-9]/g, "")) as 0
+                        }
+                        placeholder="VD: 25,400"
+                        style={{ width: "100%" }}
+                        min={1}
+                        step={100}
+                      />
+                    </Form.Item>
+                    <Form.Item label="Phí kho (USD/kg)">
+                      <InputNumber
+                        value={warehouseFee}
+                        onChange={(v) => setWarehouseFee(v ?? 0.02)}
+                        style={{ width: "100%" }}
+                        min={0}
+                        step={0.01}
+                        precision={2}
+                      />
+                    </Form.Item>
+                    <Form.Item label="Hệ số điều chỉnh phế">
+                      <InputNumber
+                        value={wasteAdjustmentFactor}
+                        onChange={(v) => setWasteAdjustmentFactor(v ?? 0.95)}
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        precision={2}
+                      />
+                    </Form.Item>
+                  </Form>
+                ),
+              },
+            ]}
+          />
         </Spin>
       ),
     },
