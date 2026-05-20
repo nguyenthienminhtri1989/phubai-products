@@ -21,15 +21,18 @@ interface MachineData {
     model?: string;
     isActive: boolean;
     allowMultiItemPerShift?: boolean;
+    itemAssignments?: AssignmentData[];
 }
 
 interface AssignmentData {
     id?: number;
     itemId: number;
+    lotId?: number | null;
     fromSpindle?: number | null;
     toSpindle?: number | null;
     sortOrder?: number;
     item?: { id: number; name: string };
+    lot?: { id: number; lotNumber: string } | null;
 }
 
 export default function MachinesPage() {
@@ -64,8 +67,11 @@ export default function MachinesPage() {
     const [multiItemSaving, setMultiItemSaving] = useState(false);
     const [multiItemForm] = Form.useForm();
 
-    // Danh sách lô sợi đang mở (dùng cho form chọn lô)
+    // Danh sách lô sợi đang mở (dùng cho form chọn lô — modal edit máy)
     const [yarnLots, setYarnLots] = useState<any[]>([]);
+
+    // Danh sách lô cho modal phân công multi-item
+    const [assignmentLots, setAssignmentLots] = useState<any[]>([]);
 
     const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
@@ -176,11 +182,17 @@ export default function MachinesPage() {
         setIsMultiItemModalOpen(true);
         setMultiItemLoading(true);
         try {
-            const res = await fetch(`/api/machines/${machine.id}/assignments`);
-            const data: AssignmentData[] = await res.json();
+            const [assignRes, lotsRes] = await Promise.all([
+                fetch(`/api/machines/${machine.id}/assignments`),
+                fetch('/api/lots?lotType=YARN&status=OPEN'),
+            ]);
+            const data: AssignmentData[] = await assignRes.json();
+            const lotsData = await lotsRes.json();
+            setAssignmentLots(Array.isArray(lotsData) ? lotsData : []);
             multiItemForm.setFieldsValue({
                 assignments: data.map(a => ({
                     itemId: a.itemId,
+                    lotId: a.lotId ?? undefined,
                     fromSpindle: a.fromSpindle ?? undefined,
                     toSpindle: a.toSpindle ?? undefined,
                 })),
@@ -242,15 +254,46 @@ export default function MachinesPage() {
         },
         {
             title: "Mặt hàng đang chạy", key: "item",
-            render: (_: any, r: MachineData) => r.allowMultiItemPerShift
-                ? <Tag color="purple">Nhiều mặt hàng</Tag>
-                : r.currentItem ? <Tag color="blue">{r.currentItem.name}</Tag> : <Tag color="red">Chưa gán</Tag>
+            render: (_: any, r: MachineData) => {
+                if (r.allowMultiItemPerShift) {
+                    if (!r.itemAssignments?.length) return <Tag color="red">Chưa phân công</Tag>;
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {r.itemAssignments.map(a => (
+                                <Tag key={a.itemId} color="purple" style={{ fontSize: 11, margin: 0 }}>
+                                    {a.item?.name}
+                                </Tag>
+                            ))}
+                        </div>
+                    );
+                }
+                return r.currentItem
+                    ? <Tag color="blue">{r.currentItem.name}</Tag>
+                    : <Tag color="red">Chưa gán</Tag>;
+            }
         },
         {
-            title: "Lô đang SX", key: "lot", width: 130,
-            render: (_: any, r: MachineData) => r.currentLot
-                ? <Tag color="orange" style={{ fontWeight: 600 }}>{r.currentLot.lotNumber}</Tag>
-                : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>
+            title: "Lô đang SX", key: "lot", width: 140,
+            render: (_: any, r: MachineData) => {
+                if (r.allowMultiItemPerShift && r.itemAssignments?.length) {
+                    const lotsWithData = r.itemAssignments.filter(a => a.lot);
+                    if (lotsWithData.length === 0) {
+                        return <span style={{ color: '#bbb', fontSize: 12 }}>Chưa gán lô</span>;
+                    }
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {lotsWithData.map(a => (
+                                <Tag key={a.lot!.id} color="orange" style={{ fontSize: 11, margin: 0 }}>
+                                    {a.lot!.lotNumber}
+                                </Tag>
+                            ))}
+                        </div>
+                    );
+                }
+                return r.currentLot
+                    ? <Tag color="orange" style={{ fontWeight: 600 }}>{r.currentLot.lotNumber}</Tag>
+                    : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>;
+            }
         },
         {
             title: "Loại máy", dataIndex: "model", key: "model", width: 140,
@@ -478,7 +521,7 @@ export default function MachinesPage() {
                 open={isMultiItemModalOpen}
                 onCancel={() => setIsMultiItemModalOpen(false)}
                 footer={null}
-                width={680}
+                width={780}
             >
                 <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
                     Cấu hình danh sách mặt hàng chạy trên máy <b>{multiItemMachine?.name}</b>.
@@ -495,11 +538,13 @@ export default function MachinesPage() {
                                 {/* Header */}
                                 <Row gutter={8} style={{ marginBottom: 6, fontWeight: 600, fontSize: 12, color: '#888' }}>
                                     <Col flex="1">Mặt hàng</Col>
+                                    <Col style={{ width: 190 }}>Lô sợi</Col>
                                     <Col style={{ width: 36 }}></Col>
                                 </Row>
 
                                 {fields.map(({ key, name, ...restField }) => (
                                     <Row key={key} gutter={8} style={{ marginBottom: 8 }} align="middle">
+                                        {/* Select mặt hàng */}
                                         <Col flex="1">
                                             <Form.Item
                                                 {...restField}
@@ -512,9 +557,50 @@ export default function MachinesPage() {
                                                     optionFilterProp="label"
                                                     placeholder="Chọn mặt hàng..."
                                                     options={items.map(i => ({ label: i.name, value: i.id }))}
+                                                    onChange={() => {
+                                                        // Đổi mặt hàng → reset lotId để tránh gán lô sai item
+                                                        const vals = multiItemForm.getFieldValue('assignments');
+                                                        if (vals?.[name]) {
+                                                            vals[name].lotId = undefined;
+                                                            multiItemForm.setFieldsValue({ assignments: vals });
+                                                        }
+                                                    }}
                                                 />
                                             </Form.Item>
                                         </Col>
+                                        {/* Select lô — dùng shouldUpdate để re-render khi đổi itemId */}
+                                        <Col style={{ width: 190 }}>
+                                            <Form.Item
+                                                shouldUpdate={(prev, cur) =>
+                                                    prev?.assignments?.[name]?.itemId !== cur?.assignments?.[name]?.itemId
+                                                }
+                                                noStyle
+                                            >
+                                                {() => {
+                                                    const selectedItemId = multiItemForm.getFieldValue(['assignments', name, 'itemId']);
+                                                    const options = assignmentLots
+                                                        .filter((l: any) => !selectedItemId || l.itemId === selectedItemId)
+                                                        .map((l: any) => ({ value: l.id, label: l.lotNumber }));
+                                                    return (
+                                                        <Form.Item
+                                                            {...restField}
+                                                            name={[name, 'lotId']}
+                                                            style={{ margin: 0 }}
+                                                        >
+                                                            <Select
+                                                                allowClear
+                                                                showSearch
+                                                                optionFilterProp="label"
+                                                                placeholder="Chọn lô..."
+                                                                options={options}
+                                                                disabled={!selectedItemId}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
+                                            </Form.Item>
+                                        </Col>
+                                        {/* Nút xóa */}
                                         <Col style={{ width: 36, textAlign: 'center' }}>
                                             <MinusCircleOutlined
                                                 onClick={() => remove(name)}

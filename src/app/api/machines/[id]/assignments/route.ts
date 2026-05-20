@@ -15,7 +15,10 @@ export async function GET(
 
   const assignments = await prisma.machineItemAssignment.findMany({
     where: { machineId, isActive: true },
-    include: { item: { select: { id: true, name: true } } },
+    include: {
+      item: { select: { id: true, name: true } },
+      lot: { select: { id: true, lotNumber: true } },
+    },
     orderBy: { sortOrder: "asc" },
   });
 
@@ -35,7 +38,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const assignments: { itemId: number; fromSpindle?: number; toSpindle?: number; sortOrder?: number }[] =
+    const assignments: { itemId: number; lotId?: number | null; fromSpindle?: number; toSpindle?: number; sortOrder?: number }[] =
       body.assignments ?? [];
 
     // Replace all: xóa cũ, tạo mới
@@ -46,6 +49,7 @@ export async function PUT(
         data: assignments.map((a, i) => ({
           machineId,
           itemId: a.itemId,
+          lotId: a.lotId ?? null,
           fromSpindle: a.fromSpindle ?? null,
           toSpindle: a.toSpindle ?? null,
           sortOrder: a.sortOrder ?? i,
@@ -57,7 +61,10 @@ export async function PUT(
     // Trả về danh sách đã lưu
     const result = await prisma.machineItemAssignment.findMany({
       where: { machineId, isActive: true },
-      include: { item: { select: { id: true, name: true } } },
+      include: {
+        item: { select: { id: true, name: true } },
+        lot: { select: { id: true, lotNumber: true } },
+      },
       orderBy: { sortOrder: "asc" },
     });
 

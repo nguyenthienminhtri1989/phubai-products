@@ -14,8 +14,16 @@ export async function GET(request: Request) {
     where,
     include: {
       process: { include: { factory: true } },
-      currentItem: true, // Lấy tên mặt hàng đang chạy
-      currentLot: { select: { id: true, lotNumber: true } }, // Lô đang SX
+      currentItem: true,
+      currentLot: { select: { id: true, lotNumber: true } },
+      itemAssignments: {
+        where: { isActive: true },
+        include: {
+          item: { select: { id: true, name: true } },
+          lot: { select: { id: true, lotNumber: true } },
+        },
+        orderBy: { sortOrder: "asc" },
+      },
     },
     orderBy: [{ processId: "asc" }, { id: "asc" }],
   });

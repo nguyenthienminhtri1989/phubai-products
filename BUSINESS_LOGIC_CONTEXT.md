@@ -3021,3 +3021,46 @@ src/components/AdminLayout.tsx                         — thêm kdsx.revenue v�
 - FixedCostEntry: 14 records đã migrate từ MonthlyPlan → factoryId=2, yearMonth=2027-05
 - Dev DB: toàn bộ bảng KD đều trống (ProductionLog=0, SalesOrder=0) — cần nhập dữ liệu thật để test
 - PageRegistry: thêm entry `kdsx.revenue` trực tiếp vào DB
+
+---
+
+## MACHINES — Gán lô sợi cho máy multi-item + Cải tiến modal điều phối
+
+**Status:** ✅ Completed 2026-05-20
+
+### What was built
+Mở rộng hệ thống máy multi-item: mỗi `MachineItemAssignment` giờ lưu `lotId` riêng cho từng mặt hàng, thay vì chỉ dùng `machine.currentLotId` chung. Modal phân công được cải tiến thêm Select lô lọc theo mặt hàng. Bảng máy hiển thị danh sách lô thay vì "—" cho máy multi-item.
+
+### Files created/modified
+```
+prisma/schema.prisma                                      — MachineItemAssignment.lotId, KdDailyInput.lotId, Lot.machineAssignments + kdDailyInputs
+prisma/migrations/20260520000001_.../migration.sql        — ALTER TABLE thêm lotId vào 2 bảng
+src/app/api/machines/[id]/assignments/route.ts            — GET include lot, PUT lưu lotId
+src/app/api/machines/route.ts                             — GET include itemAssignments (item + lot)
+src/app/machines/page.tsx                                 — Interface + columns + modal multi-item với Select lô
+src/app/kd-daily-input/page.tsx                           — RowData.lotId, capture từ assignment, truyền khi save
+src/app/api/kd-daily-input/route.ts                       — Upsert lưu lotId vào kd_daily_inputs
+src/app/api/production/daily-input/route.ts               — bodyLotId override machine.currentLotId
+```
+
+### Key business logic implemented
+- `MachineItemAssignment.lotId`: nullable FK → Lot; một máy multi-item có thể chạy lô khác nhau cho từng mặt hàng cùng lúc
+- Cột "Lô đang SX": máy multi-item render nhiều Tag lô từ `itemAssignments`; máy thường giữ nguyên `currentLot`
+- Select lô trong modal: lọc `assignmentLots` theo `itemId` đã chọn cùng dòng (dùng `shouldUpdate`); khi đổi mặt hàng tự reset `lotId`
+- `production/daily-input`: `lotId` từ body ưu tiên hơn `machine.currentLotId` — hỗ trợ cả luồng multi-item lẫn thường
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/machines/[id]/assignments | Trả assignments kèm lot {id, lotNumber} |
+| PUT | /api/machines/[id]/assignments | Lưu assignments kèm lotId |
+| GET | /api/machines | Trả danh sách máy kèm itemAssignments (item + lot) |
+
+### Known limitations
+- Select lô trong modal chỉ load lô YARN status=OPEN; lô CLOSED không hiển thị
+- Không có validation bắt buộc gán lô cho máy multi-item (lotId optional)
+- `kd-daily-input` page chưa hiển thị tên lô trực tiếp trong bảng nhập liệu (chỉ lưu DB)
+
+### Data notes
+- Migration thêm cột nullable — không ảnh hưởng dữ liệu cũ (NULL mặc định)
+- Cần restart dev server sau khi apply migration để Prisma client pick up schema mới

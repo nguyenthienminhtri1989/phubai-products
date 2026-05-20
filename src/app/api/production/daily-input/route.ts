@@ -56,6 +56,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { recordDate, note } = body;
+    const bodyLotId: number | null = body.lotId != null ? parseInt(body.lotId) : null;
     let {
       machineId,
       shift,
@@ -105,12 +106,13 @@ export async function POST(request: Request) {
       createdById: parseInt(session.user.id),
     };
 
-    // Lấy lotId từ machine.currentLotId (tự động — công nhân không cần chọn)
+    // lotId ưu tiên từ body (máy multi-item truyền từ assignment),
+    // fallback về machine.currentLotId (máy thường — công nhân không cần chọn)
     const machine = await prisma.machine.findUnique({
       where: { id: machineId },
       select: { currentLotId: true },
     });
-    const lotId = machine?.currentLotId ?? null;
+    const lotId = bodyLotId ?? machine?.currentLotId ?? null;
 
     // 4. SỬ DỤNG UPSERT: Tự động Cập nhật hoặc Tạo mới dựa trên khóa Unique
     // Khóa này được Prisma tự sinh từ @@unique([machineId, recordDate, shift, itemId])

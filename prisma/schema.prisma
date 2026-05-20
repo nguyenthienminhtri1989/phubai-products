@@ -1238,6 +1238,8 @@ model KdDailyInput {
   machine     Machine  @relation(fields: [machineId], references: [id])
   itemId      Int
   item        Item     @relation(fields: [itemId], references: [id])
+  lotId       Int?     // Lô sợi đang SX (từ MachineItemAssignment.lotId cho máy multi-item)
+  lot         Lot?     @relation(fields: [lotId], references: [id])
   recordDate  DateTime @db.Date
   outputKg    Float // sản lượng cả ngày (3 ca gộp) — KD tự tổng hợp
   note        String?
@@ -1428,6 +1430,8 @@ model MachineItemAssignment {
   machine   Machine @relation(fields: [machineId], references: [id])
   itemId    Int
   item      Item    @relation(fields: [itemId], references: [id])
+  lotId     Int?                                                          // Lô sợi đang chạy cho mặt hàng này
+  lot       Lot?    @relation(fields: [lotId], references: [id])          // Quan hệ tới Lot
 
   fromSpindle Int? // Cọc từ (cọc đầu chạy mặt hàng này)
   toSpindle   Int? // Cọc đến (cọc cuối chạy mặt hàng này)
@@ -1478,6 +1482,12 @@ model Lot {
 
   // Máy đang chạy lô này
   runningOnMachines Machine[] @relation("CurrentLot")
+
+  // Quan hệ ngược: MachineItemAssignment dùng lô này
+  machineAssignments MachineItemAssignment[]
+
+  // KD daily input dùng lô này
+  kdDailyInputs KdDailyInput[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
