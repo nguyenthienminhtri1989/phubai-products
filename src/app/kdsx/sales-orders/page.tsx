@@ -352,88 +352,143 @@ export default function SalesOrdersPage() {
               {(fields, { add, remove }) => (
                 <>
                   {fields.map(({ key, name, ...restField }) => (
-                    <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
-                      <Form.Item {...restField} name={[name, "itemId"]} rules={[{ required: true, message: "Chọn loại sợi" }]}>
-                        <Select
-                          options={items.map((i) => ({ label: i.name, value: i.id }))}
-                          showSearch
-                          optionFilterProp="label"
-                          placeholder="Loại sợi"
-                          style={{ width: 220 }}
-                        />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, "plannedQty"]} rules={[{ required: true }]}>
-                        <InputNumber placeholder="SL (kg)" min={0} style={{ width: 120 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, "unitPrice"]} rules={[{ required: true }]}>
-                        <InputNumber placeholder="Giá (USD/kg)" min={0} step={0.01} style={{ width: 130 }} />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "sellingCostRate"]}
-                        rules={[{ required: true, message: "Nhập %" }]}
+                    <div
+                      key={key}
+                      style={{
+                        position: "relative",
+                        border: "1px solid #f0f0f0",
+                        borderRadius: 6,
+                        padding: "12px 12px 0 12px",
+                        marginBottom: 12,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "0 12px",
+                          paddingRight: 56,
+                        }}
                       >
-                        <InputNumber
-                          placeholder="CP BH (%)"
-                          min={0}
-                          max={100}
-                          step={1}
-                          style={{ width: 110 }}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "deliveredQty"]}
-                        tooltip="Chỉ nhập khi HĐ cũ đã giao 1 phần trước khi dùng phần mềm. HĐ mới để 0."
-                        initialValue={0}
+                        <Form.Item
+                          {...restField}
+                          name={[name, "itemId"]}
+                          label="Loại sợi"
+                          rules={[{ required: true, message: "Chọn loại sợi" }]}
+                          style={{ width: 240, marginBottom: 12 }}
+                        >
+                          <Select
+                            options={items.map((i) => ({ label: i.name, value: i.id }))}
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="Loại sợi"
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "plannedQty"]}
+                          label="SL HĐ (kg)"
+                          rules={[{ required: true }]}
+                          style={{ width: 130, marginBottom: 12 }}
+                        >
+                          <InputNumber placeholder="SL (kg)" min={0} style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "unitPrice"]}
+                          label="Giá (USD/kg)"
+                          rules={[{ required: true }]}
+                          style={{ width: 130, marginBottom: 12 }}
+                        >
+                          <InputNumber placeholder="Giá" min={0} step={0.01} style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "sellingCostRate"]}
+                          label="CP BH (%)"
+                          rules={[{ required: true, message: "Nhập %" }]}
+                          style={{ width: 110, marginBottom: 12 }}
+                        >
+                          <InputNumber
+                            placeholder="%"
+                            min={0}
+                            max={100}
+                            step={1}
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "deliveredQty"]}
+                          label="Đã giao (kg)"
+                          tooltip="Chỉ nhập khi HĐ cũ đã giao 1 phần trước khi dùng phần mềm. HĐ mới để 0."
+                          initialValue={0}
+                          style={{ width: 130, marginBottom: 12 }}
+                        >
+                          <InputNumber
+                            min={0}
+                            step={100}
+                            placeholder="Đã giao"
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "priorityOverride"]}
+                          label="Ưu tiên"
+                          tooltip="Số nhỏ = ưu tiên cao. Để trống = tự động theo deadline/ngày ký"
+                          style={{ width: 100, marginBottom: 12 }}
+                        >
+                          <InputNumber min={1} placeholder="Ưu tiên" style={{ width: "100%" }} />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "deferToMonth"]}
+                          label="Hoãn đến"
+                          tooltip="Tạm loại HĐ này khỏi tháng hiện tại, chỉ xuất hiện từ tháng được chọn"
+                          style={{ width: 140, marginBottom: 12 }}
+                        >
+                          <DatePicker
+                            picker="month"
+                            format="YYYY-MM"
+                            placeholder="YYYY-MM"
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "wasteRecoveryRate"]}
+                          label="Phế (USD/kg)"
+                          tooltip="VD: 0.18 = thu hồi 0.18 USD/kg phế. Để trống = dùng định mức chung"
+                          style={{ width: 130, marginBottom: 12 }}
+                        >
+                          <InputNumber
+                            min={0}
+                            step={0.01}
+                            placeholder="Phế"
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "note"]}
+                          label="Ghi chú"
+                          style={{ flex: 1, minWidth: 200, marginBottom: 12 }}
+                        >
+                          <Input placeholder="Ghi chú" />
+                        </Form.Item>
+                      </div>
+                      <Button
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => remove(name)}
+                        style={{ position: "absolute", top: 8, right: 8 }}
                       >
-                        <InputNumber
-                          min={0}
-                          step={100}
-                          placeholder="Đã giao (kg)"
-                          style={{ width: 130 }}
-                        />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, "note"]}>
-                        <Input placeholder="Ghi chú" style={{ width: 130 }} />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "priorityOverride"]}
-                        tooltip="Số nhỏ = ưu tiên cao. Để trống = tự động theo deadline/ngày ký"
-                      >
-                        <InputNumber
-                          min={1}
-                          placeholder="Ưu tiên"
-                          style={{ width: 90 }}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "deferToMonth"]}
-                        tooltip="Tạm loại HĐ này khỏi tháng hiện tại, chỉ xuất hiện từ tháng được chọn"
-                      >
-                        <DatePicker
-                          picker="month"
-                          format="YYYY-MM"
-                          placeholder="Hoãn đến"
-                          style={{ width: 120 }}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "wasteRecoveryRate"]}
-                        tooltip="VD: 0.18 = thu hồi 0.18 USD/kg phế. Để trống = dùng định mức chung"
-                      >
-                        <InputNumber
-                          min={0}
-                          step={0.01}
-                          placeholder="Phế (USD/kg)"
-                          style={{ width: 120 }}
-                        />
-                      </Form.Item>
-                      <Button danger onClick={() => remove(name)}>Xóa</Button>
-                    </Space>
+                        Xóa
+                      </Button>
+                    </div>
                   ))}
                   <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
                     Thêm loại sợi

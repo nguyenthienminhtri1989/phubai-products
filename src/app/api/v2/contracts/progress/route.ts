@@ -21,8 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [year, month] = yearMonth.split("-").map(Number);
-    const firstDayOfMonth = new Date(year, month - 1, 1);
+    const firstDayOfMonth = new Date(`${yearMonth}-01T00:00:00.000Z`);
 
     // Lấy allocation kết quả tháng này
     const allocation = await runAllocationFromProduction(

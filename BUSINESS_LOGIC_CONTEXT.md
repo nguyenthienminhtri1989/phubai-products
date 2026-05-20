@@ -3064,3 +3064,27 @@ src/app/api/production/daily-input/route.ts               — bodyLotId override
 ### Data notes
 - Migration thêm cột nullable — không ảnh hưởng dữ liệu cũ (NULL mặc định)
 - Cần restart dev server sau khi apply migration để Prisma client pick up schema mới
+
+---
+
+## DASHBOARD V2 — Fix filter công đoạn ống & timezone UTC
+
+**Status:** ✅ Completed 2026-05-20
+
+### What was built
+Fix 2 bug trong API ma trận sản lượng và các điểm tạo date range của module v2: (1) bổ sung filter `isRevenueProcess: true` để chỉ lấy SL công đoạn ống thay vì tất cả công đoạn; (2) chuyển toàn bộ cách dựng `firstDay`/`lastDay` và trích `day` từ `recordDate` sang UTC để khớp với cách Prisma lưu `@db.Date`.
+
+### Files created/modified
+```
+src/app/api/v2/production-matrix/route.ts   — fix filter isRevenueProcess + UTC range + getUTCDate
+src/app/api/v2/contracts/progress/route.ts  — firstDayOfMonth dùng UTC string
+src/lib/allocation-engine-v2.ts             — firstDay/lastDay/today chuyển sang UTC (2 hàm: runAllocationFromProduction, runAllocationToday)
+```
+
+### Key business logic implemented
+- Production matrix chỉ tính SL của công đoạn doanh thu (`isRevenueProcess = true`) — các công đoạn phụ không tính vào ma trận hiển thị
+- Date range tháng dùng UTC: `new Date(`${yearMonth}-01T00:00:00.000Z`)` cho firstDay và `Date.UTC(year, month, 0, 23, 59, 59, 999)` cho lastDay — tránh lệch sang tháng trước trên server có TZ khác UTC
+- Khi group log theo ngày phải dùng `recordDate.getUTCDate()` thay vì `getDate()`
+
+### Known limitations
+- Các file ngoài scope v2 (allocation-engine.ts cũ, kdsx/*) chưa được audit timezone trong lần fix này

@@ -21,14 +21,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const [year, month] = yearMonth.split("-").map(Number);
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const daysInMonth = lastDay.getDate();
+    const firstDay = new Date(`${yearMonth}-01T00:00:00.000Z`);
+    const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    const daysInMonth = lastDay.getUTCDate();
 
     const logs = await prisma.productionLog.findMany({
       where: {
         recordDate: { gte: firstDay, lte: lastDay },
-        machine: { process: { factoryId } },
+        machine: { process: { factoryId, isRevenueProcess: true } },
       },
       select: {
         itemId: true,
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     // Group by itemId → day
     const data: Record<number, Record<number, number>> = {};
     for (const log of logs) {
-      const day = new Date(log.recordDate).getDate();
+      const day = log.recordDate.getUTCDate();
       if (!data[log.itemId]) data[log.itemId] = {};
       data[log.itemId][day] = (data[log.itemId][day] ?? 0) + log.finalOutput;
     }

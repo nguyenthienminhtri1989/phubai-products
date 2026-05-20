@@ -55,10 +55,10 @@ export async function runAllocationFromProduction(
   mode: "REAL" | "PROJECTION" = "REAL"
 ): Promise<AllocationResult> {
   const [year, month] = yearMonth.split("-").map(Number);
-  const firstDay = new Date(year, month - 1, 1);
-  const lastDay = new Date(year, month, 0); // ngày cuối tháng
+  const firstDay = new Date(`${yearMonth}-01T00:00:00.000Z`);
+  const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // ngày cuối tháng
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
 
   const toDate =
     mode === "REAL" ? (today < lastDay ? today : lastDay) : lastDay;
@@ -368,10 +368,9 @@ export async function runAllocationToday(
   yearMonth: string
 ): Promise<AllocationResult> {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
 
-  const [year, month] = yearMonth.split("-").map(Number);
-  const firstDay = new Date(year, month - 1, 1);
+  const firstDay = new Date(`${yearMonth}-01T00:00:00.000Z`);
 
   // Lấy SL chỉ hôm nay
   const todayProduction = await getProductionByItem(factoryId, today, today);

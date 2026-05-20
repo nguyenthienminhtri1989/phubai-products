@@ -23,11 +23,7 @@ import {
   Alert,
   Form,
 } from "antd";
-import {
-  ReloadOutlined,
-  CopyOutlined,
-  SaveOutlined,
-} from "@ant-design/icons";
+import { ReloadOutlined, CopyOutlined, SaveOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 
@@ -154,7 +150,11 @@ function SummaryCards({
   return (
     <Card
       size="small"
-      title={<Text strong style={{ color }}>{label}</Text>}
+      title={
+        <Text strong style={{ color }}>
+          {label}
+        </Text>
+      }
       style={{ marginBottom: 12 }}
     >
       <Row gutter={12}>
@@ -175,7 +175,9 @@ function SummaryCards({
         <Col span={6}>
           <Statistic
             title="Chi phí"
-            value={fmtTy(summary.totalVariableCostVnd + summary.totalFixedCostVnd)}
+            value={fmtTy(
+              summary.totalVariableCostVnd + summary.totalFixedCostVnd,
+            )}
             valueStyle={{ fontSize: 16, color: "#cf1322" }}
           />
         </Col>
@@ -207,11 +209,15 @@ export default function RevenueDashboard() {
   } | null>(null);
   const [contracts, setContracts] = useState<ContractProgress[]>([]);
   const [matrix, setMatrix] = useState<MatrixData | null>(null);
-  const [factories, setFactories] = useState<{ id: number; name: string }[]>([]);
+  const [factories, setFactories] = useState<{ id: number; name: string }[]>(
+    [],
+  );
 
   // Fixed costs state
   const [fixedCosts, setFixedCosts] = useState<FixedCostLine[]>([]);
-  const [fixedCostEdits, setFixedCostEdits] = useState<Record<string, number>>({});
+  const [fixedCostEdits, setFixedCostEdits] = useState<Record<string, number>>(
+    {},
+  );
   const [savingFC, setSavingFC] = useState(false);
   const [copyingFC, setCopyingFC] = useState(false);
 
@@ -219,7 +225,8 @@ export default function RevenueDashboard() {
   const [paramsExist, setParamsExist] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [warehouseFee, setWarehouseFee] = useState<number>(0.02);
-  const [wasteAdjustmentFactor, setWasteAdjustmentFactor] = useState<number>(0.95);
+  const [wasteAdjustmentFactor, setWasteAdjustmentFactor] =
+    useState<number>(0.95);
   const [savingParams, setSavingParams] = useState(false);
 
   // Load factories
@@ -238,11 +245,21 @@ export default function RevenueDashboard() {
     if (!factoryId || !yearMonth) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/v2/dashboard/revenue?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
-      fetch(`/api/v2/contracts/progress?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
-      fetch(`/api/v2/production-matrix?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
-      fetch(`/api/v2/fixed-costs?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
-      fetch(`/api/kdsx/input-params?factoryId=${factoryId}&yearMonth=${yearMonth}`).then((r) => r.json()),
+      fetch(
+        `/api/v2/dashboard/revenue?factoryId=${factoryId}&yearMonth=${yearMonth}`,
+      ).then((r) => r.json()),
+      fetch(
+        `/api/v2/contracts/progress?factoryId=${factoryId}&yearMonth=${yearMonth}`,
+      ).then((r) => r.json()),
+      fetch(
+        `/api/v2/production-matrix?factoryId=${factoryId}&yearMonth=${yearMonth}`,
+      ).then((r) => r.json()),
+      fetch(
+        `/api/v2/fixed-costs?factoryId=${factoryId}&yearMonth=${yearMonth}`,
+      ).then((r) => r.json()),
+      fetch(
+        `/api/kdsx/input-params?factoryId=${factoryId}&yearMonth=${yearMonth}`,
+      ).then((r) => r.json()),
     ])
       .then(([dash, contractData, matrixData, fcData, paramData]) => {
         if (dash.error) {
@@ -255,7 +272,9 @@ export default function RevenueDashboard() {
         const costs: FixedCostLine[] = fcData.costs ?? [];
         setFixedCosts(costs);
         const edits: Record<string, number> = {};
-        costs.forEach((c: FixedCostLine) => { edits[c.costType] = c.amountVnd; });
+        costs.forEach((c: FixedCostLine) => {
+          edits[c.costType] = c.amountVnd;
+        });
         setFixedCostEdits(edits);
 
         if (paramData && paramData.exchangeRate) {
@@ -274,7 +293,9 @@ export default function RevenueDashboard() {
       .finally(() => setLoading(false));
   }, [factoryId, yearMonth]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   async function saveFixedCosts() {
     if (!factoryId || !yearMonth) return;
@@ -347,24 +368,89 @@ export default function RevenueDashboard() {
     }
   }
 
+  // ===== CONTRACT ROW GROUP INFO (group by itemId, preserve API order) =====
+  const contractRowInfo: { rowSpan: number; isLastInGroup: boolean }[] =
+    (() => {
+      const info: { rowSpan: number; isLastInGroup: boolean }[] = [];
+      for (let i = 0; i < contracts.length; i++) {
+        if (i > 0 && contracts[i].itemId === contracts[i - 1].itemId) {
+          info.push({ rowSpan: 0, isLastInGroup: false });
+        } else {
+          let j = i;
+          while (
+            j + 1 < contracts.length &&
+            contracts[j + 1].itemId === contracts[i].itemId
+          )
+            j++;
+          info.push({ rowSpan: j - i + 1, isLastInGroup: false });
+        }
+      }
+      for (let i = 0; i < contracts.length; i++) {
+        const next = contracts[i + 1];
+        if (!next || next.itemId !== contracts[i].itemId) {
+          if (info[i]) info[i].isLastInGroup = true;
+        }
+      }
+      return info;
+    })();
+
   // ===== CONTRACT TABLE COLUMNS =====
   const contractColumns: ColumnsType<ContractProgress> = [
+    {
+      title: "TT",
+      key: "stt",
+      width: 50,
+      align: "center",
+      render: (_, __, idx) => <Text strong>{idx + 1}</Text>,
+    },
     {
       title: "HĐ",
       dataIndex: "orderNo",
       key: "orderNo",
-      width: 120,
-      render: (v, r) => (
-        <Space size={4}>
-          {r.priorityOverride != null && (
-            <Tag color="blue" style={{ fontSize: 10 }}>P{r.priorityOverride}</Tag>
-          )}
-          <Text>{v}</Text>
-        </Space>
-      ),
+      width: 140,
+      render: (v, r, idx) => {
+        const isLast = contractRowInfo[idx]?.isLastInGroup;
+        const isOnlyOne = contractRowInfo[idx]?.rowSpan === 1 && isLast;
+        const showSurplusTag = isLast && !isOnlyOne;
+        return (
+          <Space size={4} wrap>
+            {r.priorityOverride != null && (
+              <Tag color="blue" style={{ fontSize: 10 }}>
+                P{r.priorityOverride}
+              </Tag>
+            )}
+            <Text italic={showSurplusTag}>{v}</Text>
+            {showSurplusTag && (
+              <Tag color="orange" style={{ fontSize: 10, marginInlineEnd: 0 }}>
+                phần dư
+              </Tag>
+            )}
+          </Space>
+        );
+      },
     },
-    { title: "Khách hàng", dataIndex: "customerName", key: "customerName", width: 140, ellipsis: true },
-    { title: "Mặt hàng", dataIndex: "itemName", key: "itemName", width: 160, ellipsis: true },
+    {
+      title: "Khách hàng",
+      dataIndex: "customerName",
+      key: "customerName",
+      width: 140,
+      ellipsis: true,
+    },
+    {
+      title: "Mặt hàng",
+      dataIndex: "itemName",
+      key: "itemName",
+      width: 160,
+      ellipsis: true,
+      onCell: (_, idx) => ({
+        rowSpan: contractRowInfo[idx ?? 0]?.rowSpan ?? 1,
+        style: {
+          fontWeight: 600,
+          background: "#fafafa",
+          verticalAlign: "middle" as const,
+        },
+      }),
+    },
     {
       title: "Cam kết (kg)",
       dataIndex: "totalQty",
@@ -403,7 +489,13 @@ export default function RevenueDashboard() {
       key: "progressPct",
       align: "center",
       width: 130,
-      render: (v) => <Progress percent={v} size="small" strokeColor={v >= 100 ? "#52c41a" : "#1677ff"} />,
+      render: (v) => (
+        <Progress
+          percent={v}
+          size="small"
+          strokeColor={v >= 100 ? "#52c41a" : "#1677ff"}
+        />
+      ),
     },
     {
       title: "Đơn giá",
@@ -443,7 +535,8 @@ export default function RevenueDashboard() {
 
   // ===== MATRIX COLUMNS =====
   const todayObj = dayjs();
-  const todayDay = yearMonth === todayObj.format("YYYY-MM") ? todayObj.date() : -1;
+  const todayDay =
+    yearMonth === todayObj.format("YYYY-MM") ? todayObj.date() : -1;
   const isSunday = (day: number) =>
     dayjs(`${yearMonth}-${String(day).padStart(2, "0")}`).day() === 0;
 
@@ -541,7 +634,11 @@ export default function RevenueDashboard() {
       },
     })),
     {
-      title: <Text strong style={{ fontSize: 12 }}>Tổng</Text>,
+      title: (
+        <Text strong style={{ fontSize: 12 }}>
+          Tổng
+        </Text>
+      ),
       key: "total",
       align: "right" as const,
       fixed: "right" as const,
@@ -651,7 +748,7 @@ export default function RevenueDashboard() {
           {/* Production matrix */}
           <Card
             size="small"
-            title={<Text strong>Ma trận sản lượng thực hiện (kg/ngày)</Text>}
+            title={<Text strong>Bảng sản lượng thực hiện (kg/ngày)</Text>}
           >
             <style>{`
               .matrix-table .ant-table-cell {
@@ -724,7 +821,9 @@ export default function RevenueDashboard() {
                         value={exchangeRate}
                         onChange={(v) => setExchangeRate(v)}
                         formatter={(v) =>
-                          v ? new Intl.NumberFormat("vi-VN").format(Number(v)) : ""
+                          v
+                            ? new Intl.NumberFormat("vi-VN").format(Number(v))
+                            : ""
                         }
                         parser={(v) =>
                           Number((v ?? "").replace(/[^0-9]/g, "")) as 0
@@ -830,7 +929,11 @@ export default function RevenueDashboard() {
               onChange={(d) => d && setYearMonth(d.format("YYYY-MM"))}
               allowClear={false}
             />
-            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadData}
+              loading={loading}
+            >
               Tải lại
             </Button>
           </Space>
