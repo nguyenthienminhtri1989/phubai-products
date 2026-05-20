@@ -73,8 +73,6 @@ export default function MachinesPage() {
     // Danh sách lô cho modal phân công multi-item
     const [assignmentLots, setAssignmentLots] = useState<any[]>([]);
 
-    // Watch assignments realtime để Select lô luôn lấy đúng itemId cùng dòng
-    const watchedAssignments: any[] = Form.useWatch('assignments', multiItemForm) ?? [];
 
     const userRole = (session?.user as any)?.userRole as string | undefined;
     const userProcessIds: number[] = (session?.user as any)?.processIds || [];
@@ -541,7 +539,7 @@ export default function MachinesPage() {
                                 {/* Header */}
                                 <Row gutter={8} style={{ marginBottom: 6, fontWeight: 600, fontSize: 12, color: '#888' }}>
                                     <Col flex="1">Mặt hàng</Col>
-                                    <Col style={{ width: 190 }}>Lô sợi</Col>
+                                    <Col style={{ width: 200 }}>Lô sợi</Col>
                                     <Col style={{ width: 36 }}></Col>
                                 </Row>
 
@@ -571,27 +569,30 @@ export default function MachinesPage() {
                                                 />
                                             </Form.Item>
                                         </Col>
-                                        {/* Select lô — options lọc theo itemId cùng dòng */}
-                                        <Col style={{ width: 190 }}>
-                                            <Form.Item
-                                                {...restField}
-                                                name={[name, 'lotId']}
-                                                style={{ margin: 0 }}
-                                            >
-                                                <Select
-                                                    allowClear
-                                                    showSearch
-                                                    optionFilterProp="label"
-                                                    placeholder="Chọn lô..."
-                                                    disabled={!watchedAssignments[name]?.itemId}
-                                                    options={assignmentLots
-                                                        .filter((l: any) =>
-                                                            !watchedAssignments[name]?.itemId ||
-                                                            l.itemId === watchedAssignments[name]?.itemId
-                                                        )
-                                                        .map((l: any) => ({ value: l.id, label: l.lotNumber }))
-                                                    }
-                                                />
+                                        {/* Select lô — hiển thị tất cả lô YARN đang OPEN */}
+                                        <Col style={{ width: 200 }}>
+                                            <Form.Item noStyle shouldUpdate>
+                                                {() => {
+                                                    const lotOptions = assignmentLots.map((l: any) => ({
+                                                        value: l.id,
+                                                        label: `${l.lotNumber}${l.item ? ' — ' + l.item.name : ''}`,
+                                                    }));
+                                                    return (
+                                                        <Form.Item
+                                                            {...restField}
+                                                            name={[name, 'lotId']}
+                                                            style={{ margin: 0 }}
+                                                        >
+                                                            <Select
+                                                                allowClear
+                                                                showSearch
+                                                                optionFilterProp="label"
+                                                                placeholder="Chọn lô..."
+                                                                options={lotOptions}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
                                             </Form.Item>
                                         </Col>
                                         {/* Nút xóa */}

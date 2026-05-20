@@ -28,7 +28,16 @@
       "PowerShell(Remove-Item \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\_test_prisma.js\" -Confirm:$false)",
       "Bash(npx next *)",
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/api/factories\" -UseBasicAuth -ErrorAction Stop; Write-Output \"Status: $\\($r.StatusCode\\)\"; Write-Output $r.Content.Substring\\(0, [Math]::Min\\(300, $r.Content.Length\\)\\) } catch { Write-Output \"Error: $\\($_.Exception.Message\\)\" })",
-      "PowerShell(Get-Process -Name \"node\" | Where-Object { $_.CommandLine -match \"next\" -or $_.MainWindowTitle -match \"next\" } | Select-Object Id, ProcessName, StartTime | Format-Table)"
+      "PowerShell(Get-Process -Name \"node\" | Where-Object { $_.CommandLine -match \"next\" -or $_.MainWindowTitle -match \"next\" } | Select-Object Id, ProcessName, StartTime | Format-Table)",
+      "Bash(Select-Object -First 30)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__read_network_requests",
+      "mcp__Claude_in_Chrome__read_console_messages",
+      "mcp__Claude_in_Chrome__javascript_tool",
+      "mcp__Claude_in_Chrome__tabs_close_mcp"
     ]
   }
 }
