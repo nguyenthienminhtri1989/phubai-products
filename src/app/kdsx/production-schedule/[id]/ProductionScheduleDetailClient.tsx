@@ -53,6 +53,8 @@ function daysInMonthFn(yearMonth: string): number {
   return new Date(y, m, 0).getDate();
 }
 
+interface Process { id: number; name: string; factoryId: number; }
+
 export default function ProductionScheduleDetailClient({ scheduleId }: { scheduleId: number }) {
   const router = useRouter();
 
@@ -78,6 +80,10 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [actualFilterFrom, setActualFilterFrom] = useState<number>(1);
   const [actualFilterTo, setActualFilterTo] = useState<number>(31);
 
+  // Process filter — ActualProductionGrid độc lập với segments
+  const [factoryProcesses, setFactoryProcesses] = useState<Process[]>([]);
+  const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
+
   const fetchSchedule = useCallback(async () => {
     try {
       const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}`);
@@ -92,69 +98,106 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
     if (res.ok) setSummary(await res.json());
   }, [scheduleId]);
 
-  const fetchActualGrid = useCallback(async () => {
+  const fetchActualGrid = useCallback(async (processIds: number[] = []) => {
     try {
-      const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`);
+      const queryParam = processIds.length > 0 ? `?processIds=${processIds.join(",")}` : "";
+      const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/actual${queryParam}`);
       if (res.ok) {
         const data = await res.json();
         setActualGrid(data.grid ?? {});
         setActualItems(data.items ?? []);
-        setActualBenchmarkMap(data.benchmarkMap ?? {}); // THÊM
+        setActualBenchmarkMap(data.benchmarkMap ?? {});
       }
     } catch { /* ignore */ }
     setActualGridLoaded(true);
   }, [scheduleId]);
 
-  // Initial data load — inline fetches so React Compiler can see setState only
-  // happens in async .then() callbacks, never synchronously inside the effect body.
-  // useCallback functions (fetchSchedule etc.) are kept for manual refresh() calls.
+  // Initial data load — 2 phase:
+  // Phase 1 (parallel): schedule, summary, machines, items, processes
+  // Phase 2: sau khi có schedule → xác định defaultProcessIds → fetch actual grid
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      // schedule
-      fetch(`/api/kdsx/production-schedule/${scheduleId}`)
-        .then(r => { if (!r.ok) { message.error("Không tìm thấy kế hoạch"); } return r.ok ? r.json() : null; })
-        .then(data => {
-          if (data) {
-            setSchedule(data);
-            // set actualFilterTo to actual days in month (user can still override via InputNumber)
-            setActualFilterTo(daysInMonthFn(data.yearMonth));
-          }
-        })
-        .catch(() => message.error("Lỗi tải dữ liệu")),
-      fetch(`/api/kdsx/production-schedule/${scheduleId}/summary`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data) setSummary(data); })
-        .catch(() => { }),
-      // actual grid
-      fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data) {
-            setActualGrid(data.grid ?? {});
-            setActualItems(data.items ?? []);
-            setActualBenchmarkMap(data.benchmarkMap ?? {});
-          }
-          setActualGridLoaded(true);
-        })
-        .catch(() => { setActualGridLoaded(true); }),
-      // machines
-      fetch("/api/machines")
-        .then(r => r.json())
-        .then(d => setMachines(Array.isArray(d) ? d : d.machines ?? []))
-        .catch(() => { }),
-      // items
-      fetch("/api/items")
-        .then(r => r.json())
-        .then(d => setItems(Array.isArray(d) ? d : d.items ?? []))
-        .catch(() => { }),
-    ]).finally(() => setLoading(false));
+    let cancelled = false;
 
-  }, [scheduleId]); // scheduleId is a stable primitive — no callback deps needed
+    async function loadAll() {
+      setLoading(true);
+      try {
+        // Phase 1: tất cả dữ liệu cơ sở song song
+        const [scheduleRes, summaryRes, machinesRes, itemsRes, processesRes] = await Promise.all([
+          fetch(`/api/kdsx/production-schedule/${scheduleId}`),
+          fetch(`/api/kdsx/production-schedule/${scheduleId}/summary`),
+          fetch("/api/machines"),
+          fetch("/api/items"),
+          fetch("/api/processes"),
+        ]);
 
-  // actualFilterTo is now derived directly from schedule.yearMonth (see above) — no effect needed
+        if (cancelled) return;
 
-  const refresh = async () => { await Promise.all([fetchSchedule(), fetchSummary(), fetchActualGrid()]); };
+        if (!scheduleRes.ok) { message.error("Không tìm thấy kế hoạch"); return; }
+
+        const scheduleData = await scheduleRes.json();
+        const summaryData = summaryRes.ok ? await summaryRes.json() : null;
+        const machinesRaw = machinesRes.ok ? await machinesRes.json() : null;
+        const itemsRaw = itemsRes.ok ? await itemsRes.json() : null;
+        const processesRaw = processesRes.ok ? await processesRes.json() : null;
+
+        if (cancelled) return;
+
+        setSchedule(scheduleData);
+        setActualFilterTo(daysInMonthFn(scheduleData.yearMonth));
+        if (summaryData) setSummary(summaryData);
+        setMachines(Array.isArray(machinesRaw) ? machinesRaw : machinesRaw?.machines ?? []);
+        setItems(Array.isArray(itemsRaw) ? itemsRaw : itemsRaw?.items ?? []);
+
+        // Lọc processes theo factory của schedule này
+        const allProcesses: Process[] = Array.isArray(processesRaw) ? processesRaw : [];
+        const factoryProcs = allProcesses.filter((p) => p.factoryId === scheduleData.factoryId);
+        setFactoryProcesses(factoryProcs);
+
+        // Xác định defaultProcessIds:
+        // - Có segments → lấy processId từ các máy trong segments (hiển thị đúng với KH)
+        // - Không có segments → chọn tất cả công đoạn của nhà máy (hiển thị toàn bộ TH)
+        let defaultProcessIds: number[];
+        if (scheduleData.segments.length > 0) {
+          defaultProcessIds = [...new Set(
+            scheduleData.segments.map((s: Segment) => s.machine.processId)
+          )] as number[];
+        } else {
+          defaultProcessIds = factoryProcs.map((p) => p.id);
+        }
+        setSelectedProcessIds(defaultProcessIds);
+
+        // Phase 2: fetch actual grid với processIds đã xác định
+        const queryParam = defaultProcessIds.length > 0
+          ? `?processIds=${defaultProcessIds.join(",")}`
+          : "";
+        const actualRes = await fetch(
+          `/api/kdsx/production-schedule/${scheduleId}/actual${queryParam}`
+        );
+        if (cancelled) return;
+
+        if (actualRes.ok) {
+          const actualData = await actualRes.json();
+          setActualGrid(actualData.grid ?? {});
+          setActualItems(actualData.items ?? []);
+          setActualBenchmarkMap(actualData.benchmarkMap ?? {});
+        }
+        setActualGridLoaded(true);
+
+      } catch {
+        message.error("Lỗi tải dữ liệu");
+        setActualGridLoaded(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadAll();
+    return () => { cancelled = true; };
+  }, [scheduleId]);
+
+  const refresh = async () => {
+    await Promise.all([fetchSchedule(), fetchSummary(), fetchActualGrid(selectedProcessIds)]);
+  };
 
   const handleToggleHoliday = async (day: number) => {
     if (!schedule) return;
@@ -937,17 +980,69 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
             key: "actual",
             label: "📊 Thực hiện",
             children: (
-              <ActualProductionGrid
-                scheduleId={scheduleId}
-                segments={schedule.segments}
-                holidays={holidayArr}
-                totalDays={totalDays}
-                itemColors={itemColors}
-                yearMonth={yearMonth}
-                externalGrid={actualGridLoaded ? actualGrid : undefined}
-                externalItems={actualItems}
-                externalBenchmarkMap={actualBenchmarkMap}
-              />
+              <div>
+                {/* Process selector — độc lập với planGrid */}
+                <div style={{
+                  marginBottom: 12,
+                  padding: "8px 12px",
+                  background: "#f6ffed",
+                  border: "1px solid #b7eb8f",
+                  borderRadius: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}>
+                  <Text style={{ fontSize: 12, fontWeight: 700, color: "#237804", whiteSpace: "nowrap" }}>
+                    🏭 Công đoạn hiển thị:
+                  </Text>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {factoryProcesses.map((proc) => {
+                      const isSelected = selectedProcessIds.includes(proc.id);
+                      return (
+                        <button
+                          key={proc.id}
+                          onClick={() => {
+                            const newIds = isSelected
+                              ? selectedProcessIds.filter((id) => id !== proc.id)
+                              : [...selectedProcessIds, proc.id];
+                            setSelectedProcessIds(newIds);
+                            setActualGridLoaded(false);
+                            fetchActualGrid(newIds);
+                          }}
+                          style={{
+                            padding: "2px 10px",
+                            borderRadius: 12,
+                            border: isSelected ? "1.5px solid #52c41a" : "1.5px solid #d9d9d9",
+                            background: isSelected ? "#f6ffed" : "#fafafa",
+                            color: isSelected ? "#237804" : "#595959",
+                            fontWeight: isSelected ? 700 : 400,
+                            fontSize: 12,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {proc.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
+                    Sản lượng TH hiển thị độc lập — không cần kế hoạch trước
+                  </Text>
+                </div>
+
+                <ActualProductionGrid
+                  scheduleId={scheduleId}
+                  segments={schedule.segments}
+                  holidays={holidayArr}
+                  totalDays={totalDays}
+                  itemColors={itemColors}
+                  yearMonth={yearMonth}
+                  externalGrid={actualGridLoaded ? actualGrid : undefined}
+                  externalItems={actualItems}
+                  externalBenchmarkMap={actualBenchmarkMap}
+                />
+              </div>
             ),
           },
           {

@@ -3119,3 +3119,34 @@ src/app/processes/page.tsx                                            — thêm 
 
 ### Known limitations
 - Chưa enforce unique 1 công đoạn doanh thu / nhà máy — nếu Admin bật 2 công đoạn, matrix sẽ cộng SL của cả hai (sai)
+
+---
+
+## KẾ HOẠCH SẢN XUẤT — Tách ActualProductionGrid khỏi planGrid
+
+**Status:** ✅ Completed 2026-05-22
+
+### What was built
+Tháo bỏ sự phụ thuộc của tab **Thực hiện** (ActualProductionGrid) vào việc phải tạo segments kế hoạch trước. Trước đây, API `/actual` chỉ lấy ProductionLog của các máy CÓ trong segments → nếu chưa tạo KH thì bảng TH luôn trống. Nay user chọn công đoạn (Process) thì bảng TH hiển thị sản lượng thực tế của tất cả máy trong công đoạn đó, hoàn toàn độc lập với planGrid.
+
+### Files created/modified
+```
+src/app/api/kdsx/production-schedule/[id]/actual/route.ts   — thêm processIds query param; khi có processIds → query tất cả máy active của công đoạn đó thay vì segment machines
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — thêm Process interface + state (factoryProcesses, selectedProcessIds); refactor useEffect initial load thành 2-phase async (phase 1: song song; phase 2: fetch actual với processIds); thêm process selector UI dạng toggle buttons trong tab Thực hiện
+```
+
+### Key business logic implemented
+- **API priority**: `processIds` param → segment machines → empty (3 mức ưu tiên)
+- **Default processIds khi load**: nếu schedule có segments → lấy processId của các máy trong segments; nếu không có segments → lấy tất cả công đoạn của nhà máy đó
+- **Backward compatible**: khi UI cũ không truyền `processIds`, API fallback về segment machines như trước
+- **BenchmarkMap**: vẫn hoạt động bình thường vì dùng machineId+itemId từ dữ liệu thực tế, không từ segments
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/kdsx/production-schedule/[id]/actual?processIds=1,2 | Lấy grid thực tế theo công đoạn (không cần segments) |
+| GET | /api/kdsx/production-schedule/[id]/actual | Fallback: dùng segment machines như cũ |
+
+### Known limitations
+- Tab **So sánh KH/TH** (`ScheduleComparisonDashboard`) vẫn self-fetch `/actual` không có processIds → hiển thị đúng khi có segments, trống khi không có segments (chấp nhận được vì tab đó cần KH để so sánh)
+- Process selector UI dùng native HTML buttons thay vì Ant Design Select để tránh thêm import
