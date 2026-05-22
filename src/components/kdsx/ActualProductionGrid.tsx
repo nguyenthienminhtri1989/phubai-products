@@ -32,6 +32,7 @@ interface ActualProductionGridProps {
   externalGrid?: ActualGrid;
   externalItems?: { id: number; name: string }[];
   externalBenchmarkMap?: Record<string, number>;
+  externalMachines?: { id: number; name: string; model?: string | null; processId: number }[];
   onGridLoaded?: (grid: ActualGrid, source: string) => void;
 }
 
@@ -65,6 +66,7 @@ export default function ActualProductionGrid({
   externalGrid,
   externalItems,
   externalBenchmarkMap,
+  externalMachines,
   onGridLoaded,
 }: ActualProductionGridProps) {
   const [internalGrid, setInternalGrid] = useState<ActualGrid>({});
@@ -112,11 +114,17 @@ export default function ActualProductionGrid({
 
   if (loading) return <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>;
 
-  // Merge apiItems (từ fetch nội bộ) với externalItems (từ parent) — ưu tiên externalItems
+  // Merge items: externalItems ưu tiên hơn apiItems (từ fetch nội bộ)
   const resolvedItems: { id: number; name: string }[] = [
     ...apiItems,
     ...(externalItems ?? []).filter(ei => !apiItems.some(ai => ai.id === ei.id)),
   ];
+
+  // Merge machines: externalMachines (từ parent) ưu tiên hơn apiMachines (fetch nội bộ)
+  // externalMachines được set khi parent dùng externalGrid — apiMachines sẽ rỗng trong TH đó
+  const resolvedMachines = externalMachines && externalMachines.length > 0
+    ? externalMachines
+    : apiMachines;
 
   // ── Build GridRow hoàn toàn từ grid data (kd_daily_inputs) ──
   // Mỗi dòng = 1 combo (machineId, itemId) có SL thực tế > 0
@@ -142,7 +150,7 @@ export default function ActualProductionGrid({
         if ((kg as number) <= 0) continue;
         const key = `${machineId}-${itemId}`;
         if (!rowMap.has(key)) {
-          const machine = apiMachines.find(m => m.id === machineId)
+          const machine = resolvedMachines.find(m => m.id === machineId)
             ?? segments.find(s => s.machineId === machineId)?.machine;
           const item = resolvedItems.find(i => i.id === itemId);
           rowMap.set(key, {

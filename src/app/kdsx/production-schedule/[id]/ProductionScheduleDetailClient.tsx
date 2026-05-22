@@ -76,6 +76,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const [actualGrid, setActualGrid] = useState<ActualGrid>({});
   const [actualGridLoaded, setActualGridLoaded] = useState(false);
   const [actualItems, setActualItems] = useState<{ id: number; name: string }[]>([]);
+  const [actualMachines, setActualMachines] = useState<{ id: number; name: string; model?: string | null; processId: number }[]>([]);
   const [actualBenchmarkMap, setActualBenchmarkMap] = useState<Record<string, number>>({});
   const [actualFilterFrom, setActualFilterFrom] = useState<number>(1);
   const [actualFilterTo, setActualFilterTo] = useState<number>(31);
@@ -106,6 +107,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
         const data = await res.json();
         setActualGrid(data.grid ?? {});
         setActualItems(data.items ?? []);
+        setActualMachines(data.machines ?? []);
         setActualBenchmarkMap(data.benchmarkMap ?? {});
       }
     } catch { /* ignore */ }
@@ -179,6 +181,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
           const actualData = await actualRes.json();
           setActualGrid(actualData.grid ?? {});
           setActualItems(actualData.items ?? []);
+          setActualMachines(actualData.machines ?? []);
           setActualBenchmarkMap(actualData.benchmarkMap ?? {});
         }
         setActualGridLoaded(true);
@@ -314,9 +317,16 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   const filterFrom = Math.max(1, Math.min(actualFilterFrom, totalDays));
   const filterTo = Math.max(filterFrom, Math.min(actualFilterTo, totalDays));
 
-  // Collect all itemIds from segments
-  const allItemIds = Array.from(new Set(schedule.segments.map(s => s.itemId)));
-  const itemMap = new Map(schedule.segments.map(s => [s.itemId, s.item.name]));
+  // Collect all itemIds từ segments + actualItems (từ actual grid API)
+  // → khi không có segments, vẫn lấy được itemIds từ dữ liệu thực tế
+  const allItemIds = Array.from(new Set([
+    ...schedule.segments.map(s => s.itemId),
+    ...actualItems.map(i => i.id),
+  ]));
+  const itemMap = new Map<number, string>([
+    ...schedule.segments.map(s => [s.itemId, s.item.name] as [number, string]),
+    ...actualItems.map(i => [i.id, i.name] as [number, string]),
+  ]);
 
   // For each item, sum actual kg from grid within [filterFrom, filterTo]
   // Xác định ngày nào đã có data thực tế (toàn bộ grid)
@@ -332,9 +342,15 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
   }
 
   const actualSummaryByItem = allItemIds.map(itemId => {
-    const machineIds = Array.from(new Set(
-      schedule.segments.filter(s => s.itemId === itemId).map(s => s.machineId)
-    ));
+    // Lấy machineIds từ cả segments (KH) lẫn actualGrid (TH)
+    // → khi không có segments, vẫn tìm được máy nào thực sự có sản lượng item này
+    const machineIdsFromGrid = Object.keys(actualGrid).map(Number).filter(machineId =>
+      Object.values(actualGrid[machineId] ?? {}).some(dayData => (dayData[itemId] ?? 0) > 0)
+    );
+    const machineIds = Array.from(new Set([
+      ...schedule.segments.filter(s => s.itemId === itemId).map(s => s.machineId),
+      ...machineIdsFromGrid,
+    ]));
     let totalActualKg = 0;     // CHỈ sản lượng thực tế
     let totalProjectedKg = 0;  // Thực tế + giả định (benchmark fill)
 
@@ -1040,6 +1056,7 @@ export default function ProductionScheduleDetailClient({ scheduleId }: { schedul
                   yearMonth={yearMonth}
                   externalGrid={actualGridLoaded ? actualGrid : undefined}
                   externalItems={actualItems}
+                  externalMachines={actualMachines}
                   externalBenchmarkMap={actualBenchmarkMap}
                 />
               </div>
