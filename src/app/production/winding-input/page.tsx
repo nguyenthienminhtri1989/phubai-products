@@ -434,7 +434,7 @@ export default function WindingInputPage() {
           style={{ width: "100%" }}
           min={0}
           value={record.outputKg}
-          disabled={isReadOnly || (record.isExtra && record.itemId === 0)}
+          disabled={isReadOnly}
           onChange={(v) => updateRow(record._uid, "outputKg", v)}
         />
       ),

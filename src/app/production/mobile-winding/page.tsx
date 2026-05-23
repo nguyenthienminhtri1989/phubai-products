@@ -660,7 +660,6 @@ function MobileWindingContent() {
                                 }}
                                 showSearch
                                 optionFilterProp="children"
-                                disabled={it.isExtra && it.itemId === 0}
                             >
                                 {getLotsForItem(it.itemId).map(l => (
                                     <Select.Option key={l.id} value={l.id}>{l.lotNumber}</Select.Option>
@@ -678,7 +677,6 @@ function MobileWindingContent() {
                                 inputMode="decimal"
                                 placeholder="Nhập kg..."
                                 value={it.outputKg}
-                                disabled={it.isExtra && it.itemId === 0}
                                 onChange={v => updateItem(currentMachine.id, it._uid, { outputKg: v })}
                                 addonAfter="kg"
                             />

@@ -233,6 +233,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname === "/production/mobile-input" ||
+    pathname === "/production/mobile-winding" ||
     pathname === "/production/mobile-stops" ||
     pathname === "/production/mobile-report" ||
     pathname === "/production/mobile-maintenance"
