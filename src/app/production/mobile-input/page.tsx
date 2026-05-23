@@ -93,6 +93,7 @@ function MobileInputContent() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loadingMachines, setLoadingMachines] = useState(false);
     const [initialLoading, setInitialLoading] = useState(!!paramMachineId); // Loading khi vao tu QR
+    const [allMachinesAreMulti, setAllMachinesAreMulti] = useState(false); // Tất cả máy là đánh ống
 
     // Input states
     const [inputStates, setInputStates] = useState<Record<number, {
@@ -197,9 +198,11 @@ function MobileInputContent() {
                 ]);
                 if (res.ok) {
                     const all = await res.json();
-                    const filtered = all
-                        .filter((m: Machine) => m.processId === selectedProcessId && m.isActive !== false && !m.allowMultiItemPerShift)
+                    const processAll = all.filter((m: Machine) => m.processId === selectedProcessId && m.isActive !== false);
+                    const filtered = processAll
+                        .filter((m: Machine) => !m.allowMultiItemPerShift)
                         .sort((a: Machine, b: Machine) => a.id - b.id);
+                    setAllMachinesAreMulti(processAll.length > 0 && filtered.length === 0);
                     setMachines(filtered);
 
                     // Neu vao tu QR -> nhay toi may do
@@ -688,8 +691,30 @@ function MobileInputContent() {
     if (machines.length === 0) {
         return (
             <div style={styles.center}>
-                <Result status="info" title="Không có máy nào"
-                    extra={<Button size="large" onClick={() => { setSelectedProcessId(null); setMachines([]); }}>Chọn lại</Button>} />
+                <Result
+                    status="info"
+                    title={allMachinesAreMulti ? "Công đoạn đánh ống" : "Không có máy nào"}
+                    subTitle={allMachinesAreMulti
+                        ? "Tất cả máy trong công đoạn này là máy đánh ống nhiều mặt hàng. Vui lòng sử dụng trang Nhập liệu đánh ống."
+                        : undefined
+                    }
+                    extra={
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+                            {allMachinesAreMulti && (
+                                <Button
+                                    type="primary" size="large"
+                                    onClick={() => router.push("/production/winding-input")}
+                                    style={{ height: 48, fontSize: 16, fontWeight: 600, borderRadius: 10 }}
+                                >
+                                    Đi đến trang Nhập liệu đánh ống
+                                </Button>
+                            )}
+                            <Button size="large" onClick={() => { setSelectedProcessId(null); setMachines([]); setAllMachinesAreMulti(false); }}>
+                                Chọn công đoạn khác
+                            </Button>
+                        </div>
+                    }
+                />
             </div>
         );
     }

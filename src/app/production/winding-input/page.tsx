@@ -22,6 +22,7 @@ import type {
 // Types nội bộ trang
 // ============================================================
 interface WindingRow {
+  _uid: string; // Unique key cho mỗi row
   machineId: number;
   machineName: string;
   itemId: number;
@@ -34,6 +35,9 @@ interface WindingRow {
   existingLogId?: number;
   isExtra?: boolean; // Dòng thêm giữa ca (không có trong assignment)
 }
+
+let _uidCounter = 0;
+const nextUid = () => `wr-${++_uidCounter}`;
 
 // ============================================================
 // Main Page
@@ -108,6 +112,7 @@ export default function WindingInputPage() {
         if (assignments.length === 0 && todayLogs.length === 0) {
           // Máy chưa có assignment và chưa có log → 1 dòng trống
           newRows.push({
+            _uid: nextUid(),
             machineId: m.id,
             machineName: m.name,
             itemId: m.currentItem?.id || 0,
@@ -128,6 +133,7 @@ export default function WindingInputPage() {
           const log = todayLogs.find(l => l.itemId === a.itemId);
           addedItemIds.add(a.itemId);
           newRows.push({
+            _uid: nextUid(),
             machineId: m.id,
             machineName: m.name,
             itemId: a.itemId,
@@ -145,6 +151,7 @@ export default function WindingInputPage() {
         for (const log of todayLogs) {
           if (!addedItemIds.has(log.itemId)) {
             newRows.push({
+              _uid: nextUid(),
               machineId: m.id,
               machineName: m.name,
               itemId: log.itemId,
@@ -177,9 +184,9 @@ export default function WindingInputPage() {
   // ============================================================
   // Row editing
   // ============================================================
-  const updateRow = (machineId: number, itemId: number, field: keyof WindingRow, value: any) => {
+  const updateRow = (uid: string, field: keyof WindingRow, value: any) => {
     setRows(prev => prev.map(r =>
-      r.machineId === machineId && r.itemId === itemId
+      r._uid === uid
         ? { ...r, [field]: value, isDirty: true }
         : r
     ));
@@ -188,25 +195,31 @@ export default function WindingInputPage() {
   const addExtraRow = (machineId: number) => {
     const machine = machinesRaw.find(m => m.id === machineId);
     if (!machine) return;
-    setRows(prev => [
-      ...prev,
-      {
-        machineId,
-        machineName: machine.name,
-        itemId: 0,
-        itemName: "",
-        lotId: null,
-        lotNumber: null,
-        outputKg: null,
-        note: "",
-        isDirty: true,
-        isExtra: true,
-      },
-    ]);
+    const newRow: WindingRow = {
+      _uid: nextUid(),
+      machineId,
+      machineName: machine.name,
+      itemId: 0,
+      itemName: "",
+      lotId: null,
+      lotNumber: null,
+      outputKg: null,
+      note: "",
+      isDirty: true,
+      isExtra: true,
+    };
+    // Chèn ngay sau dòng cuối cùng của máy này (giữ rows liền kề cho rowSpan)
+    setRows(prev => {
+      const lastIdx = prev.reduce((acc, r, i) => r.machineId === machineId ? i : acc, -1);
+      if (lastIdx === -1) return [...prev, newRow];
+      const copy = [...prev];
+      copy.splice(lastIdx + 1, 0, newRow);
+      return copy;
+    });
   };
 
-  const removeExtraRow = (machineId: number, itemId: number) => {
-    setRows(prev => prev.filter(r => !(r.machineId === machineId && r.itemId === itemId && r.isExtra)));
+  const removeExtraRow = (uid: string) => {
+    setRows(prev => prev.filter(r => r._uid !== uid));
   };
 
   // ============================================================
@@ -351,13 +364,13 @@ export default function WindingInputPage() {
               onChange={(v: number) => {
                 const item = items.find(i => i.id === v);
                 // Check trùng itemId cho cùng máy
-                const existing = rows.find(r => r.machineId === record.machineId && r.itemId === v);
+                const existing = rows.find(r => r.machineId === record.machineId && r.itemId === v && r._uid !== record._uid);
                 if (existing) {
                   message.warning("Mặt hàng đã có trong danh sách máy này");
                   return;
                 }
                 setRows(prev => prev.map(r =>
-                  r === record
+                  r._uid === record._uid
                     ? { ...r, itemId: v, itemName: item?.name || "", isDirty: true }
                     : r
                 ));
@@ -388,9 +401,8 @@ export default function WindingInputPage() {
             disabled={isReadOnly}
             onChange={(v: number | undefined) => {
               const lot = lots.find(l => l.id === v);
-              updateRow(record.machineId, record.itemId, "lotId", v ?? null);
               setRows(prev => prev.map(r =>
-                r.machineId === record.machineId && r.itemId === record.itemId
+                r._uid === record._uid
                   ? { ...r, lotNumber: lot?.lotNumber ?? null, lotId: v ?? null, isDirty: true }
                   : r
               ));
@@ -414,7 +426,7 @@ export default function WindingInputPage() {
           min={0}
           value={record.outputKg}
           disabled={isReadOnly || (record.isExtra && record.itemId === 0)}
-          onChange={(v) => updateRow(record.machineId, record.itemId, "outputKg", v)}
+          onChange={(v) => updateRow(record._uid, "outputKg", v)}
         />
       ),
     },
@@ -427,7 +439,7 @@ export default function WindingInputPage() {
           size="small"
           value={record.note}
           disabled={isReadOnly}
-          onChange={(e) => updateRow(record.machineId, record.itemId, "note", e.target.value)}
+          onChange={(e) => updateRow(record._uid, "note", e.target.value)}
         />
       ),
     },
@@ -440,7 +452,7 @@ export default function WindingInputPage() {
             <Button
               size="small" type="text" danger
               icon={<DeleteOutlined />}
-              onClick={() => removeExtraRow(record.machineId, record.itemId)}
+              onClick={() => removeExtraRow(record._uid)}
             />
           );
         }
@@ -538,7 +550,7 @@ export default function WindingInputPage() {
         <Table
           columns={columns}
           dataSource={rows}
-          rowKey={(r) => `${r.machineId}-${r.itemId}-${r.isExtra ? "extra" : "main"}`}
+          rowKey={(r) => r._uid}
           pagination={false}
           size="small"
           bordered
