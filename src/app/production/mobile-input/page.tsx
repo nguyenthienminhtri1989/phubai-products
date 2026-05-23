@@ -703,10 +703,10 @@ function MobileInputContent() {
                             {allMachinesAreMulti && (
                                 <Button
                                     type="primary" size="large"
-                                    onClick={() => router.push("/production/winding-input")}
+                                    onClick={() => router.push("/production/mobile-winding")}
                                     style={{ height: 48, fontSize: 16, fontWeight: 600, borderRadius: 10 }}
                                 >
-                                    Đi đến trang Nhập liệu đánh ống
+                                    Đi đến Nhập liệu đánh ống (Mobile)
                                 </Button>
                             )}
                             <Button size="large" onClick={() => { setSelectedProcessId(null); setMachines([]); setAllMachinesAreMulti(false); }}>

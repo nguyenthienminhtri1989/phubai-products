@@ -306,6 +306,15 @@ export default function WindingInputPage() {
     return ids;
   }, [rows]);
 
+  // Màu xen kẽ theo máy (chẵn/lẻ trong danh sách)
+  const machineColorIndex = useMemo(() => {
+    const map: Record<number, number> = {};
+    machineIds.forEach((id, idx) => { map[id] = idx; });
+    return map;
+  }, [machineIds]);
+
+  const ROW_COLORS = ["#ffffff", "#f0f7ff"]; // trắng / xanh nhạt xen kẽ
+
   // ============================================================
   // Lots filtered by item
   // ============================================================
@@ -554,14 +563,21 @@ export default function WindingInputPage() {
           pagination={false}
           size="small"
           bordered
-          rowClassName={(r) => r.isDirty ? "ant-table-row-dirty" : ""}
+          rowClassName={(r) => {
+            if (r.isDirty) return "winding-row-dirty";
+            const colorIdx = machineColorIndex[r.machineId] ?? 0;
+            return colorIdx % 2 === 0 ? "winding-row-even" : "winding-row-odd";
+          }}
           locale={{ emptyText: processId ? "Không có máy đánh ống multi-item" : "Chọn nhà máy và công đoạn" }}
         />
       </Spin>
 
       <style jsx global>{`
-        .ant-table-row-dirty td {
-          background-color: #e6f4ff !important;
+        .winding-row-even td { background-color: #ffffff !important; }
+        .winding-row-odd  td { background-color: #f0f7ff !important; }
+        .winding-row-dirty td {
+          background-color: #fff7e6 !important;
+          border-left: 3px solid #faad14 !important;
         }
       `}</style>
     </div>

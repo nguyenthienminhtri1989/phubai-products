@@ -108,6 +108,7 @@ const ALL_PAGES: PageDef[] = [
 
   // MOBILE
   { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
+  { pageKey: "mobile.winding", pageGroup: "MOBILE", path: "/production/mobile-winding", label: "Nhập liệu đánh ống", icon: <ThunderboltOutlined /> },
   { pageKey: "mobile.report", pageGroup: "MOBILE", path: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
   { pageKey: "mobile.stops", pageGroup: "MOBILE", path: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
   { pageKey: "mobile.maintenance", pageGroup: "MOBILE", path: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
@@ -185,7 +186,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-mobile",
     label: "MOBILE",
     icon: <MobileOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["mobile.input", "mobile.report", "mobile.stops", "mobile.maintenance"],
+    pageKeys: ["mobile.input", "mobile.winding", "mobile.report", "mobile.stops", "mobile.maintenance"],
   },
   {
     key: "group-energy",

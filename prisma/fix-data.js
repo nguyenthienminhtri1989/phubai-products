@@ -164,25 +164,32 @@ async function main() {
       sortOrder: 150,
     },
     {
+      pageKey: "mobile.winding",
+      pageName: "Nhập liệu đánh ống (Mobile)",
+      pageGroup: "MOBILE",
+      path: "/production/mobile-winding",
+      sortOrder: 151,
+    },
+    {
       pageKey: "mobile.report",
       pageName: "Báo cáo sản lượng (Mobile)",
       pageGroup: "MOBILE",
       path: "/production/mobile-report",
-      sortOrder: 151,
+      sortOrder: 152,
     },
     {
       pageKey: "mobile.stops",
       pageName: "Báo sự cố (Mobile)",
       pageGroup: "MOBILE",
       path: "/production/mobile-stops",
-      sortOrder: 152,
+      sortOrder: 153,
     },
     {
       pageKey: "mobile.maintenance",
       pageName: "Bảo dưỡng máy (Mobile)",
       pageGroup: "MOBILE",
       path: "/production/mobile-maintenance",
-      sortOrder: 153,
+      sortOrder: 154,
     },
     // KINH DOANH
     {

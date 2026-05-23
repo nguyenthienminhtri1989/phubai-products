@@ -3194,9 +3194,47 @@ prisma/fix-data.js                          — Thêm PageRegistry entry sx.wind
 
 ### Known limitations
 
-- Trang đánh ống chưa có riêng trên mobile — user mobile dùng trang desktop responsive
 - Shared hook `useProductionMetadata` chỉ được dùng ở daily-input-grid; 2 trang còn lại (mobile-input, daily-input) vẫn fetch metadata theo cách riêng
 
 ### Data notes
 
 - PageRegistry entry: `sx.winding-input` với sortOrder 103, path `/production/winding-input`
+
+---
+
+## MOBILE — Trang nhập liệu đánh ống Mobile
+
+**Status:** ✅ Completed 2026-05-23
+
+### What was built
+
+Tạo trang mobile riêng `/production/mobile-winding` cho máy đánh ống multi-item. Giao diện tương tự `mobile-input` nhưng thay vì chỉ số trước/sau thì hiển thị N cards nhập kg theo từng mặt hàng. Cập nhật desktop `winding-input` thêm màu xen kẽ theo máy. Sửa redirect từ `mobile-input` trỏ đúng sang trang mobile thay vì desktop.
+
+### Files created/modified
+
+```
+src/app/production/mobile-winding/page.tsx   — Trang mobile cho máy đánh ống
+src/app/production/winding-input/page.tsx    — Thêm màu xen kẽ theo máy + fix rowSpan + uid
+src/app/production/mobile-input/page.tsx     — Fix empty state + redirect đúng trang mobile
+src/components/AdminLayout.tsx               — Thêm menu mobile.winding vào MOBILE group
+prisma/fix-data.js                           — Thêm PageRegistry mobile.winding
+```
+
+### Key business logic implemented
+
+- `mobile-winding`: Chỉ load máy `allowMultiItemPerShift = true`, mỗi máy hiển thị card per item, nhập kg trực tiếp (formulaType không quan trọng)
+- Thêm hàng giữa ca: nút "＋ Thêm mặt hàng giữa ca" → extra card với Select chọn item → check trùng itemId trong cùng máy
+- `_uid` per row: tránh conflict khi nhiều extra rows chưa chọn item, dùng làm key và match để update/remove
+- Màu xen kẽ desktop: `winding-row-even` (#ffffff) / `winding-row-odd` (#f0f7ff), dirty row = #fff7e6 + border trái vàng
+- Redirect mobile-input: khi public winding-only process → nút trỏ `/production/mobile-winding` thay vì desktop
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/production/daily-status?processId=X&date=Y&shift=Z | Dùng lại, trả về itemAssignments + todayLogs |
+| POST | /api/production/daily-input | Dùng lại, lưu kg per item |
+
+### Known limitations
+
+- `mobile-winding` chưa hỗ trợ QR code scan (chỉ chọn công đoạn thủ công hoặc qua URL ?processId=X)
