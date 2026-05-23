@@ -51,11 +51,18 @@ async function main() {
       sortOrder: 102,
     },
     {
+      pageKey: "sx.winding-input",
+      pageName: "Nhập liệu đánh ống",
+      pageGroup: "SẢN XUẤT",
+      path: "/production/winding-input",
+      sortOrder: 103,
+    },
+    {
       pageKey: "sx.line-setup",
       pageName: "Thiết lập line SX",
       pageGroup: "SẢN XUẤT",
       path: "/production/line-setup",
-      sortOrder: 103,
+      sortOrder: 104,
     },
     {
       pageKey: "sx.line-diagram",

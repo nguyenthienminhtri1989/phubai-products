@@ -38,7 +38,12 @@
       "mcp__Claude_in_Chrome__read_console_messages",
       "mcp__Claude_in_Chrome__javascript_tool",
       "mcp__Claude_in_Chrome__tabs_close_mcp",
-      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Path \"D:\\\\DU-AN-PHAN-MEM\\\\PHUBAI-ERP\\\\src\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(ls -la D:\\\\\\\\DU-AN-PHAN-MEM\\\\\\\\PHUBAI-ERP\\\\\\\\src/)",
+      "Bash(xargs head -150)",
+      "Bash(xargs wc -l)"
     ]
   }
 }

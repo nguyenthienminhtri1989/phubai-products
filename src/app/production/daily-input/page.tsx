@@ -1,5 +1,3 @@
-// TEST LẠI XEM CODE CÓ PUSH LÊN GIT THÀNH CÔNG KHÔNG?
-
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -8,6 +6,7 @@ import { SaveOutlined, ArrowRightOutlined, SwapOutlined, LeftOutlined, RightOutl
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
+import { calcOutput as calcOutputShared } from "@/lib/production-utils";
 
 interface Machine {
     id: number;
@@ -46,24 +45,6 @@ interface Machine {
 interface Item { id: number; name: string; }
 interface LotOption { id: number; lotNumber: string; item?: { id: number; name: string } | null; status?: string; }
 
-interface MachineAssignment {
-    id: number;
-    machineId: number;
-    itemId: number;
-    item: { id: number; name: string };
-}
-
-interface MultiItemInput {
-    itemId: number;
-    itemName: string;
-    endIndex: number | null;
-    isStopped: boolean;
-    efficiency: number | null;
-    note: string;
-    existingLogId?: number;
-    originalItemId: number;
-}
-
 interface Factory { id: number; name: string; }
 interface Process { id: number; name: string; factoryId: number; }
 
@@ -98,11 +79,6 @@ export default function DailyInputPage() {
     // Gán / thay đổi số lô ngay trong modal
     const [quickAssignLotNumber, setQuickAssignLotNumber] = useState<string>('');
     const [showQuickAssignLot, setShowQuickAssignLot] = useState(false);
-
-    // Multi-item support
-    const [machineAssignments, setMachineAssignments] = useState<Record<number, MachineAssignment[]>>({});
-    const [multiItemInputs, setMultiItemInputs] = useState<MultiItemInput[]>([]);
-    const [editingMultiItemIdx, setEditingMultiItemIdx] = useState<number | null>(null);
 
     // Cảnh báo ca thiếu
     const [missingShifts, setMissingShifts] = useState<Array<{ date: string; shift: number; machineName: string }>>([]);
@@ -163,19 +139,13 @@ export default function DailyInputPage() {
     };
 
     const calcOutputHelper = (machine: Machine, start: number, end: number, ne: number): number => {
-        const delta = end - start;
-        const type = machine.formulaType;
-        let result = 0;
-        if (type === 1) result = end;
-        else if (type === 2) result = delta;
-        else if (type === 3) {
-            const spindles = machine.spindleCount || 1;
-            const denom = ne * 1000 * 1.693;
-            if (denom !== 0) result = (delta * spindles) / denom;
-        } else if (type === 4) {
-            if (ne !== 0) result = delta / ne;
-        }
-        return Math.round(result);
+        return calcOutputShared({
+            formulaType: machine.formulaType,
+            startIndex: start,
+            endIndex: end,
+            spindleCount: machine.spindleCount,
+            inputNE: ne,
+        });
     };
 
     const handleItemChangeSave = async () => {
@@ -265,19 +235,7 @@ export default function DailyInputPage() {
                 fetch(`/api/production/daily-total?processId=${selectedProcessId}&date=${dateStr}`),
             ]);
             const machineList: Machine[] = await res.json();
-            setMachines(machineList);
-
-            // Fetch assignments cho máy multi-item
-            const assignMap: Record<number, MachineAssignment[]> = {};
-            await Promise.all(machineList.map(async m => {
-                if (m.allowMultiItemPerShift) {
-                    try {
-                        const aRes = await fetch(`/api/machines/${m.id}/assignments`);
-                        if (aRes.ok) assignMap[m.id] = await aRes.json();
-                    } catch { }
-                }
-            }));
-            setMachineAssignments(assignMap);
+            setMachines(machineList.filter(m => !m.allowMultiItemPerShift));
 
             if (resTotal.ok) {
                 const data = await resTotal.json();
@@ -295,39 +253,6 @@ export default function DailyInputPage() {
         setIsItemChangeVisible(false);
         setCutoverIndex(null);
         setNewItemId(null);
-        setEditingMultiItemIdx(null);
-
-        const assignments = machineAssignments[machine.id];
-        const isMulti = !!machine.allowMultiItemPerShift && !!assignments && assignments.length > 0;
-
-        if (isMulti) {
-            const logs = machine.todayLogs ?? (machine.todayLog ? [machine.todayLog] : []);
-            const inputs: MultiItemInput[] = assignments.map(a => {
-                const existingLog = logs.find(l => l.itemId === a.itemId);
-                return {
-                    itemId: a.itemId,
-                    itemName: a.item.name,
-                    endIndex: existingLog?.endIndex ?? (existingLog?.finalOutput ?? null),
-                    isStopped: existingLog?.note === 'Máy dừng',
-                    efficiency: existingLog?.efficiency ?? null,
-                    note: existingLog?.note === 'Máy dừng' ? '' : (existingLog?.note ?? ''),
-                    existingLogId: existingLog?.id,
-                    originalItemId: a.itemId,
-                };
-            });
-            setMultiItemInputs(inputs);
-
-            setQuickAssignLotNumber(machine.currentLot?.lotNumber ?? '');
-            setShowQuickAssignLot(false);
-            setShowQuickAssign(false);
-            setMissingShifts([]);
-            setWarningDismissed(false);
-
-            setIsModalOpen(true);
-            return;
-        }
-
-        setMultiItemInputs([]);
 
         // Khởi tạo quick assign: nếu chưa có currentItem → bắt buộc chọn; nếu đã có → ẩn, chỉ hiện khi bấm "Thay đổi"
         setQuickAssignItemId(machine.currentItem?.id ?? null);
@@ -564,137 +489,6 @@ export default function DailyInputPage() {
         } catch (e) { message.error("Lỗi khi lưu dữ liệu"); }
     };
 
-    const handleSaveMultiItem = async (saveAndNext: boolean) => {
-        if (!currentMachine) return;
-        try {
-            const dateStr = selectedDate.format('YYYY-MM-DD');
-
-            // 1. Ghi ngược mặt hàng nếu thay đổi (PATCH assignment)
-            for (const inp of multiItemInputs) {
-                if (inp.itemId !== inp.originalItemId) {
-                    const res = await fetch(`/api/machines/${currentMachine.id}/assignments`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ oldItemId: inp.originalItemId, newItemId: inp.itemId }),
-                    });
-                    if (!res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        message.error(`Lỗi cập nhật assignment: ${data.error ?? ''}`);
-                        return;
-                    }
-                }
-            }
-
-            // 2. Ghi ngược lô hàng
-            const prevLotNumber = currentMachine.currentLot?.lotNumber ?? '';
-            const newLotNumber = quickAssignLotNumber.trim();
-            if (newLotNumber !== prevLotNumber) {
-                let newLotId: number | null = null;
-                if (newLotNumber) {
-                    const lotRes = await fetch(`/api/lots?search=${encodeURIComponent(newLotNumber)}`);
-                    if (lotRes.ok) {
-                        const lotList: { id: number; lotNumber: string }[] = await lotRes.json();
-                        const found = lotList.find(l => l.lotNumber === newLotNumber);
-                        if (found) newLotId = found.id;
-                        else message.warning(`Không tìm thấy lô "${newLotNumber}"`);
-                    }
-                }
-                if (newLotId !== null || newLotNumber === '') {
-                    await fetch(`/api/machines/${currentMachine.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            name: currentMachine.name,
-                            processId: currentMachine.processId,
-                            formulaType: currentMachine.formulaType,
-                            spindleCount: currentMachine.spindleCount,
-                            isActive: true,
-                            currentLotId: newLotId,
-                        }),
-                    });
-                    const updatedLot = newLotId ? { id: newLotId, lotNumber: newLotNumber } : null;
-                    setCurrentMachine(prev => prev ? { ...prev, currentLot: updatedLot } : prev);
-                    setMachines(prev => prev.map(m =>
-                        m.id === currentMachine.id ? { ...m, currentLot: updatedLot } : m
-                    ));
-                }
-            }
-
-            // 3. Lưu production logs — 1 log per mặt hàng
-            let savedCount = 0;
-            for (const inp of multiItemInputs) {
-                const kg = inp.isStopped ? 0 : (inp.endIndex ?? 0);
-                if (kg <= 0 && !inp.isStopped) continue;
-
-                const res = await fetch('/api/production/daily-input', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        recordDate: dateStr,
-                        shift: selectedShift,
-                        machineId: currentMachine.id,
-                        itemId: inp.itemId,
-                        startIndex: 0,
-                        endIndex: inp.isStopped ? null : inp.endIndex,
-                        inputNE: 0,
-                        finalOutput: kg,
-                        efficiency: inp.efficiency,
-                        note: inp.isStopped ? 'Máy dừng' : (inp.note || ''),
-                    }),
-                });
-                if (!res.ok) {
-                    message.error(`Lỗi lưu ${inp.itemName}`);
-                } else {
-                    savedCount++;
-                }
-            }
-
-            if (savedCount > 0) message.success(`Đã lưu ${savedCount} mặt hàng`);
-
-            // 4. Cập nhật local state
-            const totalKg = multiItemInputs.reduce(
-                (s, inp) => s + (inp.isStopped ? 0 : (inp.endIndex ?? 0)),
-                0,
-            );
-            const firstItem = multiItemInputs[0];
-            setMachines(prev => prev.map(m =>
-                m.id === currentMachine.id
-                    ? {
-                        ...m,
-                        todayLog: firstItem ? {
-                            id: 0,
-                            itemId: firstItem.itemId,
-                            item: { id: firstItem.itemId, name: firstItem.itemName },
-                            finalOutput: totalKg,
-                        } : m.todayLog,
-                    }
-                    : m
-            ));
-
-            // 5. Re-fetch assignments nếu có đổi mặt hàng
-            const hasItemChange = multiItemInputs.some(inp => inp.itemId !== inp.originalItemId);
-            if (hasItemChange) {
-                try {
-                    const aRes = await fetch(`/api/machines/${currentMachine.id}/assignments`);
-                    if (aRes.ok) {
-                        const newAssignments = await aRes.json();
-                        setMachineAssignments(prev => ({ ...prev, [currentMachine.id]: newAssignments }));
-                    }
-                } catch { }
-            }
-
-            if (saveAndNext) {
-                const idx = machines.findIndex(m => m.id === currentMachine.id);
-                if (idx < machines.length - 1) handleOpenMachine(machines[idx + 1]);
-                else { setIsModalOpen(false); message.success('Đã nhập hết danh sách!'); }
-            } else {
-                setIsModalOpen(false);
-            }
-        } catch (e: any) {
-            message.error(e.message || 'Lỗi khi lưu');
-        }
-    };
-
     const rawProcessIds = (session?.user as any)?.processIds || [];
     const userProcessIds: number[] = Array.isArray(rawProcessIds) ? rawProcessIds.map(Number) : [];
     const isAdmin = session?.user?.role === "ADMIN";
@@ -867,10 +661,7 @@ export default function DailyInputPage() {
                         <div style={{ width: '100%', textAlign: 'center', padding: 20 }}>Không có máy nào trong công đoạn này.</div>
                     )}
                     {machines.map(m => {
-                        const isDone = !!m.todayLog || (m.todayLogs && m.todayLogs.length > 0);
-                        const assignments = machineAssignments[m.id];
-                        const isMulti = !!m.allowMultiItemPerShift && !!assignments && assignments.length > 0;
-                        const multiTotal = (m.todayLogs ?? []).reduce((s, l) => s + (l.finalOutput ?? 0), 0);
+                        const isDone = !!m.todayLog;
                         return (
                             <Col key={m.id} xs={12} sm={8} md={6} lg={4}>
                                 <Card
@@ -889,10 +680,7 @@ export default function DailyInputPage() {
                                         {isDone && <SaveOutlined style={{ color: '#52c41a', flexShrink: 0 }} />}
                                     </div>
                                     <div style={{ fontSize: 11, color: '#666', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {isMulti
-                                            ? assignments.map(a => a.item.name).join(' + ')
-                                            : ((m.todayLog?.item?.name ?? m.currentItem?.name) || <span style={{ color: 'red' }}>Chưa gán hàng</span>)
-                                        }
+                                        {(m.todayLog?.item?.name ?? m.currentItem?.name) || <span style={{ color: 'red' }}>Chưa gán hàng</span>}
                                     </div>
                                     {m.currentLot?.lotNumber && (
                                         <div style={{ fontSize: 11, color: '#fa8c16', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -901,7 +689,7 @@ export default function DailyInputPage() {
                                     )}
                                     <div style={{ marginTop: 6, textAlign: 'right', fontWeight: 'bold', fontSize: isMobile ? 15 : 16 }}>
                                         {isDone
-                                            ? <span style={{ color: 'green' }}>{isMulti ? multiTotal : m.todayLog?.finalOutput} <small>kg</small></span>
+                                            ? <span style={{ color: 'green' }}>{m.todayLog?.finalOutput} <small>kg</small></span>
                                             : <span style={{ color: '#ccc' }}>--</span>
                                         }
                                     </div>
@@ -915,7 +703,7 @@ export default function DailyInputPage() {
             {/* MODAL NHẬP LIỆU */}
             <Modal
                 open={isModalOpen}
-                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); setShowQuickAssign(false); setQuickAssignItemId(null); setShowQuickAssignLot(false); setQuickAssignLotNumber(''); setMultiItemInputs([]); setEditingMultiItemIdx(null); }}
+                onCancel={() => { setIsModalOpen(false); setIsItemChangeVisible(false); setCutoverIndex(null); setNewItemId(null); setMissingShifts([]); setWarningDismissed(false); setShowQuickAssign(false); setQuickAssignItemId(null); setShowQuickAssignLot(false); setQuickAssignLotNumber(''); }}
                 footer={null}
                 width={isMobile ? '96vw' : 500}
                 style={isMobile ? { top: 8 } : undefined}
@@ -923,177 +711,12 @@ export default function DailyInputPage() {
                 title={
                     <span style={{ fontSize: isMobile ? 14 : 16 }}>
                         {currentMachine?.name}{' '}
-                        {multiItemInputs.length > 0 ? (
-                            <Tag color="purple">Nhiều mặt hàng</Tag>
-                        ) : (
-                            <Tag color="blue">
-                                {currentMachine?.todayLog?.item?.name ?? currentMachine?.currentItem?.name}
-                            </Tag>
-                        )}
+                        <Tag color="blue">
+                            {currentMachine?.todayLog?.item?.name ?? currentMachine?.currentItem?.name}
+                        </Tag>
                     </span>
                 }
             >
-                {multiItemInputs.length > 0 ? (
-                    <div>
-                        {/* ── Số lô hàng ── */}
-                        {!showQuickAssignLot ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, background: '#fff7e6', borderRadius: 8, padding: '8px 12px' }}>
-                                <span style={{ fontSize: 12, color: '#666' }}>Lô hàng:</span>
-                                {quickAssignLotNumber
-                                    ? <Tag color="orange" style={{ margin: 0 }}>{quickAssignLotNumber}</Tag>
-                                    : <span style={{ color: '#ccc', fontSize: 12 }}>—</span>}
-                                {!isReadOnly && (
-                                    <Button
-                                        type="link" size="small"
-                                        style={{ padding: 0, marginLeft: 'auto', color: '#d46b08', fontSize: 12 }}
-                                        onClick={() => setShowQuickAssignLot(true)}
-                                    >
-                                        ✏️ Thay đổi
-                                    </Button>
-                                )}
-                            </div>
-                        ) : (
-                            <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: '#fffbe6', border: '1px solid #faad14' }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#d48806' }}>✏️ Thay đổi số lô hàng</div>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                    <Select
-                                        autoFocus showSearch allowClear
-                                        style={{ flex: 1 }}
-                                        placeholder="Chọn lô hàng..."
-                                        optionFilterProp="label"
-                                        value={quickAssignLotNumber || undefined}
-                                        onChange={val => { setQuickAssignLotNumber(val ?? ''); setShowQuickAssignLot(false); }}
-                                        onBlur={() => setShowQuickAssignLot(false)}
-                                        options={lots.map(l => ({
-                                            label: l.item?.name ? `${l.lotNumber} — ${l.item.name}` : l.lotNumber,
-                                            value: l.lotNumber,
-                                        }))}
-                                    />
-                                    <Button size="small" onClick={() => { setQuickAssignLotNumber(currentMachine?.currentLot?.lotNumber ?? ''); setShowQuickAssignLot(false); }}>Hủy</Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* N ô nhập */}
-                        {multiItemInputs.map((input, idx) => (
-                            <div
-                                key={input.originalItemId}
-                                style={{
-                                    marginBottom: 16,
-                                    padding: '12px 14px',
-                                    borderRadius: 10,
-                                    background: input.isStopped ? '#fffbe6' : (input.endIndex !== null ? '#f6ffed' : '#fafafa'),
-                                    border: `1px solid ${input.isStopped ? '#faad14' : (input.endIndex !== null ? '#b7eb8f' : '#e8e8e8')}`,
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <Tag color="blue" style={{ margin: 0, fontWeight: 600 }}>{input.itemName}</Tag>
-                                        {!isReadOnly && (
-                                            <Button
-                                                type="link" size="small"
-                                                style={{ padding: 0, color: '#d46b08', fontSize: 11 }}
-                                                onClick={() => setEditingMultiItemIdx(idx)}
-                                            >
-                                                ✏️ Đổi
-                                            </Button>
-                                        )}
-                                    </div>
-                                    <Switch
-                                        size="small"
-                                        checkedChildren="Dừng"
-                                        unCheckedChildren="Chạy"
-                                        checked={input.isStopped}
-                                        onChange={val => {
-                                            setMultiItemInputs(prev => prev.map((inp, i) => i === idx ? { ...inp, isStopped: val } : inp));
-                                        }}
-                                    />
-                                </div>
-
-                                {editingMultiItemIdx === idx && (
-                                    <div style={{ marginBottom: 10 }}>
-                                        <Select
-                                            autoFocus showSearch
-                                            optionFilterProp="label"
-                                            style={{ width: '100%' }}
-                                            value={input.itemId}
-                                            options={items.map(i => ({ label: i.name, value: i.id }))}
-                                            onChange={val => {
-                                                const item = items.find(i => i.id === val);
-                                                if (!item) return;
-                                                setMultiItemInputs(prev => prev.map((inp, i) => i === idx ? { ...inp, itemId: val, itemName: item.name } : inp));
-                                                setEditingMultiItemIdx(null);
-                                            }}
-                                            onBlur={() => setEditingMultiItemIdx(null)}
-                                        />
-                                    </div>
-                                )}
-
-                                {!input.isStopped && (
-                                    <InputNumber
-                                        placeholder="Sản lượng (kg)"
-                                        value={input.endIndex}
-                                        onChange={val => {
-                                            setMultiItemInputs(prev => prev.map((inp, i) => i === idx ? { ...inp, endIndex: val } : inp));
-                                        }}
-                                        style={{ width: '100%', height: isMobile ? 56 : 44, fontSize: isMobile ? 24 : 18, fontWeight: 700 }}
-                                        controls={false}
-                                        inputMode="decimal"
-                                    />
-                                )}
-
-                                {!input.isStopped && (
-                                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                                        <InputNumber
-                                            placeholder="HS %"
-                                            value={input.efficiency}
-                                            min={0} max={200} controls={false}
-                                            style={{ width: 80 }}
-                                            onChange={val => {
-                                                setMultiItemInputs(prev => prev.map((inp, i) => i === idx ? { ...inp, efficiency: val } : inp));
-                                            }}
-                                        />
-                                        <Input
-                                            placeholder="Ghi chú..."
-                                            value={input.note}
-                                            style={{ flex: 1 }}
-                                            onChange={e => {
-                                                setMultiItemInputs(prev => prev.map((inp, i) => i === idx ? { ...inp, note: e.target.value } : inp));
-                                            }}
-                                        />
-                                    </div>
-                                )}
-
-                                {input.existingLogId && (
-                                    <div style={{ fontSize: 11, color: '#52c41a', marginTop: 6 }}>✓ Đã lưu trước đó</div>
-                                )}
-                            </div>
-                        ))}
-
-                        <div style={{
-                            textAlign: 'center', padding: '14px 12px', background: '#f6ffed',
-                            marginBottom: 14, borderRadius: 10, border: '1px solid #b7eb8f',
-                        }}>
-                            <div style={{ color: '#888', fontSize: 12 }}>Tổng sản lượng</div>
-                            <div style={{ fontSize: isMobile ? 38 : 28, fontWeight: 'bold', color: '#389e0d', lineHeight: 1.2 }}>
-                                {multiItemInputs.reduce((sum, inp) => sum + (inp.isStopped ? 0 : (inp.endIndex ?? 0)), 0)}
-                                <small style={{ fontSize: '45%', fontWeight: 'normal' }}> kg</small>
-                            </div>
-                        </div>
-
-                        <Row gutter={8}>
-                            <Col span={8}>
-                                <Button block style={{ height: isMobile ? 48 : undefined }} onClick={() => setIsModalOpen(false)}>Hủy</Button>
-                            </Col>
-                            <Col span={8}>
-                                <Button block icon={<SaveOutlined />} style={{ height: isMobile ? 48 : undefined }} onClick={() => handleSaveMultiItem(false)}>Lưu</Button>
-                            </Col>
-                            <Col span={8}>
-                                <Button block type="primary" icon={<ArrowRightOutlined />} style={{ height: isMobile ? 48 : undefined }} onClick={() => handleSaveMultiItem(true)}>Lưu & Tiếp</Button>
-                            </Col>
-                        </Row>
-                    </div>
-                ) : (
                 <Form form={form} layout="vertical">
                     <Form.Item name="itemId" hidden><Input /></Form.Item>
 
@@ -1433,7 +1056,6 @@ export default function DailyInputPage() {
                         </Col>
                     </Row>
                 </Form>
-                )}
             </Modal>
         </div>
     );

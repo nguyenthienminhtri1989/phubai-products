@@ -77,6 +77,7 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "sx.machines", pageGroup: "SẢN XUẤT", path: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
   { pageKey: "sx.daily-input", pageGroup: "SẢN XUẤT", path: "/production/daily-input", label: "Nhập sản lượng (Thẻ)", icon: <ProductOutlined /> },
   { pageKey: "sx.daily-input-grid", pageGroup: "SẢN XUẤT", path: "/production/daily-input-grid", label: "Nhập sản lượng (Bảng)", icon: <TableOutlined /> },
+  { pageKey: "sx.winding-input", pageGroup: "SẢN XUẤT", path: "/production/winding-input", label: "Nhập liệu đánh ống", icon: <ThunderboltOutlined /> },
   { pageKey: "sx.iot-import", pageGroup: "SẢN XUẤT", path: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> },
   { pageKey: "sx.line-setup", pageGroup: "SẢN XUẤT", path: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
   { pageKey: "sx.line-diagram", pageGroup: "SẢN XUẤT", path: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
@@ -163,7 +164,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "SẢN XUẤT",
     icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.iot-import",
+      "sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.winding-input", "sx.iot-import",
       "sx.line-setup", "sx.line-diagram", "sx.qr-machines",
       "sx.machine-stops", "sx.stop-history", "sx.maintenance",
       "benchmark.versions", "benchmark.capacity", "benchmark.comparison",

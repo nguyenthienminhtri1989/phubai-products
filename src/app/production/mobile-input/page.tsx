@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import {
-    Button, InputNumber, message, Tag, Spin, Result, Space,
+    Button, InputNumber, message, Tag, Spin, Result,
     Typography, Modal, Progress, Select
 } from "antd";
 import {
@@ -10,12 +10,13 @@ import {
     CheckCircleOutlined, WarningOutlined, StopOutlined,
     LeftOutlined, RightOutlined,
     ThunderboltOutlined, ScanOutlined, SwapOutlined, HomeOutlined,
-    CloseOutlined, EditOutlined, PlusOutlined
+    EditOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { calcOutput as calcOutputShared } from "@/lib/production-utils";
 
 const { Title, Text } = Typography;
 
@@ -119,12 +120,6 @@ function MobileInputContent() {
     const [itemChangeSaving, setItemChangeSaving] = useState(false);
     const [totalOutput3Ca, setTotalOutput3Ca] = useState(0);
 
-    // Multi-item support
-    const [machineAssignments, setMachineAssignments] = useState<Record<number, any[]>>({});
-    const [multiInputStates, setMultiInputStates] = useState<Record<number, Record<number, number | null>>>({});
-    const [addItemModalVisible, setAddItemModalVisible] = useState(false);
-    const [editAssignmentItem, setEditAssignmentItem] = useState<any>(null); // null = thêm mới, có giá trị = đổi
-
     // Quick change item (máy thường)
     const [quickChangeItemVisible, setQuickChangeItemVisible] = useState(false);
 
@@ -203,21 +198,9 @@ function MobileInputContent() {
                 if (res.ok) {
                     const all = await res.json();
                     const filtered = all
-                        .filter((m: Machine) => m.processId === selectedProcessId && m.isActive !== false)
+                        .filter((m: Machine) => m.processId === selectedProcessId && m.isActive !== false && !m.allowMultiItemPerShift)
                         .sort((a: Machine, b: Machine) => a.id - b.id);
                     setMachines(filtered);
-
-                    // Fetch assignments cho máy multi-item
-                    const newAssignments: Record<number, any[]> = {};
-                    await Promise.all(
-                        filtered
-                            .filter((m: Machine) => m.allowMultiItemPerShift)
-                            .map(async (m: Machine) => {
-                                const aRes = await fetch(`/api/machines/${m.id}/assignments`);
-                                if (aRes.ok) newAssignments[m.id] = await aRes.json();
-                            })
-                    );
-                    setMachineAssignments(newAssignments);
 
                     // Neu vao tu QR -> nhay toi may do
                     if (paramMachineId) {
@@ -249,32 +232,6 @@ function MobileInputContent() {
 
         for (const m of machineList) {
             try {
-                // Máy multi-item: load tất cả records theo itemId
-                if (m.allowMultiItemPerShift) {
-                    const res = await fetch(
-                        `/api/production/daily-input?machineId=${m.id}&date=${dateStr}&shift=${shift}&allItems=true`
-                    );
-                    let multiSaved = false;
-                    let multiTotal = 0;
-                    if (res.ok) {
-                        const logs: { itemId: number; finalOutput: number }[] = await res.json();
-                        if (Array.isArray(logs) && logs.length > 0) {
-                            multiSaved = true;
-                            const byItem: Record<number, number | null> = {};
-                            logs.forEach(l => { byItem[l.itemId] = l.finalOutput; multiTotal += l.finalOutput; });
-                            setMultiInputStates(prev => ({ ...prev, [m.id]: byItem }));
-                        }
-                    }
-                    newStates[m.id] = {
-                        startIndex: 0, endIndex: null,
-                        inputNE: m.currentNE || 30,
-                        isReset: false, isStopped: false,
-                        saved: multiSaved,
-                        output: multiTotal,
-                    };
-                    continue;
-                }
-
                 const res = await fetch(`/api/production/last-log?machineId=${m.id}&date=${dateStr}&shift=${shift}`);
                 const lastLog = await res.json();
 
@@ -331,27 +288,14 @@ function MobileInputContent() {
 
     const calculatedOutput = useMemo(() => {
         if (!currentMachine || !currentState) return 0;
-        if (currentState.isStopped) return 0;
-        const start = Number(currentState.startIndex) || 0;
-        const end = Number(currentState.endIndex);
-        if (currentState.endIndex === null || currentState.endIndex === undefined) return 0;
-
-        const delta = end - start;
-        const type = currentMachine.formulaType;
-        let result = 0;
-
-        if (type === 1) result = end;
-        else if (type === 2) result = delta;
-        else if (type === 3) {
-            const ne = Number(currentState.inputNE) || 1;
-            const spindles = currentMachine.spindleCount || 1;
-            const denom = ne * 1000 * 1.693;
-            if (denom !== 0) result = (delta * spindles) / denom;
-        } else if (type === 4) {
-            const ne = Number(currentState.inputNE) || 1;
-            if (ne !== 0) result = delta / ne;
-        }
-        return parseFloat(result.toFixed(2));
+        return calcOutputShared({
+            formulaType: currentMachine.formulaType,
+            startIndex: currentState.startIndex,
+            endIndex: currentState.endIndex,
+            spindleCount: currentMachine.spindleCount,
+            inputNE: currentState.inputNE,
+            isStopped: currentState.isStopped,
+        });
     }, [currentMachine, currentState]);
 
     const updateCurrentState = (field: string, value: any) => {
@@ -377,76 +321,6 @@ function MobileInputContent() {
     const handleSave = async (andNext: boolean = false) => {
         if (!currentMachine || !currentState) return;
 
-        // === Máy multi-item: lưu nhiều records ===
-        if (currentMachine.allowMultiItemPerShift) {
-            const assignments = machineAssignments[currentMachine.id] ?? [];
-            if (assignments.length === 0) {
-                message.warning("Máy này chưa có phân công mặt hàng. Vào trang Quản lý Máy để cấu hình.");
-                return;
-            }
-            const multiState = multiInputStates[currentMachine.id] ?? {};
-            const hasAny = assignments.some(a => (multiState[a.itemId] ?? 0) > 0);
-            if (!hasAny) {
-                message.warning("Chưa nhập sản lượng cho mặt hàng nào");
-                return;
-            }
-
-            setSaving(true);
-            try {
-                let totalSaved = 0;
-                for (const a of assignments) {
-                    const kg = multiState[a.itemId];
-                    if (kg == null || kg < 0) continue;
-                    const res = await fetch("/api/production/daily-input", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            recordDate: selectedDate.format("YYYY-MM-DD"),
-                            shift: selectedShift,
-                            machineId: currentMachine.id,
-                            itemId: a.itemId,
-                            startIndex: 0,
-                            endIndex: 0,
-                            inputNE: 0,
-                            finalOutput: kg,
-                            note: a.fromSpindle ? `Cọc ${a.fromSpindle}-${a.toSpindle}` : null,
-                        }),
-                    });
-                    if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.error || `Lỗi lưu mặt hàng ${a.item?.name}`);
-                    }
-                    totalSaved += kg;
-                }
-
-                setInputStates(prev => ({
-                    ...prev,
-                    [currentMachine.id]: { ...prev[currentMachine.id], saved: true, output: totalSaved },
-                }));
-
-                if (andNext && currentIndex < machines.length - 1) {
-                    setLastSavedOutput(totalSaved);
-                    setShowSuccess(true);
-                    setTimeout(() => {
-                        setShowSuccess(false);
-                        const nextIdx = currentIndex + 1;
-                        setCurrentIndex(nextIdx);
-                        setTimeout(() => { endIndexRef.current?.focus(); scrollMachineBarTo(nextIdx); }, 200);
-                    }, 800);
-                } else if (andNext && currentIndex >= machines.length - 1) {
-                    message.success("Đã nhập xong tất cả máy!");
-                } else {
-                    message.success("Đã lưu!");
-                }
-            } catch (e: any) {
-                message.error(e.message);
-            } finally {
-                setSaving(false);
-            }
-            return;
-        }
-
-        // === Máy thường ===
         if (calculatedOutput < 0 && !currentState.isStopped) {
             Modal.error({
                 title: "Sản lượng âm!",
@@ -536,37 +410,6 @@ function MobileInputContent() {
     // ============================
     // ĐỔI HÀNG GIỮA CA
     // ============================
-
-    // ============================
-    // XÓA ASSIGNMENT (MULTI-ITEM)
-    // ============================
-
-    const handleRemoveAssignment = async (machineId: number, itemId: number) => {
-        const existing = machineAssignments[machineId] ?? [];
-        const newAssignments = existing.filter((a) => a.itemId !== itemId);
-        setMachineAssignments((prev) => ({ ...prev, [machineId]: newAssignments }));
-
-        // Xóa giá trị đã nhập
-        setMultiInputStates((prev) => {
-            const ms = { ...prev[machineId] };
-            delete ms[itemId];
-            return { ...prev, [machineId]: ms };
-        });
-
-        // Lưu lên server
-        await fetch(`/api/machines/${machineId}/assignments`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                assignments: newAssignments.map((a, i) => ({
-                    itemId: a.itemId,
-                    fromSpindle: a.fromSpindle,
-                    toSpindle: a.toSpindle,
-                    sortOrder: i,
-                })),
-            }),
-        });
-    };
 
     const handleMobileItemChange = async () => {
         if (!currentMachine || !currentState) return;
@@ -949,7 +792,7 @@ function MobileInputContent() {
                     {currentMachine.spindleCount && <Tag style={{ fontSize: 12 }}>{currentMachine.spindleCount} coc</Tag>}
                     {currentState.saved && <Tag color="green" style={{ fontSize: 12 }}>Đã nhập</Tag>}
                 </div>
-                {currentMachine.currentItem && !currentMachine.allowMultiItemPerShift && (
+                {currentMachine.currentItem && (
                     <div style={{ display: "flex", gap: 8, marginTop: 4, justifyContent: "center" }}>
                         <Button
                             type="link"
@@ -1003,99 +846,6 @@ function MobileInputContent() {
 
             {/* FORM */}
             <div style={styles.formArea}>
-                {currentMachine.allowMultiItemPerShift ? (
-                    // === FORM MULTI-ITEM ===
-                    <div style={{ padding: "0 16px" }}>
-                        {(machineAssignments[currentMachine.id] ?? []).length === 0 ? (
-                            <div style={{ textAlign: "center", padding: 32, color: "#999" }}>
-                                Máy này chưa có phân công mặt hàng.<br />
-                                Vào trang <b>Quản lý Máy</b> để cấu hình.
-                            </div>
-                        ) : (
-                            <>
-                                {(machineAssignments[currentMachine.id] ?? []).map((a: any) => (
-                                    <div
-                                        key={a.itemId}
-                                        style={{
-                                            marginBottom: 16, padding: 16,
-                                            background: "#f6f8fa", borderRadius: 12,
-                                            border: "1px solid #e8e8e8",
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                fontWeight: 700,
-                                                fontSize: 16,
-                                                marginBottom: 8,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "space-between",
-                                            }}
-                                        >
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                                {a.item?.name}
-                                                {a.fromSpindle != null && (
-                                                    <Tag>
-                                                        Cọc {a.fromSpindle}–{a.toSpindle}
-                                                    </Tag>
-                                                )}
-                                            </div>
-                                            <Space size={4}>
-                                                <Button
-                                                    type="text"
-                                                    size="small"
-                                                    icon={<SwapOutlined />}
-                                                    onClick={() => {
-                                                        setEditAssignmentItem(a);
-                                                        setAddItemModalVisible(true);
-                                                    }}
-                                                    style={{ color: "#d46b08", fontSize: 11 }}
-                                                />
-                                                <Button
-                                                    type="text"
-                                                    size="small"
-                                                    danger
-                                                    icon={<CloseOutlined />}
-                                                    onClick={() => handleRemoveAssignment(currentMachine.id, a.itemId)}
-                                                    style={{ fontSize: 11 }}
-                                                />
-                                            </Space>
-                                        </div>
-                                        <InputNumber
-                                            value={multiInputStates[currentMachine.id]?.[a.itemId] ?? undefined}
-                                            onChange={(v) =>
-                                                setMultiInputStates(prev => ({
-                                                    ...prev,
-                                                    [currentMachine.id]: { ...prev[currentMachine.id], [a.itemId]: v },
-                                                }))
-                                            }
-                                            placeholder="Sản lượng (kg)"
-                                            style={{ width: "100%", height: 56, fontSize: 22 }}
-                                            controls={false}
-                                            inputMode="decimal"
-                                            min={0}
-                                            addonAfter="kg"
-                                        />
-                                    </div>
-                                ))}
-                                <Button
-                                    type="dashed"
-                                    block
-                                    icon={<PlusOutlined />}
-                                    onClick={() => {
-                                        setEditAssignmentItem(null);
-                                        setAddItemModalVisible(true);
-                                    }}
-                                    style={{ height: 48, fontSize: 15, borderRadius: 12, marginTop: 8 }}
-                                >
-                                    + Thêm mặt hàng
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                ) : (
-                    // === FORM MÁY THƯỜNG ===
-                    <>
                 {/* Switches */}
                 <div style={styles.switchRow}>
                     <div
@@ -1181,8 +931,6 @@ function MobileInputContent() {
                         <span style={{ fontSize: 18, fontWeight: 500, marginLeft: 4 }}>kg</span>
                     </div>
                 </div>
-                    </>
-                )}
             </div>
 
             {/* NUT BAM */}
@@ -1214,81 +962,7 @@ function MobileInputContent() {
             {/* MODAL ĐỔI NGÀY / CA */}
             {dateShiftModal}
 
-            {/* MODAL THÊM / ĐỔI MẶT HÀNG (MULTI-ITEM) */}
-            <Modal
-                open={addItemModalVisible}
-                onCancel={() => {
-                    setAddItemModalVisible(false);
-                    setEditAssignmentItem(null);
-                }}
-                title={editAssignmentItem ? "Đổi mặt hàng" : "Thêm mặt hàng"}
-                centered
-                footer={null}
-            >
-                <Select
-                    showSearch
-                    filterOption={(input, opt) =>
-                        (opt?.label as string)?.toLowerCase().includes(input.toLowerCase())
-                    }
-                    style={{ width: "100%", marginBottom: 16 }}
-                    placeholder="Chọn mặt hàng..."
-                    options={items.map((i) => ({ label: i.name, value: i.id }))}
-                    onChange={async (itemId) => {
-                        if (!currentMachine) return;
-                        const existingAssignments = machineAssignments[currentMachine.id] ?? [];
-
-                        let newAssignments;
-                        if (editAssignmentItem) {
-                            // Đổi: thay itemId cũ bằng mới
-                            newAssignments = existingAssignments.map((a) =>
-                                a.itemId === editAssignmentItem.itemId
-                                    ? { ...a, itemId, item: items.find((i) => i.id === itemId) }
-                                    : a,
-                            );
-                        } else {
-                            // Thêm mới
-                            newAssignments = [
-                                ...existingAssignments,
-                                {
-                                    itemId,
-                                    item: items.find((i) => i.id === itemId),
-                                    fromSpindle: null,
-                                    toSpindle: null,
-                                    sortOrder: existingAssignments.length,
-                                },
-                            ];
-                        }
-
-                        // Cập nhật local
-                        setMachineAssignments((prev) => ({
-                            ...prev,
-                            [currentMachine.id]: newAssignments,
-                        }));
-
-                        // Lưu lên server
-                        await fetch(`/api/machines/${currentMachine.id}/assignments`, {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                assignments: newAssignments.map((a, i) => ({
-                                    itemId: a.itemId,
-                                    fromSpindle: a.fromSpindle,
-                                    toSpindle: a.toSpindle,
-                                    sortOrder: i,
-                                })),
-                            }),
-                        });
-
-                        setAddItemModalVisible(false);
-                        setEditAssignmentItem(null);
-                        message.success(
-                            editAssignmentItem ? "Đã đổi mặt hàng" : "Đã thêm mặt hàng",
-                        );
-                    }}
-                />
-            </Modal>
-
-            {/* MODAL ĐỔI MẶT HÀNG NHANH (MÁY THƯỜNG) */}
+            {/* MODAL ĐỔI MẶT HÀNG NHANH */}
             <Modal
                 open={quickChangeItemVisible}
                 onCancel={() => setQuickChangeItemVisible(false)}

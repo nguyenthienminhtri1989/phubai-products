@@ -20,14 +20,21 @@ export async function GET(request: Request) {
       include: {
         currentItem: true,
         currentLot: { select: { id: true, lotNumber: true } },
-        // Kỹ thuật: Include luôn log của Ca/Ngày đang chọn
+        itemAssignments: {
+          where: { isActive: true },
+          include: {
+            item: { select: { id: true, name: true } },
+            lot: { select: { id: true, lotNumber: true } },
+          },
+          orderBy: { sortOrder: "asc" },
+        },
         productionLogs: {
           where: {
             recordDate: targetDate,
             shift: parseInt(shift),
           },
           include: {
-            item: { select: { id: true, name: true } }, // Lấy tên mặt hàng thực tế của log
+            item: { select: { id: true, name: true } },
           },
           orderBy: { id: "asc" },
         },

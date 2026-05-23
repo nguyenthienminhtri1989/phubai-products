@@ -17,7 +17,12 @@ export async function POST(req: Request) {
     // Còn update 1 máy (từ trang nhập sản lượng) thì ai cũng được
     const _batchRole = (session.user as any)?.userRole as string | undefined;
     const isAdmin = _batchRole === "ADMIN";
-    const isManager = ["ADMIN","DIRECTOR","FACTORY_MANAGER"].includes(_batchRole ?? "");
+    const isManager = [
+      "ADMIN",
+      "DIRECTOR",
+      "FACTORY_MANAGER",
+      "STATISTICIAN",
+    ].includes(_batchRole ?? "");
     if (machineIds.length > 1 && !isAdmin && !isManager) {
       return NextResponse.json(
         { error: "Chỉ Admin hoặc Manager mới được điều phối hàng loạt" },

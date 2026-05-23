@@ -129,14 +129,20 @@ export async function POST(request: Request) {
       create: { ...dataToSave, lotId },
     });
 
-    // 5. Cập nhật thông tin máy
-    await prisma.machine.update({
-      where: { id: machineId },
-      data: {
-        currentItemId: itemId,
-        ...(inputNE ? { currentNE: parseFloat(inputNE) } : {}),
-      },
-    });
+    // 5. Cập nhật thông tin máy — chỉ khi nhập cho ngày hôm nay
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const recordDay = new Date(dateObj);
+    recordDay.setHours(0, 0, 0, 0);
+    if (recordDay.getTime() === today.getTime()) {
+      await prisma.machine.update({
+        where: { id: machineId },
+        data: {
+          currentItemId: itemId,
+          ...(inputNE ? { currentNE: parseFloat(inputNE) } : {}),
+        },
+      });
+    }
 
     // 6. Allocation engine đã chuyển sang đọc từ KdDailyInput.
     //    Phòng KD nhập liệu qua /api/kd-daily-input sẽ tự động gọi runAllocationKD.

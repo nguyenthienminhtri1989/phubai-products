@@ -3150,3 +3150,53 @@ src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — th�
 ### Known limitations
 - Tab **So sánh KH/TH** (`ScheduleComparisonDashboard`) vẫn self-fetch `/actual` không có processIds → hiển thị đúng khi có segments, trống khi không có segments (chấp nhận được vì tab đó cần KH để so sánh)
 - Process selector UI dùng native HTML buttons thay vì Ant Design Select để tránh thêm import
+
+---
+
+## SẢN XUẤT — Tách trang nhập liệu đánh ống & Tối ưu code nhập sản lượng
+
+**Status:** ✅ Completed 2026-05-23
+
+### What was built
+
+Tạo trang nhập liệu riêng cho máy đánh ống multi-item (`/production/winding-input`), extract shared logic (formulas, types, hooks) thành modules chung, loại bỏ toàn bộ code multi-item khỏi 3 trang nhập cũ (daily-input, daily-input-grid, mobile-input), fix bug `currentItemId` bị ghi đè khi sửa log ngày cũ.
+
+### Files created/modified
+
+```
+src/lib/production-utils.ts              — Shared: calcOutput(), detectShiftAndDate(), YARN_CONSTANT
+src/types/production.ts                  — Shared types: MachineForInput, ProductionLogEntry, MachineAssignment, etc.
+src/hooks/useProductionMetadata.ts       — Hook fetch factories/processes/items/lots dùng chung
+src/app/production/winding-input/page.tsx — Trang nhập liệu đánh ống mới (multi-item machines only)
+src/app/production/daily-input-grid/page.tsx — Xóa multi-item code, import shared utils, filter !allowMultiItemPerShift
+src/app/production/mobile-input/page.tsx    — Xóa multi-item code, import shared calcOutput, filter !allowMultiItemPerShift
+src/app/production/daily-input/page.tsx     — Xóa multi-item code, import shared calcOutput, filter !allowMultiItemPerShift
+src/app/api/production/daily-status/route.ts — Include itemAssignments trong response (tránh N+1)
+src/app/api/production/daily-input/route.ts  — Fix bug: chỉ update currentItemId khi recordDate = today
+src/components/AdminLayout.tsx              — Thêm menu "Nhập liệu đánh ống" vào sidebar
+prisma/fix-data.js                          — Thêm PageRegistry entry sx.winding-input
+```
+
+### Key business logic implemented
+
+- Máy có `allowMultiItemPerShift = true` chỉ xuất hiện ở trang đánh ống mới, không còn ở 3 trang cũ
+- Trang đánh ống dùng `MachineItemAssignment` (included in daily-status API) để hiển thị items, hỗ trợ thêm hàng giữa ca
+- `calcOutput()` shared: 4 formulaType (1=direct kg, 2=delta, 3=spindle+NE, 4=NE), thay thế 3 implementation trùng lặp
+- `detectShiftAndDate()` shared: Ca 1=13-21h, Ca 2=21-5h (date -1 if past midnight), Ca 3=5-13h (date -1)
+- Fix bug: `currentItemId` chỉ update khi `recordDate` = today, tránh ghi đè khi sửa log cũ
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/production/daily-status?processId=X&date=Y&shift=Z | Trả về machines + todayLog + itemAssignments (mới) |
+| POST | /api/production/daily-input | Upsert production log (fix: chỉ update currentItemId khi nhập ngày hôm nay) |
+
+### Known limitations
+
+- Trang đánh ống chưa có riêng trên mobile — user mobile dùng trang desktop responsive
+- Shared hook `useProductionMetadata` chỉ được dùng ở daily-input-grid; 2 trang còn lại (mobile-input, daily-input) vẫn fetch metadata theo cách riêng
+
+### Data notes
+
+- PageRegistry entry: `sx.winding-input` với sortOrder 103, path `/production/winding-input`
