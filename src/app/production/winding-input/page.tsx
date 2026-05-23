@@ -2,11 +2,27 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
-  Table, Button, Select, DatePicker, InputNumber, Input, Space, Tag,
-  message, Statistic, Spin, Popconfirm, Divider,
+  Table,
+  Button,
+  Select,
+  DatePicker,
+  InputNumber,
+  Input,
+  Space,
+  Tag,
+  message,
+  Statistic,
+  Spin,
+  Popconfirm,
+  Divider,
+  Tooltip,
 } from "antd";
 import {
-  SaveOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined,
+  SaveOutlined,
+  ReloadOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -14,15 +30,20 @@ import { useSession } from "next-auth/react";
 import { detectShiftAndDate } from "@/lib/production-utils";
 import { useProductionMetadata } from "@/hooks/useProductionMetadata";
 import type {
-  Factory, Process, ItemOption, LotOption, MachineAssignment,
-  MachineForInput, ProductionLogEntry,
+  Factory,
+  Process,
+  ItemOption,
+  LotOption,
+  MachineAssignment,
+  MachineForInput,
+  ProductionLogEntry,
 } from "@/types/production";
 
 // ============================================================
 // Types nội bộ trang
 // ============================================================
 interface WindingRow {
-  _uid: string; // Unique key cho mỗi row
+  _uid: string;       // Unique key cho mỗi row
   machineId: number;
   machineName: string;
   itemId: number;
@@ -33,7 +54,9 @@ interface WindingRow {
   note: string;
   isDirty: boolean;
   existingLogId?: number;
-  isExtra?: boolean; // Dòng thêm giữa ca (không có trong assignment)
+  isExtra?: boolean;      // Dòng thêm giữa ca (không có trong assignment)
+  originalItemId?: number; // Item gốc từ assignment — dùng để detect thay đổi
+  editMode?: boolean;      // Đang trong chế độ sửa mặt hàng
 }
 
 let _uidCounter = 0;
@@ -44,18 +67,34 @@ const nextUid = () => `wr-${++_uidCounter}`;
 // ============================================================
 export default function WindingInputPage() {
   const { data: session } = useSession();
-  const { factories, processes, items, lots, loading: metaLoading } = useProductionMetadata();
+  const {
+    factories,
+    processes,
+    items,
+    lots,
+    loading: metaLoading,
+  } = useProductionMetadata();
 
   const su = session?.user as any;
   const isAdmin = su?.role === "ADMIN";
   const isReadOnly = !isAdmin && su?.accessLevel === "READ_ONLY";
-  const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
-  const canDelete = isAdmin || (su?.userRole ? ALLOWED_DELETE_ROLES.includes(su.userRole) : false);
+  const ALLOWED_DELETE_ROLES = [
+    "ADMIN",
+    "DIRECTOR",
+    "FACTORY_MANAGER",
+    "STATISTICIAN",
+  ];
+  const canDelete =
+    isAdmin ||
+    (su?.userRole ? ALLOWED_DELETE_ROLES.includes(su.userRole) : false);
 
   // Filter states
   const [factoryId, setFactoryId] = useState<number | undefined>();
   const [processId, setProcessId] = useState<number | undefined>();
-  const { shift: initShift, date: initDate } = useMemo(() => detectShiftAndDate(), []);
+  const { shift: initShift, date: initDate } = useMemo(
+    () => detectShiftAndDate(),
+    [],
+  );
   const [date, setDate] = useState<Dayjs>(initDate);
   const [shift, setShift] = useState<number>(initShift);
 
@@ -65,19 +104,21 @@ export default function WindingInputPage() {
   const [saving, setSaving] = useState(false);
   const [machinesRaw, setMachinesRaw] = useState<MachineForInput[]>([]);
 
-  // Processes thuộc factory đã chọn, chỉ hiện processes có máy multi-item
+  // Processes thuộc factory đã chọn
   const filteredProcesses = useMemo(() => {
     if (!factoryId) return [];
-    return processes.filter(p => p.factoryId === factoryId);
+    return processes.filter((p) => p.factoryId === factoryId);
   }, [processes, factoryId]);
 
   // Auto chọn factory/process nếu user chỉ quản lý 1
   useEffect(() => {
     if (isAdmin || processes.length === 0) return;
     const rawIds = su?.processIds ?? [];
-    const userProcessIds: number[] = Array.isArray(rawIds) ? rawIds.map(Number) : [];
+    const userProcessIds: number[] = Array.isArray(rawIds)
+      ? rawIds.map(Number)
+      : [];
     if (userProcessIds.length === 1) {
-      const proc = processes.find(p => userProcessIds.includes(p.id));
+      const proc = processes.find((p) => userProcessIds.includes(p.id));
       if (proc) {
         setFactoryId(proc.factoryId);
         setProcessId(proc.id);
@@ -89,18 +130,21 @@ export default function WindingInputPage() {
   // Load data
   // ============================================================
   const handleLoad = useCallback(async () => {
-    if (!processId) { message.warning("Chọn công đoạn trước"); return; }
+    if (!processId) {
+      message.warning("Chọn công đoạn trước");
+      return;
+    }
     setFetching(true);
     try {
       const dateStr = date.format("YYYY-MM-DD");
       const res = await fetch(
-        `/api/production/daily-status?processId=${processId}&date=${dateStr}&shift=${shift}`
+        `/api/production/daily-status?processId=${processId}&date=${dateStr}&shift=${shift}`,
       );
       if (!res.ok) throw new Error();
       const allMachines: MachineForInput[] = await res.json();
 
       // Chỉ lấy máy multi-item
-      const multiMachines = allMachines.filter(m => m.allowMultiItemPerShift);
+      const multiMachines = allMachines.filter((m) => m.allowMultiItemPerShift);
       setMachinesRaw(multiMachines);
 
       const newRows: WindingRow[] = [];
@@ -126,43 +170,46 @@ export default function WindingInputPage() {
           continue;
         }
 
-        // Tạo rows từ assignments
-        const addedItemIds = new Set<number>();
-
-        for (const a of assignments) {
-          const log = todayLogs.find(l => l.itemId === a.itemId);
-          addedItemIds.add(a.itemId);
-          newRows.push({
-            _uid: nextUid(),
-            machineId: m.id,
-            machineName: m.name,
-            itemId: a.itemId,
-            itemName: a.item.name,
-            lotId: a.lotId ?? a.lot?.id ?? null,
-            lotNumber: a.lot?.lotNumber ?? null,
-            outputKg: log ? (log.finalOutput ?? null) : null,
-            note: log?.note || "",
-            isDirty: false,
-            existingLogId: log?.id,
-          });
-        }
-
-        // Logs cho items không có trong assignment (thêm giữa ca trước đó)
-        for (const log of todayLogs) {
-          if (!addedItemIds.has(log.itemId)) {
+        if (todayLogs.length > 0) {
+          // ĐÃ CÓ LOG → Build từ logs (ưu tiên dữ liệu lịch sử thực tế)
+          // Không dùng assignments làm cấu trúc chính → tránh hiện sai item của ca khác
+          for (const log of todayLogs) {
+            // Tìm assignment tương ứng (nếu có) để biết dòng này có thể edit item không
+            const assignment = assignments.find((a) => a.itemId === log.itemId);
             newRows.push({
               _uid: nextUid(),
               machineId: m.id,
               machineName: m.name,
               itemId: log.itemId,
-              itemName: log.item?.name || `Item ${log.itemId}`,
+              itemName: log.item?.name || assignment?.item.name || `Item ${log.itemId}`,
               lotId: log.lotId ?? null,
               lotNumber: null,
               outputKg: log.finalOutput ?? null,
               note: log.note || "",
               isDirty: false,
               existingLogId: log.id,
-              isExtra: true,
+              // Chỉ set originalItemId nếu item này vẫn còn trong assignment → cho phép ✏️
+              originalItemId: assignment ? log.itemId : undefined,
+              // isExtra nếu item không còn trong assignment hiện tại
+              isExtra: !assignment,
+            });
+          }
+          // KHÔNG add unlogged assignment items → tránh hiện item của ca khác
+        } else {
+          // CHƯA CÓ LOG → Build từ assignments (template cho ca mới)
+          for (const a of assignments) {
+            newRows.push({
+              _uid: nextUid(),
+              machineId: m.id,
+              machineName: m.name,
+              itemId: a.itemId,
+              itemName: a.item.name,
+              lotId: a.lotId ?? a.lot?.id ?? null,
+              lotNumber: a.lot?.lotNumber ?? null,
+              outputKg: null,
+              note: "",
+              isDirty: false,
+              originalItemId: a.itemId,
             });
           }
         }
@@ -185,15 +232,42 @@ export default function WindingInputPage() {
   // Row editing
   // ============================================================
   const updateRow = (uid: string, field: keyof WindingRow, value: any) => {
-    setRows(prev => prev.map(r =>
-      r._uid === uid
-        ? { ...r, [field]: value, isDirty: true }
-        : r
-    ));
+    setRows((prev) =>
+      prev.map((r) =>
+        r._uid === uid ? { ...r, [field]: value, isDirty: true } : r,
+      ),
+    );
+  };
+
+  // Bật chế độ sửa mặt hàng cho 1 dòng
+  const enableEditMode = (uid: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r._uid === uid ? { ...r, editMode: true } : r)),
+    );
+  };
+
+  // Đổi mặt hàng assignment: cập nhật itemId + itemName, xóa lô (vì item đổi thì lô đổi)
+  const changeRowItem = (uid: string, newItemId: number) => {
+    const item = items.find((i) => i.id === newItemId);
+    setRows((prev) =>
+      prev.map((r) =>
+        r._uid === uid
+          ? {
+              ...r,
+              itemId: newItemId,
+              itemName: item?.name || "",
+              lotId: null,
+              lotNumber: null,
+              isDirty: true,
+              editMode: false,
+            }
+          : r,
+      ),
+    );
   };
 
   const addExtraRow = (machineId: number) => {
-    const machine = machinesRaw.find(m => m.id === machineId);
+    const machine = machinesRaw.find((m) => m.id === machineId);
     if (!machine) return;
     const newRow: WindingRow = {
       _uid: nextUid(),
@@ -209,8 +283,11 @@ export default function WindingInputPage() {
       isExtra: true,
     };
     // Chèn ngay sau dòng cuối cùng của máy này (giữ rows liền kề cho rowSpan)
-    setRows(prev => {
-      const lastIdx = prev.reduce((acc, r, i) => r.machineId === machineId ? i : acc, -1);
+    setRows((prev) => {
+      const lastIdx = prev.reduce(
+        (acc, r, i) => (r.machineId === machineId ? i : acc),
+        -1,
+      );
       if (lastIdx === -1) return [...prev, newRow];
       const copy = [...prev];
       copy.splice(lastIdx + 1, 0, newRow);
@@ -219,15 +296,18 @@ export default function WindingInputPage() {
   };
 
   const removeExtraRow = (uid: string) => {
-    setRows(prev => prev.filter(r => r._uid !== uid));
+    setRows((prev) => prev.filter((r) => r._uid !== uid));
   };
 
   // ============================================================
-  // Save
+  // Save — hỗ trợ đổi mặt hàng assignment
   // ============================================================
   const handleSave = async () => {
-    const dirtyRows = rows.filter(r => r.isDirty && r.itemId > 0);
-    if (dirtyRows.length === 0) { message.info("Không có thay đổi"); return; }
+    const dirtyRows = rows.filter((r) => r.isDirty && r.itemId > 0);
+    if (dirtyRows.length === 0) {
+      message.info("Không có thay đổi");
+      return;
+    }
 
     setSaving(true);
     let savedCount = 0;
@@ -235,6 +315,17 @@ export default function WindingInputPage() {
 
     for (const r of dirtyRows) {
       try {
+        const itemChanged =
+          r.originalItemId !== undefined && r.originalItemId !== r.itemId;
+
+        // Bước 1: Nếu item thay đổi và đã có log cũ → xóa log cũ trước
+        if (itemChanged && r.existingLogId) {
+          await fetch(`/api/production/daily-input?id=${r.existingLogId}`, {
+            method: "DELETE",
+          });
+        }
+
+        // Bước 2: Tạo / cập nhật log mới với item mới (hoặc item cũ nếu không đổi)
         const res = await fetch("/api/production/daily-input", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -252,8 +343,35 @@ export default function WindingInputPage() {
             lotId: r.lotId,
           }),
         });
+
         if (res.ok) {
           savedCount++;
+
+          // Bước 3: Nếu item thay đổi → cập nhật MachineItemAssignment
+          if (itemChanged) {
+            const patchRes = await fetch(
+              `/api/machines/${r.machineId}/assignments`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  oldItemId: r.originalItemId,
+                  newItemId: r.itemId,
+                }),
+              },
+            );
+            if (!patchRes.ok) {
+              const errData = await patchRes.json().catch(() => ({}));
+              console.warn(
+                `Assignment update failed (machineId=${r.machineId}):`,
+                errData,
+              );
+              // Log đã được lưu rồi, chỉ cảnh báo về assignment
+              message.warning(
+                `Đã lưu sản lượng nhưng không thể cập nhật điều phối: ${errData.error || ""}`,
+              );
+            }
+          }
         } else {
           errorCount++;
           const errData = await res.json().catch(() => ({}));
@@ -268,7 +386,7 @@ export default function WindingInputPage() {
     if (errorCount > 0) message.error(`Lỗi ${errorCount} dòng`);
 
     setSaving(false);
-    handleLoad(); // Reload
+    handleLoad(); // Reload để sync lại state
   };
 
   // ============================================================
@@ -276,7 +394,9 @@ export default function WindingInputPage() {
   // ============================================================
   const handleDelete = async (logId: number) => {
     try {
-      const res = await fetch(`/api/production/daily-input?id=${logId}`, { method: "DELETE" });
+      const res = await fetch(`/api/production/daily-input?id=${logId}`, {
+        method: "DELETE",
+      });
       if (res.ok) {
         message.success("Đã xóa");
         handleLoad();
@@ -291,35 +411,39 @@ export default function WindingInputPage() {
   // ============================================================
   // Statistics
   // ============================================================
-  const totalOutput = useMemo(() =>
-    rows.reduce((sum, r) => sum + (r.outputKg || 0), 0), [rows]
+  const totalOutput = useMemo(
+    () => rows.reduce((sum, r) => sum + (r.outputKg || 0), 0),
+    [rows],
   );
 
-  const dirtyCount = useMemo(() =>
-    rows.filter(r => r.isDirty).length, [rows]
+  const dirtyCount = useMemo(
+    () => rows.filter((r) => r.isDirty).length,
+    [rows],
   );
 
   // Group rows by machineId for display
   const machineIds = useMemo(() => {
     const ids: number[] = [];
-    rows.forEach(r => { if (!ids.includes(r.machineId)) ids.push(r.machineId); });
+    rows.forEach((r) => {
+      if (!ids.includes(r.machineId)) ids.push(r.machineId);
+    });
     return ids;
   }, [rows]);
 
   // Màu xen kẽ theo máy (chẵn/lẻ trong danh sách)
   const machineColorIndex = useMemo(() => {
     const map: Record<number, number> = {};
-    machineIds.forEach((id, idx) => { map[id] = idx; });
+    machineIds.forEach((id, idx) => {
+      map[id] = idx;
+    });
     return map;
   }, [machineIds]);
-
-  const ROW_COLORS = ["#ffffff", "#f0f7ff"]; // trắng / xanh nhạt xen kẽ
 
   // ============================================================
   // Lots filtered by item
   // ============================================================
   const getLotsForItem = (itemId: number) =>
-    lots.filter(l => l.item?.id === itemId || !l.item);
+    lots.filter((l) => l.item?.id === itemId || !l.item);
 
   // ============================================================
   // Render
@@ -328,11 +452,14 @@ export default function WindingInputPage() {
     {
       title: "Máy",
       dataIndex: "machineName",
-      width: 100,
+      width: 110,
       render: (val: string, record: WindingRow, index: number) => {
-        // Merge cell cho cùng máy
-        const rowsOfMachine = rows.filter(r => r.machineId === record.machineId);
-        const firstIndex = rows.findIndex(r => r.machineId === record.machineId);
+        const rowsOfMachine = rows.filter(
+          (r) => r.machineId === record.machineId,
+        );
+        const firstIndex = rows.findIndex(
+          (r) => r.machineId === record.machineId,
+        );
         if (index === firstIndex) {
           return {
             children: (
@@ -346,7 +473,7 @@ export default function WindingInputPage() {
                     onClick={() => addExtraRow(record.machineId)}
                     disabled={isReadOnly}
                   >
-                    Thêm hàng
+                    Chuyển đổi giữa ca
                   </Button>
                 </div>
               </div>
@@ -360,8 +487,9 @@ export default function WindingInputPage() {
     {
       title: "Mặt hàng",
       dataIndex: "itemName",
-      width: 180,
+      width: 200,
       render: (val: string, record: WindingRow) => {
+        // Dòng thêm mới chưa chọn item → Select để chọn
         if (record.isExtra && record.itemId === 0) {
           return (
             <Select
@@ -371,27 +499,101 @@ export default function WindingInputPage() {
               showSearch
               optionFilterProp="children"
               onChange={(v: number) => {
-                const item = items.find(i => i.id === v);
-                // Check trùng itemId cho cùng máy
-                const existing = rows.find(r => r.machineId === record.machineId && r.itemId === v && r._uid !== record._uid);
+                const item = items.find((i) => i.id === v);
+                const existing = rows.find(
+                  (r) =>
+                    r.machineId === record.machineId &&
+                    r.itemId === v &&
+                    r._uid !== record._uid,
+                );
                 if (existing) {
                   message.warning("Mặt hàng đã có trong danh sách máy này");
                   return;
                 }
-                setRows(prev => prev.map(r =>
-                  r._uid === record._uid
-                    ? { ...r, itemId: v, itemName: item?.name || "", isDirty: true }
-                    : r
-                ));
+                setRows((prev) =>
+                  prev.map((r) =>
+                    r._uid === record._uid
+                      ? { ...r, itemId: v, itemName: item?.name || "", isDirty: true }
+                      : r,
+                  ),
+                );
               }}
             >
-              {items.map(i => (
-                <Select.Option key={i.id} value={i.id}>{i.name}</Select.Option>
+              {items.map((i) => (
+                <Select.Option key={i.id} value={i.id}>
+                  {i.name}
+                </Select.Option>
               ))}
             </Select>
           );
         }
-        return <Tag color="blue">{val}</Tag>;
+
+        // Đang trong chế độ sửa mặt hàng assignment
+        if (record.editMode) {
+          return (
+            <Select
+              size="small"
+              style={{ width: "100%" }}
+              defaultValue={record.itemId}
+              showSearch
+              optionFilterProp="children"
+              autoFocus
+              onChange={(v: number) => {
+                // Kiểm tra trùng với dòng khác của cùng máy
+                const existing = rows.find(
+                  (r) =>
+                    r.machineId === record.machineId &&
+                    r.itemId === v &&
+                    r._uid !== record._uid,
+                );
+                if (existing) {
+                  message.warning("Mặt hàng đã có trong danh sách máy này");
+                  return;
+                }
+                changeRowItem(record._uid, v);
+              }}
+              onBlur={() =>
+                setRows((prev) =>
+                  prev.map((r) =>
+                    r._uid === record._uid ? { ...r, editMode: false } : r,
+                  ),
+                )
+              }
+            >
+              {items.map((i) => (
+                <Select.Option key={i.id} value={i.id}>
+                  {i.name}
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        }
+
+        // Hiển thị bình thường + nút ✏️ sửa (chỉ cho dòng từ assignment)
+        const itemChanged =
+          record.originalItemId !== undefined &&
+          record.originalItemId !== record.itemId;
+        return (
+          <Space size={4}>
+            <Tag color={itemChanged ? "orange" : "blue"}>{val}</Tag>
+            {!record.isExtra && !isReadOnly && (
+              <Tooltip title="Đổi mặt hàng">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => enableEditMode(record._uid)}
+                  style={{ color: "#888", padding: "0 2px" }}
+                />
+              </Tooltip>
+            )}
+            {itemChanged && (
+              <Tag color="orange" style={{ fontSize: 10 }}>
+                Đã đổi
+              </Tag>
+            )}
+          </Space>
+        );
       },
     },
     {
@@ -409,16 +611,25 @@ export default function WindingInputPage() {
             placeholder="Chọn lô"
             disabled={isReadOnly}
             onChange={(v: number | undefined) => {
-              const lot = lots.find(l => l.id === v);
-              setRows(prev => prev.map(r =>
-                r._uid === record._uid
-                  ? { ...r, lotNumber: lot?.lotNumber ?? null, lotId: v ?? null, isDirty: true }
-                  : r
-              ));
+              const lot = lots.find((l) => l.id === v);
+              setRows((prev) =>
+                prev.map((r) =>
+                  r._uid === record._uid
+                    ? {
+                        ...r,
+                        lotNumber: lot?.lotNumber ?? null,
+                        lotId: v ?? null,
+                        isDirty: true,
+                      }
+                    : r,
+                ),
+              );
             }}
           >
-            {lotOptions.map(l => (
-              <Select.Option key={l.id} value={l.id}>{l.lotNumber}</Select.Option>
+            {lotOptions.map((l) => (
+              <Select.Option key={l.id} value={l.id}>
+                {l.lotNumber}
+              </Select.Option>
             ))}
           </Select>
         );
@@ -459,7 +670,9 @@ export default function WindingInputPage() {
         if (record.isExtra && record.itemId === 0) {
           return (
             <Button
-              size="small" type="text" danger
+              size="small"
+              type="text"
+              danger
               icon={<DeleteOutlined />}
               onClick={() => removeExtraRow(record._uid)}
             />
@@ -471,7 +684,12 @@ export default function WindingInputPage() {
               title="Xóa bản ghi này?"
               onConfirm={() => handleDelete(record.existingLogId!)}
             >
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+              <Button
+                size="small"
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+              />
             </Popconfirm>
           );
         }
@@ -490,10 +708,15 @@ export default function WindingInputPage() {
           style={{ width: 160 }}
           placeholder="Nhà máy"
           value={factoryId}
-          onChange={(v) => { setFactoryId(v); setProcessId(undefined); }}
+          onChange={(v) => {
+            setFactoryId(v);
+            setProcessId(undefined);
+          }}
         >
-          {factories.map(f => (
-            <Select.Option key={f.id} value={f.id}>{f.name}</Select.Option>
+          {factories.map((f) => (
+            <Select.Option key={f.id} value={f.id}>
+              {f.name}
+            </Select.Option>
           ))}
         </Select>
 
@@ -504,8 +727,10 @@ export default function WindingInputPage() {
           onChange={(v) => setProcessId(v)}
           disabled={!factoryId}
         >
-          {filteredProcesses.map(p => (
-            <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+          {filteredProcesses.map((p) => (
+            <Select.Option key={p.id} value={p.id}>
+              {p.name}
+            </Select.Option>
           ))}
         </Select>
 
@@ -534,9 +759,7 @@ export default function WindingInputPage() {
       <Space style={{ marginBottom: 12 }} size="large">
         <Statistic title="Tổng SL (kg)" value={totalOutput} precision={0} />
         <Statistic title="Số máy" value={machineIds.length} />
-        {dirtyCount > 0 && (
-          <Tag color="orange">{dirtyCount} dòng chưa lưu</Tag>
-        )}
+        {dirtyCount > 0 && <Tag color="orange">{dirtyCount} dòng chưa lưu</Tag>}
       </Space>
 
       <Divider style={{ margin: "8px 0" }} />
@@ -568,13 +791,21 @@ export default function WindingInputPage() {
             const colorIdx = machineColorIndex[r.machineId] ?? 0;
             return colorIdx % 2 === 0 ? "winding-row-even" : "winding-row-odd";
           }}
-          locale={{ emptyText: processId ? "Không có máy đánh ống multi-item" : "Chọn nhà máy và công đoạn" }}
+          locale={{
+            emptyText: processId
+              ? "Không có máy đánh ống multi-item"
+              : "Chọn nhà máy và công đoạn",
+          }}
         />
       </Spin>
 
       <style jsx global>{`
-        .winding-row-even td { background-color: #ffffff !important; }
-        .winding-row-odd  td { background-color: #f0f7ff !important; }
+        .winding-row-even td {
+          background-color: #ffffff !important;
+        }
+        .winding-row-odd td {
+          background-color: #f0f7ff !important;
+        }
         .winding-row-dirty td {
           background-color: #fff7e6 !important;
           border-left: 3px solid #faad14 !important;

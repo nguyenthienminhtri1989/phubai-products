@@ -6,7 +6,7 @@ import {
 } from "antd";
 import {
     SaveOutlined, CheckCircleOutlined, LeftOutlined, RightOutlined,
-    HomeOutlined, PlusOutlined, DeleteOutlined, ThunderboltOutlined,
+    HomeOutlined, PlusOutlined, DeleteOutlined, ThunderboltOutlined, EditOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -50,8 +50,10 @@ interface ItemInput {
     outputKg: number | null;
     note: string;
     isDirty: boolean;
-    isExtra: boolean;        // Dòng thêm giữa ca
+    isExtra: boolean;         // Dòng thêm giữa ca
     existingLogId?: number;
+    originalItemId?: number;  // Item gốc từ assignment — dùng để detect thay đổi
+    editMode?: boolean;       // Đang sửa tên mặt hàng
 }
 
 interface Process { id: number; name: string; factoryId: number; }
@@ -190,45 +192,46 @@ function MobileWindingContent() {
             const assignments = m.itemAssignments || [];
             const logs = m.todayLogs || [];
             const items: ItemInput[] = [];
-            const addedIds = new Set<number>();
 
-            for (const a of assignments) {
-                const log = logs.find(l => l.itemId === a.itemId);
-                addedIds.add(a.itemId);
-                items.push({
-                    _uid: uid(),
-                    itemId: a.itemId,
-                    itemName: a.item.name,
-                    lotId: log?.lotId ?? a.lot?.id ?? null,
-                    lotNumber: a.lot?.lotNumber ?? null,
-                    outputKg: log?.finalOutput ?? null,
-                    note: log?.note || "",
-                    isDirty: false,
-                    isExtra: false,
-                    existingLogId: log?.id,
-                });
-            }
-
-            // Logs cho items không có trong assignment (thêm giữa ca cũ)
-            for (const log of logs) {
-                if (!addedIds.has(log.itemId)) {
+            if (logs.length > 0) {
+                // ĐÃ CÓ LOG → Build từ logs (ưu tiên dữ liệu lịch sử thực tế)
+                // Không dùng assignments làm cấu trúc → tránh hiện sai item của ca khác
+                for (const log of logs) {
+                    const assignment = assignments.find(a => a.itemId === log.itemId);
                     items.push({
                         _uid: uid(),
                         itemId: log.itemId,
-                        itemName: log.item?.name || `Item ${log.itemId}`,
+                        itemName: log.item?.name || assignment?.item.name || `Item ${log.itemId}`,
                         lotId: log.lotId ?? null,
                         lotNumber: null,
                         outputKg: log.finalOutput ?? null,
                         note: log.note || "",
                         isDirty: false,
-                        isExtra: true,
+                        isExtra: !assignment, // extra nếu item không còn trong assignment
                         existingLogId: log.id,
+                        // Chỉ set originalItemId nếu item vẫn còn trong assignment → cho phép ✏️
+                        originalItemId: assignment ? log.itemId : undefined,
                     });
                 }
-            }
-
-            // Nếu máy chưa có gì → 1 slot trống cho user nhập
-            if (items.length === 0) {
+                // KHÔNG add unlogged assignment items → tránh hiện item của ca khác
+            } else if (assignments.length > 0) {
+                // CHƯA CÓ LOG → Build từ assignments (template ca mới)
+                for (const a of assignments) {
+                    items.push({
+                        _uid: uid(),
+                        itemId: a.itemId,
+                        itemName: a.item.name,
+                        lotId: a.lot?.id ?? null,
+                        lotNumber: a.lot?.lotNumber ?? null,
+                        outputKg: null,
+                        note: "",
+                        isDirty: false,
+                        isExtra: false,
+                        originalItemId: a.itemId,
+                    });
+                }
+            } else {
+                // Không có log lẫn assignment → 1 slot trống
                 items.push({
                     _uid: uid(),
                     itemId: m.currentItem?.id || 0,
@@ -306,6 +309,17 @@ function MobileWindingContent() {
 
         for (const it of dirtyItems) {
             try {
+                const itemChanged =
+                    it.originalItemId !== undefined && it.originalItemId !== it.itemId;
+
+                // Bước 1: Nếu item thay đổi và đã có log cũ → xóa log cũ
+                if (itemChanged && it.existingLogId) {
+                    await fetch(`/api/production/daily-input?id=${it.existingLogId}`, {
+                        method: "DELETE",
+                    });
+                }
+
+                // Bước 2: Lưu log mới / cập nhật
                 const res = await fetch("/api/production/daily-input", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -323,8 +337,32 @@ function MobileWindingContent() {
                         lotId: it.lotId,
                     }),
                 });
-                if (res.ok) ok++;
-                else fail++;
+
+                if (res.ok) {
+                    ok++;
+                    // Bước 3: Nếu item đổi → cập nhật MachineItemAssignment
+                    if (itemChanged) {
+                        const patchRes = await fetch(
+                            `/api/machines/${machine.id}/assignments`,
+                            {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    oldItemId: it.originalItemId,
+                                    newItemId: it.itemId,
+                                }),
+                            }
+                        );
+                        if (!patchRes.ok) {
+                            const errData = await patchRes.json().catch(() => ({}));
+                            message.warning(
+                                `Đã lưu sản lượng nhưng không cập nhật được điều phối: ${errData.error || ""}`,
+                            );
+                        }
+                    }
+                } else {
+                    fail++;
+                }
             } catch { fail++; }
         }
 
@@ -610,6 +648,7 @@ function MobileWindingContent() {
                     }}>
                         {/* Tên mặt hàng */}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                            {/* Dòng thêm giữa ca chưa chọn item → Select */}
                             {it.isExtra && it.itemId === 0 ? (
                                 <Select
                                     style={{ flex: 1 }}
@@ -630,10 +669,53 @@ function MobileWindingContent() {
                                         <Select.Option key={i.id} value={i.id}>{i.name}</Select.Option>
                                     ))}
                                 </Select>
+                            ) : it.editMode ? (
+                                /* Đang sửa mặt hàng assignment → Select */
+                                <Select
+                                    style={{ flex: 1 }}
+                                    defaultValue={it.itemId}
+                                    placeholder="Chọn mặt hàng..."
+                                    showSearch
+                                    optionFilterProp="children"
+                                    size="middle"
+                                    autoFocus
+                                    onChange={(v: number) => {
+                                        const found = allItems.find(i => i.id === v);
+                                        const dup = currentItems.find(x => x.itemId === v && x._uid !== it._uid);
+                                        if (dup) { message.warning("Mặt hàng đã có trong máy này"); return; }
+                                        updateItem(currentMachine.id, it._uid, {
+                                            itemId: v,
+                                            itemName: found?.name || "",
+                                            lotId: null,     // Xóa lô vì item đổi
+                                            lotNumber: null,
+                                            editMode: false,
+                                        });
+                                    }}
+                                    onBlur={() => updateItem(currentMachine.id, it._uid, { editMode: false })}
+                                >
+                                    {allItems.map(i => (
+                                        <Select.Option key={i.id} value={i.id}>{i.name}</Select.Option>
+                                    ))}
+                                </Select>
                             ) : (
-                                <Tag color="blue" style={{ fontSize: 14, padding: "3px 10px", margin: 0 }}>
-                                    {it.itemName || "(chưa chọn)"}
-                                </Tag>
+                                /* Hiển thị bình thường + nút ✏️ */
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                                    <Tag
+                                        color={it.originalItemId !== undefined && it.originalItemId !== it.itemId ? "orange" : "blue"}
+                                        style={{ fontSize: 14, padding: "3px 10px", margin: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+                                    >
+                                        {it.itemName || "(chưa chọn)"}
+                                    </Tag>
+                                    {/* Nút sửa chỉ hiện cho dòng từ assignment (không phải isExtra) */}
+                                    {!it.isExtra && (
+                                        <Button
+                                            type="text" size="small"
+                                            icon={<EditOutlined />}
+                                            style={{ color: "#888", flexShrink: 0, padding: "0 4px" }}
+                                            onClick={() => updateItem(currentMachine.id, it._uid, { editMode: true })}
+                                        />
+                                    )}
+                                </div>
                             )}
                             {it.isExtra && (
                                 <Button type="text" danger size="small" icon={<DeleteOutlined />}
