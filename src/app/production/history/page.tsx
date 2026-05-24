@@ -28,7 +28,8 @@ export default function ProductionHistoryPage() {
     // State Phân trang & Thống kê Server trả về
     const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
     const [serverStats, setServerStats] = useState<{ totalOutput: number; avgEfficiency: number | null }>({ totalOutput: 0, avgEfficiency: null });
-    const [sortConfig, setSortConfig] = useState<{ field: any, order: string } | null>(null);
+    // Multi-column sort: mảng theo thứ tự ưu tiên (index 0 = ưu tiên cao nhất)
+    const [sortConfigs, setSortConfigs] = useState<{ field: any, order: string }[]>([]);
 
     // --- 2. STATE DANH MỤC (Để đổ vào ô lọc) ---
     const [factories, setFactories] = useState<any[]>([]);
@@ -66,7 +67,7 @@ export default function ProductionHistoryPage() {
     }, []);
 
     // --- 5. HÀM TÌM KIẾM (GỌI API) ---
-    const handleSearch = async (pageIndex = 1, currentSort = sortConfig) => {
+    const handleSearch = async (pageIndex = 1, currentSorts = sortConfigs) => {
         setLoading(true);
         try {
             const payload = {
@@ -79,8 +80,8 @@ export default function ProductionHistoryPage() {
                 itemIds: selectedItems,
                 page: pageIndex,
                 pageSize: pagination.pageSize,
-                sortField: currentSort?.field,
-                sortOrder: currentSort?.order
+                // Gửi mảng sorts thay vì single sort
+                sorts: currentSorts,
             };
 
             const res = await fetch("/api/production/history", {
@@ -114,16 +115,21 @@ export default function ProductionHistoryPage() {
 
     // --- 6. XỬ LÝ CHUYỂN TRANG ---
     const handleTableChange = (newPagination: any, filters?: any, sorter?: any) => {
-        let newSort = sortConfig;
-        if (sorter && sorter.field) {
-            newSort = sorter.order ? { field: sorter.field, order: sorter.order } : null;
-        } else if (Array.isArray(sorter) && sorter.length > 0) {
-            newSort = sorter[0].order ? { field: sorter[0].field, order: sorter[0].order } : null;
-        } else if (sorter && !sorter.order) {
-            newSort = null; // Removed sorting
+        // Ant Design trả về mảng khi dùng sorter.multiple
+        // Thứ tự trong mảng = thứ tự click của user (index 0 = ưu tiên cao nhất)
+        let newSorts: { field: any, order: string }[] = [];
+        if (Array.isArray(sorter)) {
+            // Lọc ra những cột đang active (có order) và giữ nguyên thứ tự Ant Design trả về
+            newSorts = sorter
+                .filter(s => s.order)
+                .map(s => ({ field: s.field ?? s.columnKey, order: s.order }));
+        } else if (sorter && sorter.field) {
+            if (sorter.order) {
+                newSorts = [{ field: sorter.field, order: sorter.order }];
+            }
         }
-        setSortConfig(newSort);
-        handleSearch(newPagination.current, newSort);
+        setSortConfigs(newSorts);
+        handleSearch(newPagination.current, newSorts);
     };
 
     // --- 7. TÍNH TOÁN BIỂU ĐỒ (Dựa trên dữ liệu trang hiện tại) ---
@@ -208,12 +214,32 @@ export default function ProductionHistoryPage() {
         handleSearch(pagination.current);
     };
 
+    // Hàm helper: lấy sortOrder hiện tại của 1 field để highlight cột đang sort
+    const getSortOrder = (field: string | string[]) => {
+        const key = Array.isArray(field) ? field.join('.') : field;
+        const found = sortConfigs.find(s => {
+            const sKey = Array.isArray(s.field) ? s.field.join('.') : s.field;
+            return sKey === key;
+        });
+        return found ? found.order as 'ascend' | 'descend' : undefined;
+    };
+
     const columns = [
-        { title: "Ngày", dataIndex: "recordDate", sorter: true, render: (d: string) => dayjs(d).format("DD/MM/YYYY") },
-        { title: "Ca", dataIndex: "shift", width: 60, align: 'center' as const, sorter: true, render: (s: number) => <Tag color="blue">{s}</Tag> },
-        { title: "Công đoạn", dataIndex: ["machine", "process", "name"], sorter: true, responsive: ['lg'] as any }, // Ẩn trên mobile
-        { title: "Máy", dataIndex: ["machine", "name"], width: 100, sorter: true, render: (t: string) => <b>{t}</b> },
-        { title: "Mặt hàng", dataIndex: ["item", "name"], sorter: true, render: (t: string) => <Tag color={getItemColor(t)} style={{ fontWeight: 600 }}>{t}</Tag> },
+        { title: "Ngày", dataIndex: "recordDate", key: "recordDate",
+          sorter: { multiple: 1 }, sortOrder: getSortOrder('recordDate'),
+          render: (d: string) => dayjs(d).format("DD/MM/YYYY") },
+        { title: "Ca", dataIndex: "shift", key: "shift", width: 60, align: 'center' as const,
+          sorter: { multiple: 2 }, sortOrder: getSortOrder('shift'),
+          render: (s: number) => <Tag color="blue">{s}</Tag> },
+        { title: "Công đoạn", dataIndex: ["machine", "process", "name"], key: "process",
+          sorter: { multiple: 3 }, sortOrder: getSortOrder(['machine','process','name']),
+          responsive: ['lg'] as any },
+        { title: "Máy", dataIndex: ["machine", "name"], key: "machine", width: 100,
+          sorter: { multiple: 4 }, sortOrder: getSortOrder(['machine','name']),
+          render: (t: string) => <b>{t}</b> },
+        { title: "Mặt hàng", dataIndex: ["item", "name"], key: "item",
+          sorter: { multiple: 5 }, sortOrder: getSortOrder(['item','name']),
+          render: (t: string) => <Tag color={getItemColor(t)} style={{ fontWeight: 600 }}>{t}</Tag> },
         {
             title: "Lô",
             dataIndex: ["lot", "lotNumber"],
@@ -225,23 +251,28 @@ export default function ProductionHistoryPage() {
         {
             title: "Sản lượng",
             dataIndex: "finalOutput",
+            key: "finalOutput",
             align: 'right' as const,
-            sorter: true,
+            sorter: { multiple: 6 }, sortOrder: getSortOrder('finalOutput'),
             render: (n: number) => <b style={{ color: '#389e0d' }}>{n?.toLocaleString()} kg</b>
         },
         {
             title: "Hiệu suất",
             dataIndex: "efficiency",
+            key: "efficiency",
             align: 'center' as const,
             width: 100,
-            sorter: true,
+            sorter: { multiple: 7 }, sortOrder: getSortOrder('efficiency'),
             render: (n: number | null) => n != null
                 ? <Tag color={n >= 95 ? 'green' : n >= 85 ? 'orange' : 'red'}>{n.toFixed(1)}%</Tag>
                 : <span style={{ color: '#ccc' }}>—</span>,
         },
-        { title: "Đầu", dataIndex: "startIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
-        { title: "Cuối", dataIndex: "endIndex", align: 'right' as const, width: 90, sorter: true, responsive: ['md'] as any },
-        { title: "Người nhập", dataIndex: ["createdBy", "fullName"], width: 150, ellipsis: true, sorter: true, responsive: ['lg'] as any },
+        { title: "Đầu", dataIndex: "startIndex", key: "startIndex", align: 'right' as const, width: 90,
+          sorter: { multiple: 8 }, sortOrder: getSortOrder('startIndex'), responsive: ['md'] as any },
+        { title: "Cuối", dataIndex: "endIndex", key: "endIndex", align: 'right' as const, width: 90,
+          sorter: { multiple: 9 }, sortOrder: getSortOrder('endIndex'), responsive: ['md'] as any },
+        { title: "Người nhập", dataIndex: ["createdBy", "fullName"], key: "createdBy", width: 150, ellipsis: true,
+          sorter: { multiple: 10 }, sortOrder: getSortOrder(['createdBy','fullName']), responsive: ['lg'] as any },
         ...(isAdmin ? [{
             title: "Thao tác",
             key: "action",

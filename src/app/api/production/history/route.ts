@@ -18,10 +18,20 @@ export async function POST(request: Request) {
       shifts,
       itemIds,
       page = 1,
-      pageSize = 20, // Mặc định trang 1, 20 dòng/trang
+      pageSize = 20,
+      sorts = [] as { field: any; order: string }[], // Multi-column sort
+      // Legacy single sort support (backward compat)
       sortField,
       sortOrder,
     } = body;
+
+    // Normalize: nếu gửi sorts mảng thì dùng, ngược lại fallback sang sortField/sortOrder cũ
+    const activeSorts: { field: any; order: string }[] =
+      Array.isArray(sorts) && sorts.length > 0
+        ? sorts
+        : sortField
+        ? [{ field: sortField, order: sortOrder ?? 'desc' }]
+        : [];
 
     // 1. Xây dựng điều kiện lọc (Where)
     const where: any = {};
@@ -62,24 +72,30 @@ export async function POST(request: Request) {
           createdBy: { select: { fullName: true } },
         },
         orderBy: (() => {
-          if (sortField) {
-            const direction = sortOrder === 'ascend' ? 'asc' : 'desc';
-            if (Array.isArray(sortField)) {
-              const orderObj: any = {};
-              let current = orderObj;
-              for (let i = 0; i < sortField.length - 1; i++) {
-                current[sortField[i]] = {};
-                current = current[sortField[i]];
+          if (activeSorts.length > 0) {
+            // Build mảng orderBy Prisma theo đúng thứ tự ưu tiên
+            return activeSorts.map(({ field, order }) => {
+              const direction = order === 'ascend' ? 'asc' : 'desc';
+              if (Array.isArray(field)) {
+                // Nested field: ["machine", "name"] → { machine: { name: direction } }
+                const obj: any = {};
+                let cur = obj;
+                for (let i = 0; i < field.length - 1; i++) {
+                  cur[field[i]] = {};
+                  cur = cur[field[i]];
+                }
+                cur[field[field.length - 1]] = direction;
+                return obj;
+              } else {
+                if (field === 'recordDate') {
+                  // Khi sort theo ngày, luôn kèm shift cùng chiều
+                  return { [field]: direction };
+                }
+                return { [field]: direction };
               }
-              current[sortField[sortField.length - 1]] = direction;
-              return [orderObj];
-            } else {
-              if (sortField === 'recordDate') {
-                return [{ recordDate: direction }, { shift: direction }];
-              }
-              return [{ [sortField]: direction }];
-            }
+            });
           }
+          // Mặc định: mới nhất trước
           return [{ recordDate: "desc" }, { shift: "desc" }];
         })(),
       }),
