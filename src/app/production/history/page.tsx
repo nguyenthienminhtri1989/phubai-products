@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { getItemColor } from "@/utils/itemColors";
+import { naturalSortBy } from "@/utils/naturalSort";
 // Thư viện biểu đồ
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -30,6 +31,8 @@ export default function ProductionHistoryPage() {
     const [serverStats, setServerStats] = useState<{ totalOutput: number; avgEfficiency: number | null }>({ totalOutput: 0, avgEfficiency: null });
     // Multi-column sort: mảng theo thứ tự ưu tiên (index 0 = ưu tiên cao nhất)
     const [sortConfigs, setSortConfigs] = useState<{ field: any, order: string }[]>([]);
+    // Sort cột Máy xử lý riêng ở frontend bằng naturalSortBy
+    const [machineSortOrder, setMachineSortOrder] = useState<'ascend' | 'descend' | undefined>(undefined);
 
     // --- 2. STATE DANH MỤC (Để đổ vào ô lọc) ---
     const [factories, setFactories] = useState<any[]>([]);
@@ -95,7 +98,20 @@ export default function ProductionHistoryPage() {
             if (responseData.error) throw new Error(responseData.error);
 
             // Cập nhật State
-            setLogs(responseData.data);
+            let data: any[] = responseData.data;
+
+            // Nếu đang sort cột Máy → apply naturalSortBy ở frontend
+            // (PostgreSQL text sort cho ra thứ tự sai: "Máy 10" trước "Máy 2")
+            if (machineSortOrder) {
+                data = [...data].sort((a, b) => {
+                    const nameA = a.machine?.name ?? '';
+                    const nameB = b.machine?.name ?? '';
+                    const cmp = naturalSortBy(nameA, nameB);
+                    return machineSortOrder === 'ascend' ? cmp : -cmp;
+                });
+            }
+
+            setLogs(data);
             setPagination({
                 current: responseData.pagination.current,
                 pageSize: responseData.pagination.pageSize,
@@ -116,20 +132,34 @@ export default function ProductionHistoryPage() {
     // --- 6. XỬ LÝ CHUYỂN TRANG ---
     const handleTableChange = (newPagination: any, filters?: any, sorter?: any) => {
         // Ant Design trả về mảng khi dùng sorter.multiple
-        // Thứ tự trong mảng = thứ tự click của user (index 0 = ưu tiên cao nhất)
-        let newSorts: { field: any, order: string }[] = [];
+        let allSorts: { field: any, order: string }[] = [];
         if (Array.isArray(sorter)) {
-            // Lọc ra những cột đang active (có order) và giữ nguyên thứ tự Ant Design trả về
-            newSorts = sorter
+            allSorts = sorter
                 .filter(s => s.order)
                 .map(s => ({ field: s.field ?? s.columnKey, order: s.order }));
         } else if (sorter && sorter.field) {
             if (sorter.order) {
-                newSorts = [{ field: sorter.field, order: sorter.order }];
+                allSorts = [{ field: sorter.field, order: sorter.order }];
             }
         }
-        setSortConfigs(newSorts);
-        handleSearch(newPagination.current, newSorts);
+
+        // Tách sort cột Máy ra: xử lý riêng ở frontend bằng naturalSortBy
+        const machineSortEntry = allSorts.find(s => {
+            const key = Array.isArray(s.field) ? s.field.join('.') : s.field;
+            return key === 'machine.name';
+        });
+        const newMachineSortOrder = machineSortEntry
+            ? (machineSortEntry.order as 'ascend' | 'descend')
+            : undefined;
+        setMachineSortOrder(newMachineSortOrder);
+
+        // Chỉ gửi các sort khác lên server (loại bỏ machine.name)
+        const serverSorts = allSorts.filter(s => {
+            const key = Array.isArray(s.field) ? s.field.join('.') : s.field;
+            return key !== 'machine.name';
+        });
+        setSortConfigs(serverSorts);
+        handleSearch(newPagination.current, serverSorts);
     };
 
     // --- 7. TÍNH TOÁN BIỂU ĐỒ (Dựa trên dữ liệu trang hiện tại) ---
@@ -235,7 +265,7 @@ export default function ProductionHistoryPage() {
           sorter: { multiple: 3 }, sortOrder: getSortOrder(['machine','process','name']),
           responsive: ['lg'] as any },
         { title: "Máy", dataIndex: ["machine", "name"], key: "machine", width: 100,
-          sorter: { multiple: 4 }, sortOrder: getSortOrder(['machine','name']),
+          sorter: { multiple: 4 }, sortOrder: machineSortOrder,
           render: (t: string) => <b>{t}</b> },
         { title: "Mặt hàng", dataIndex: ["item", "name"], key: "item",
           sorter: { multiple: 5 }, sortOrder: getSortOrder(['item','name']),
@@ -341,6 +371,7 @@ export default function ProductionHistoryPage() {
                             // Lọc máy theo công đoạn đã chọn
                             options={machines
                                 .filter(m => selectedProcesses.length === 0 || selectedProcesses.includes(m.processId))
+                                .sort((a: any, b: any) => naturalSortBy(a.name, b.name))
                                 .map(m => ({ label: m.name, value: m.id }))}
                             onChange={setSelectedMachines} maxTagCount="responsive"
                         />
