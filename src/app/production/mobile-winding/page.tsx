@@ -13,6 +13,7 @@ import type { Dayjs } from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { detectShiftAndDate } from "@/lib/production-utils";
+import { naturalSortBy } from "@/utils/naturalSort";
 
 // ============================
 // TYPES
@@ -158,7 +159,9 @@ function MobileWindingContent() {
             );
             if (!res.ok) throw new Error();
             const all: WMachine[] = await res.json();
-            const multiMachines = all.filter(m => m.allowMultiItemPerShift);
+            const multiMachines = all
+                .filter(m => m.allowMultiItemPerShift)
+                .sort((a, b) => naturalSortBy(a.name, b.name));
             setMachines(multiMachines);
             setCurrentIdx(0);
             buildMachineItems(multiMachines);

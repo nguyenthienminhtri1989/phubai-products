@@ -13,6 +13,7 @@ import {
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/vi";
 import { getItemColor } from "@/utils/itemColors";
+import { naturalSortBy } from "@/utils/naturalSort";
 import { useRouter } from "next/navigation";
 
 const { Text, Title } = Typography;
@@ -52,20 +53,8 @@ function fmtKg(kg: number) {
   return kg.toLocaleString("vi-VN") + " kg";
 }
 
-/**
- * So sánh tên máy theo thứ tự số (natural sort).
- * Trích xuất số ở cuối chuỗi tên máy (ính hướng chính), 
- * nếu không có số thì so sánh chuỗi bình thường.
- */
-function naturalSortMachineName(a: string, b: string): number {
-  // Tính số cuối chuỗi (ví dụ: "Máy ống QPRO số 12" → 12)
-  const numA = parseInt(a.match(/(\d+)\s*$/)?.[1] ?? "", 10);
-  const numB = parseInt(b.match(/(\d+)\s*$/)?.[1] ?? "", 10);
-  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-  if (!isNaN(numA)) return -1;
-  if (!isNaN(numB)) return 1;
-  return a.localeCompare(b, "vi");
-}
+/** @deprecated — dùng naturalSortBy từ @/utils/naturalSort */
+const naturalSortMachineName = (a: string, b: string) => naturalSortBy(a, b);
 
 // ============================================================
 // Main Page

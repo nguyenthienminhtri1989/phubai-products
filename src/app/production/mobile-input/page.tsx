@@ -17,6 +17,7 @@ import type { Dayjs } from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { calcOutput as calcOutputShared } from "@/lib/production-utils";
+import { naturalSortBy } from "@/utils/naturalSort";
 
 const { Title, Text } = Typography;
 
@@ -202,7 +203,7 @@ function MobileInputContent() {
                     const processAll = all.filter((m: Machine) => m.processId === selectedProcessId && m.isActive !== false);
                     const filtered = processAll
                         .filter((m: Machine) => !m.allowMultiItemPerShift)
-                        .sort((a: Machine, b: Machine) => a.id - b.id);
+                        .sort((a: Machine, b: Machine) => naturalSortBy(a.name, b.name));
                     setAllMachinesAreMulti(processAll.length > 0 && filtered.length === 0);
                     setMachines(filtered);
 

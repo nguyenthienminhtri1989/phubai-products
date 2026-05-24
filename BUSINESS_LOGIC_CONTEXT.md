@@ -3376,3 +3376,42 @@ Không có endpoint mới.
 ### Known limitations
 
 - Trang này dùng `machine.todayLog` (log đơn) thay vì `todayLogs` (đa log) — không hỗ trợ máy đổi hàng giữa ca theo flow thông thường (chỉ hỗ trợ qua nút "Đổi hàng giữa ca" riêng biệt).
+
+---
+
+## UTILS — Natural Sort cho tên máy
+
+**Status:** ✅ Completed 2026-05-24
+
+### What was built
+
+Thêm utility function `naturalSortBy` dùng chung toàn dự án để sắp xếp tên máy theo thứ tự số tự nhiên (natural sort). Giải quyết vấn đề tên máy lưu dạng text bị sort sai thứ tự ("Máy số 10" đứng trước "Máy số 2").
+
+### Files created/modified
+
+```
+src/utils/naturalSort.ts                                    — [MỚI] naturalSortBy(), naturalSortComparator()
+src/app/kd-daily-input/report/page.tsx                     — Thay inline naturalSortMachineName bằng import từ utils
+src/app/production/machine-stops/page.tsx                  — Thêm natural sort theo tên sau khi sort stopped-first
+src/app/production/mobile-stops/page.tsx                   — Thêm natural sort theo tên sau khi sort stopped-first
+src/app/production/daily-input/page.tsx                    — Sort danh sách máy khi fetch về
+src/app/production/mobile-input/page.tsx                   — Thay sort by id bằng natural sort by name
+src/app/production/mobile-winding/page.tsx                 — Thêm natural sort khi set danh sách máy
+```
+
+### Key business logic implemented
+
+- `naturalSortBy(a, b)`: tách chuỗi thành tokens (số và text xen kẽ), so sánh từng token — số so sánh numerically, text so sánh bằng `localeCompare("vi")`
+- Thuật toán xử lý đúng mọi tình huống: "Máy số 1" < "Máy số 2" < "Máy số 10" < "Máy số 20"
+- `naturalSortComparator<T>(keyFn)`: factory tạo comparator với key extractor, tiện dùng cho bất kỳ object nào
+- Trên các trang dừng máy: sort stopped first, cùng trạng thái thì natural sort theo tên
+
+### API endpoints
+
+Không có endpoint mới — thay đổi hoàn toàn ở frontend.
+
+### Known limitations
+
+- Không ảnh hưởng đến order ở database level (Prisma vẫn dùng `orderBy: { name: "asc" }` hoặc `id: "asc"`) — sort chỉ xảy ra ở frontend sau khi fetch
+- Nếu cần sort ở DB level, dùng PostgreSQL raw query: `ORDER BY regexp_replace(name, '\\D', '', 'g')::int`
+

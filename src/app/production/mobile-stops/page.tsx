@@ -13,6 +13,7 @@ import {
 import dayjs from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { naturalSortBy } from "@/utils/naturalSort";
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -173,14 +174,15 @@ function MobileStopsContent() {
     // ============================
     // DERIVED STATE
     // ============================
-    // Sort: stopped machines first
+    // Sort: stopped machines first, cùng nhóm → natural sort tên máy
     const sortedMachines = useMemo(() =>
         [...machines].sort((a, b) => {
             const aStop = activeStops.find(s => s.machineId === a.id);
             const bStop = activeStops.find(s => s.machineId === b.id);
             if (aStop && !bStop) return -1;
             if (!aStop && bStop) return 1;
-            return 0;
+            // Cùng trạng thái → sắp tên theo thứ tự số tự nhiên
+            return naturalSortBy(a.name, b.name);
         }),
         [machines, activeStops]
     );

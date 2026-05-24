@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useSession } from "next-auth/react";
 import { calcOutput as calcOutputShared } from "@/lib/production-utils";
+import { naturalSortBy } from "@/utils/naturalSort";
 
 interface Machine {
     id: number;
@@ -235,7 +236,11 @@ export default function DailyInputPage() {
                 fetch(`/api/production/daily-total?processId=${selectedProcessId}&date=${dateStr}`),
             ]);
             const machineList: Machine[] = await res.json();
-            setMachines(machineList.filter(m => !m.allowMultiItemPerShift));
+            setMachines(
+                machineList
+                    .filter(m => !m.allowMultiItemPerShift)
+                    .sort((a, b) => naturalSortBy(a.name, b.name))
+            );
 
             if (resTotal.ok) {
                 const data = await resTotal.json();

@@ -11,6 +11,7 @@ import {
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
+import { naturalSortBy } from "@/utils/naturalSort";
 
 const { TextArea } = Input;
 
@@ -148,13 +149,14 @@ export default function MachineStopsPage() {
   const getActiveStop = (machineId: number) => activeStops.find(s => s.machineId === machineId) || null;
   const stoppedCount = machines.filter(m => getActiveStop(m.id)).length;
 
-  // Sorted: stopped first
+  // Sorted: stopped first, then natural sort by name
   const sortedMachines = [...machines].sort((a, b) => {
     const aStop = getActiveStop(a.id);
     const bStop = getActiveStop(b.id);
     if (aStop && !bStop) return -1;
     if (!aStop && bStop) return 1;
-    return 0;
+    // Cùng trạng thái → sắp xếp tên theo thứ tự số tự nhiên
+    return naturalSortBy(a.name, b.name);
   });
 
   const openStopModal = (machine: Machine) => {
