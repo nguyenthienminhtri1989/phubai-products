@@ -3238,3 +3238,106 @@ prisma/fix-data.js                           — Thêm PageRegistry mobile.windi
 ### Known limitations
 
 - `mobile-winding` chưa hỗ trợ QR code scan (chỉ chọn công đoạn thủ công hoặc qua URL ?processId=X)
+
+
+---
+
+## SẢN XUẤT — Nâng cấp trang nhập liệu đánh ống (inline edit + fix lịch sử)
+
+**Status:** ✅ Completed 2026-05-24
+
+### What was built
+
+Ba cải tiến quan trọng cho trang nhập liệu đánh ống (desktop + mobile):
+1. **Fix extra item trên mobile**: Bỏ `disabled` trên ô lô và ô kg khi thêm mặt hàng giữa ca — người dùng có thể điền ngay sau khi chọn mặt hàng.
+2. **Inline đổi mặt hàng**: Thêm nút ✏️ bên cạnh tên mặt hàng trên cả desktop và mobile, cho phép sửa mặt hàng assignment ngay tại form nhập liệu mà không cần thoát sang bảng điều phối.
+3. **Fix lịch sử ca**: Sửa bug build rows sai khi xem ca cũ sau khi assignment đã thay đổi ở ca mới.
+
+### Files created/modified
+
+```
+src/app/production/winding-input/page.tsx     — Thêm EditOutlined, originalItemId, editMode vào WindingRow; sửa handleLoad; sửa handleSave; render nút ✏️ trong cột Mặt hàng
+src/app/production/mobile-winding/page.tsx    — Thêm EditOutlined, originalItemId, editMode vào ItemInput; sửa buildMachineItems; sửa handleSave; render nút ✏️ trong item card
+```
+
+### Key business logic implemented
+
+**Inline đổi mặt hàng (✏️):**
+- Nút ✏️ chỉ hiện cho dòng từ assignment (`!isExtra`), không hiện cho dòng extra (thêm giữa ca)
+- Khi click → row/card chuyển sang Select chọn item mới; khi chọn xong → đóng về Tag, lô tự xóa (vì item đổi thì lô phải chọn lại)
+- Tag đổi màu cam + nhãn "Đã đổi" khi item khác với `originalItemId`
+- **Khi lưu (3 bước):**
+  1. Nếu item thay đổi và có `existingLogId` → `DELETE /api/production/daily-input?id=X` xóa log cũ
+  2. `POST /api/production/daily-input` tạo log mới với itemId mới
+  3. `PATCH /api/machines/{id}/assignments` `{oldItemId, newItemId}` cập nhật MachineItemAssignment
+
+**Fix lịch sử ca (build rows từ logs):**
+- **Vấn đề:** `MachineItemAssignment` không lưu lịch sử. Khi Ca 2 đổi assignment từ A→B, quay lại xem Ca 1 sẽ thấy item B trống + item A bị đẩy thành "extra" (sai).
+- **Fix:** `handleLoad` / `buildMachineItems` dùng logic mới:
+  - `todayLogs.length > 0` → build rows **từ logs** (ưu tiên lịch sử thực tế), không add unlogged assignment items
+  - `todayLogs.length === 0` → build rows **từ assignments** (template ca mới, như cũ)
+- Rows từ log: `originalItemId` chỉ set nếu item vẫn còn khớp assignment hiện tại (nút ✏️ hiện), `isExtra = !assignment`
+
+**Trade-off chấp nhận được:**
+- Nếu ca đang nhập dở (1 item đã log, item khác chưa log) → item chưa log không tự xuất hiện (người dùng dùng "Thêm hàng" thủ công)
+- Trường hợp này hiếm vì thực tế nhập đánh ống thường nhập 1 lần cuối ca
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| DELETE | /api/production/daily-input?id=X | Xóa log cũ khi đổi item |
+| PATCH  | /api/machines/{id}/assignments | `{oldItemId, newItemId}` — đã có sẵn, dùng để sync assignment |
+| POST   | /api/production/daily-input | Tạo log mới với item đã đổi |
+
+### Known limitations
+
+- Chỉ cho đổi item với dòng từ assignment (`!isExtra`). Dòng extra (thêm giữa ca có log) không có nút ✏️.
+- Assignment history không được lưu — nếu item đổi nhiều lần trong ngày, chỉ trạng thái cuối cùng được ghi nhận trong `MachineItemAssignment`.
+- Khi PATCH assignment thất bại (item mới đã có trong assignment khác), log vẫn được lưu nhưng assignment không sync — hiển thị cảnh báo cho người dùng.
+
+
+---
+
+## PRODUCTION INPUT — Fix bug xem ca cũ & đổi item (daily-input-grid + mobile-input)
+
+**Status:** ✅ Completed 2026-05-24
+
+### What was built
+
+Fix 2 bug trên 2 trang nhập liệu thông thường (không phải đánh ống), tương tự bug đã fix trên winding-input/mobile-winding:
+
+1. **daily-input-grid** — Bug 2: Khi primary/sub-row đổi item (A→B) và đã có `existingLogId`, code không DELETE log cũ (item A) trước khi POST log mới (item B), dẫn đến máy có 2 logs trong cùng ca.
+
+2. **mobile-input** — Bug 1: `handleSave` luôn dùng `currentMachine.currentItem?.id` (trạng thái hiện tại). Khi xem lại ca cũ mà item đã thay đổi (hôm qua dùng A, hôm nay B), sẽ POST sai item cho ca hôm qua. Fix: thêm `existingItemId` vào inputStates, load từ existing log, ưu tiên khi save.
+
+### Files created/modified
+
+```
+src/app/production/daily-input-grid/page.tsx  — Thêm bước DELETE log cũ trước Promise.allSettled POST
+src/app/production/mobile-input/page.tsx      — Thêm existingItemId vào inputStates type, loadPreviousIndexes, handleSave, handleMobileItemChange
+```
+
+### Key business logic implemented
+
+**daily-input-grid fix (Bug 2 — DELETE trước POST):**
+- Lọc `rowsToDeleteOldLog`: các dirty rows có `existingLogId && itemId !== originalItemId && cả 2 khác 0`
+- Loop DELETE từng log cũ TRƯỚC khi vào `Promise.allSettled` POST
+- Áp dụng cho cả primary row và sub-row (không giới hạn `!r.isSubRow`)
+
+**mobile-input fix (Bug 1 — existingItemId):**
+- `inputStates` có thêm field `existingItemId?: number`
+- `loadPreviousIndexes` extract `existing.itemId` từ API `/api/production/daily-input?machineId=...&date=...&shift=...` và lưu vào `existingItemId`
+- `handleSave` dùng `currentState.existingItemId ?? currentMachine.currentItem?.id` làm itemId trong payload
+- `handleMobileItemChange` reset `existingItemId = itemChangeNewId` sau khi đổi hàng giữa ca (tránh lần save tiếp dùng sai item)
+
+**Xác nhận Bug 3 (currentItemId ghi đè):** Không có trong 2 file này — API `daily-input/route.ts` đã fix riêng.
+
+### API endpoints
+
+Không có endpoint mới — chỉ tận dụng `DELETE /api/production/daily-input?id=X` đã có.
+
+### Known limitations
+
+- `mobile-input` không hỗ trợ nhiều items/ca trên 1 máy (machines có `allowMultiItemPerShift=false`), nên không cần xử lý multi-log như winding-input.
+- Khi xem ca cũ trên mobile-input, `inputNE` vẫn lấy từ `m.currentNE` (không từ log) — nếu NE đã thay đổi thì hiển thị không chính xác (minor, không ảnh hưởng lưu vì người dùng có thể sửa).

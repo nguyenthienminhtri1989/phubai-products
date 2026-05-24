@@ -104,6 +104,7 @@ function MobileInputContent() {
         isStopped: boolean;
         saved: boolean;
         output: number;
+        existingItemId?: number; // itemId thực tế của ca đó (từ log), dùng khi xem ca cũ
     }>>({});
 
     // UI state
@@ -242,12 +243,14 @@ function MobileInputContent() {
                 let alreadySaved = false;
                 let savedEnd = null;
                 let savedOutput = 0;
+                let existingItemId: number | undefined;
                 if (checkRes.ok) {
                     const existing = await checkRes.json();
                     if (existing && existing.id) {
                         alreadySaved = true;
                         savedEnd = existing.endIndex;
                         savedOutput = existing.finalOutput ?? 0;
+                        existingItemId = existing.itemId; // lưu item thực tế của ca đó
                     }
                 }
 
@@ -259,6 +262,7 @@ function MobileInputContent() {
                     isStopped: false,
                     saved: alreadySaved,
                     output: savedOutput,
+                    existingItemId,
                 };
             } catch (e) {
                 newStates[m.id] = {
@@ -338,7 +342,8 @@ function MobileInputContent() {
                 recordDate: selectedDate.format("YYYY-MM-DD"),
                 shift: selectedShift,
                 machineId: currentMachine.id,
-                itemId: currentMachine.currentItem?.id,
+                // Dùng item thực tế của ca đó (khi xem ca cũ), không dùng currentItem hiện tại
+                itemId: currentState.existingItemId ?? currentMachine.currentItem?.id,
                 startIndex: currentState.startIndex,
                 endIndex: currentState.endIndex,
                 inputNE: currentState.inputNE,
@@ -483,6 +488,7 @@ function MobileInputContent() {
                     endIndex: null,
                     saved: true,
                     output: outputA,
+                    existingItemId: itemChangeNewId, // item mới, để save tiếp dùng đúng item
                 },
             }));
 

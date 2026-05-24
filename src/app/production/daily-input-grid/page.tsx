@@ -441,6 +441,18 @@ export default function DailyInputGridPage() {
         message.info(`Đã cập nhật lô cho ${lotChangedRows.length} máy`);
       }
 
+      // Xóa log cũ khi row (primary hoặc sub-row) đổi item — tránh để lại log với item cũ
+      const rowsToDeleteOldLog = dirty.filter(
+        r => r.existingLogId && r.itemId !== r.originalItemId && r.itemId !== 0 && r.originalItemId !== 0
+      );
+      for (const r of rowsToDeleteOldLog) {
+        try {
+          await fetch(`/api/production/daily-input?id=${r.existingLogId}`, { method: "DELETE" });
+        } catch (e) {
+          console.error(`Lỗi xóa log cũ máy ${r.machineName}:`, e);
+        }
+      }
+
       const results = await Promise.allSettled(
         dirty.map(r => {
           const finalOutput = r.isStopped ? 0 : calcOutput(r);
