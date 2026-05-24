@@ -3341,3 +3341,38 @@ Không có endpoint mới — chỉ tận dụng `DELETE /api/production/daily-i
 
 - `mobile-input` không hỗ trợ nhiều items/ca trên 1 máy (machines có `allowMultiItemPerShift=false`), nên không cần xử lý multi-log như winding-input.
 - Khi xem ca cũ trên mobile-input, `inputNE` vẫn lấy từ `m.currentNE` (không từ log) — nếu NE đã thay đổi thì hiển thị không chính xác (minor, không ảnh hưởng lưu vì người dùng có thể sửa).
+
+---
+
+## PRODUCTION INPUT — Fix bug xem ca cũ (daily-input modal)
+
+**Status:** ✅ Completed 2026-05-24
+
+### What was built
+
+Fix 2 bug liên quan trên trang nhập sản lượng modal-based (`/production/daily-input`):
+
+**Bug 1** — `quickAssignItemId` khởi tạo sai: `handleOpenMachine` luôn gán `machine.currentItem?.id`, dù máy đã có `todayLog` với `itemId` khác. `submitData` dùng `effectiveItemId = quickAssignItemId` → POST log với item hiện tại thay vì item thực tế của ca đó.
+
+**Bug 2 (phụ sinh)** — Assignment update không được guard: Nếu `quickAssignItemId` (từ log, ví dụ A) khác `currentItem` (B), code sẽ gọi `/api/machines/batch` ghi đè assignment B→A khi đang sửa ca cũ.
+
+### Files created/modified
+
+```
+src/app/production/daily-input/page.tsx  — Sửa khởi tạo quickAssignItemId; thêm guard !currentMachine?.todayLog cho assignment update
+```
+
+### Key business logic implemented
+
+- `handleOpenMachine`: `setQuickAssignItemId((machine.todayLog?.itemId ?? machine.currentItem?.id) ?? null)` — ưu tiên item của log
+- `setShowQuickAssign(!machine.currentItem && !machine.todayLog)` — chỉ auto-mở select khi máy chưa gán hàng VÀ chưa có log
+- `submitData`: điều kiện cập nhật assignment đổi thành `!currentMachine?.todayLog && effectiveItemId !== prevItemId` — chỉ update assignment khi nhập mới, không cập nhật khi sửa log cũ
+- UI "Thay đổi" button đã có guard `{!currentMachine?.todayLog && ...}` từ trước — nên không cần sửa thêm phần render
+
+### API endpoints
+
+Không có endpoint mới.
+
+### Known limitations
+
+- Trang này dùng `machine.todayLog` (log đơn) thay vì `todayLogs` (đa log) — không hỗ trợ máy đổi hàng giữa ca theo flow thông thường (chỉ hỗ trợ qua nút "Đổi hàng giữa ca" riêng biệt).

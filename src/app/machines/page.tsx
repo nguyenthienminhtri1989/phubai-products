@@ -577,7 +577,10 @@ export default function MachinesPage() {
             selectedRowKeys,
             onChange: setSelectedRowKeys,
             getCheckboxProps: (record: MachineData) => ({
-              disabled: !canEdit(record),
+              disabled: !canEdit(record) || !!record.allowMultiItemPerShift,
+              title: record.allowMultiItemPerShift
+                ? "Máy nhiều mặt hàng — dùng nút ⊞ để phân công riêng"
+                : undefined,
             }),
           }}
           pagination={{ pageSize: 20 }}

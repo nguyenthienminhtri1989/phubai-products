@@ -254,9 +254,9 @@ export default function DailyInputPage() {
         setCutoverIndex(null);
         setNewItemId(null);
 
-        // Khởi tạo quick assign: nếu chưa có currentItem → bắt buộc chọn; nếu đã có → ẩn, chỉ hiện khi bấm "Thay đổi"
-        setQuickAssignItemId(machine.currentItem?.id ?? null);
-        setShowQuickAssign(!machine.currentItem); // tự động mở nếu chưa gán
+        // Khởi tạo quick assign: ưu tiên item của log (khi xem ca cũ) để tránh dùng sai currentItem
+        setQuickAssignItemId((machine.todayLog?.itemId ?? machine.currentItem?.id) ?? null);
+        setShowQuickAssign(!machine.currentItem && !machine.todayLog); // tự động mở chỉ khi chưa gán VÀ chưa có log
 
         // Khởi tạo số lô từ máy
         setQuickAssignLotNumber(machine.currentLot?.lotNumber ?? '');
@@ -384,9 +384,10 @@ export default function DailyInputPage() {
                 return;
             }
 
-            // Nếu mặt hàng thay đổi so với điều phối hiện tại → cập nhật điều phối máy luôn
+            // Nếu mặt hàng thay đổi so với điều phối hiện tại → cập nhật điều phối máy
+            // Chỉ cập nhật khi chưa có log ca này (nhập mới) — không ghi đè assignment khi sửa ca cũ
             const prevItemId = currentMachine?.currentItem?.id ?? null;
-            if (effectiveItemId !== prevItemId) {
+            if (!currentMachine?.todayLog && effectiveItemId !== prevItemId) {
                 const assignRes = await fetch('/api/machines/batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
