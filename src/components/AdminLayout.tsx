@@ -46,11 +46,7 @@ import {
 } from "@ant-design/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  canViewPage,
-  type PermUser,
-  type UserRole,
-} from "@/lib/permissions";
+import { canViewPage, type PermUser, type UserRole } from "@/lib/permissions";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -72,70 +68,388 @@ interface PageDef {
 // Tất cả trang — mapping từ PageRegistry
 const ALL_PAGES: PageDef[] = [
   // TỔNG QUAN
-  { pageKey: "dashboard.overview", pageGroup: "TỔNG QUAN", path: "/", label: "Tổng quan", icon: <DashboardOutlined /> },
+  {
+    pageKey: "dashboard.overview",
+    pageGroup: "TỔNG QUAN",
+    path: "/",
+    label: "Tổng quan",
+    icon: <DashboardOutlined />,
+  },
   // SẢN XUẤT
-  { pageKey: "sx.machines", pageGroup: "SẢN XUẤT", path: "/machines", label: "Máy móc & Điều phối", icon: <RobotOutlined /> },
-  { pageKey: "sx.daily-input", pageGroup: "SẢN XUẤT", path: "/production/daily-input", label: "Nhập sản lượng (Thẻ)", icon: <ProductOutlined /> },
-  { pageKey: "sx.daily-input-grid", pageGroup: "SẢN XUẤT", path: "/production/daily-input-grid", label: "Nhập sản lượng (Bảng)", icon: <TableOutlined /> },
-  { pageKey: "sx.winding-input", pageGroup: "SẢN XUẤT", path: "/production/winding-input", label: "Nhập liệu đánh ống", icon: <ThunderboltOutlined /> },
-  { pageKey: "sx.iot-import", pageGroup: "SẢN XUẤT", path: "/iot-import", label: "Import IoT", icon: <UploadOutlined /> },
-  { pageKey: "sx.line-setup", pageGroup: "SẢN XUẤT", path: "/production/line-setup", label: "Thiết lập line SX", icon: <ApartmentOutlined /> },
-  { pageKey: "sx.line-diagram", pageGroup: "SẢN XUẤT", path: "/production/line-diagram", label: "Sơ đồ line SX", icon: <NodeIndexOutlined /> },
-  { pageKey: "sx.qr-machines", pageGroup: "SẢN XUẤT", path: "/machines/qr-machines", label: "QR Code máy", icon: <QrcodeOutlined /> },
-  { pageKey: "sx.machine-stops", pageGroup: "SẢN XUẤT", path: "/production/machine-stops", label: "Ghi nhận dừng máy", icon: <PauseCircleOutlined /> },
-  { pageKey: "sx.stop-history", pageGroup: "SẢN XUẤT", path: "/production/stop-history", label: "Lịch sử dừng máy", icon: <HistoryOutlined /> },
-  { pageKey: "sx.maintenance", pageGroup: "SẢN XUẤT", path: "/dashboard/maintenance", label: "Nhật ký bảo dưỡng", icon: <ScheduleOutlined /> },
+  {
+    pageKey: "sx.machines",
+    pageGroup: "SẢN XUẤT",
+    path: "/machines",
+    label: "Máy móc & Điều phối",
+    icon: <RobotOutlined />,
+  },
+  {
+    pageKey: "sx.daily-input",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/daily-input",
+    label: "Nhập sản lượng (Thẻ)",
+    icon: <ProductOutlined />,
+  },
+  {
+    pageKey: "sx.daily-input-grid",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/daily-input-grid",
+    label: "Nhập sản lượng (Bảng)",
+    icon: <TableOutlined />,
+  },
+  {
+    pageKey: "sx.winding-input",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/winding-input",
+    label: "Nhập liệu đánh ống",
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    pageKey: "sx.iot-import",
+    pageGroup: "SẢN XUẤT",
+    path: "/iot-import",
+    label: "Import IoT",
+    icon: <UploadOutlined />,
+  },
+  {
+    pageKey: "sx.line-setup",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/line-setup",
+    label: "Thiết lập line SX",
+    icon: <ApartmentOutlined />,
+  },
+  {
+    pageKey: "sx.line-diagram",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/line-diagram",
+    label: "Sơ đồ line SX",
+    icon: <NodeIndexOutlined />,
+  },
+  {
+    pageKey: "sx.qr-machines",
+    pageGroup: "SẢN XUẤT",
+    path: "/machines/qr-machines",
+    label: "QR Code máy",
+    icon: <QrcodeOutlined />,
+  },
+  {
+    pageKey: "sx.machine-stops",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/machine-stops",
+    label: "Ghi nhận dừng máy",
+    icon: <PauseCircleOutlined />,
+  },
+  {
+    pageKey: "sx.stop-history",
+    pageGroup: "SẢN XUẤT",
+    path: "/production/stop-history",
+    label: "Lịch sử dừng máy",
+    icon: <HistoryOutlined />,
+  },
+  {
+    pageKey: "sx.maintenance",
+    pageGroup: "SẢN XUẤT",
+    path: "/dashboard/maintenance",
+    label: "Nhật ký bảo dưỡng",
+    icon: <ScheduleOutlined />,
+  },
   // ĐỊNH MỨC
-  { pageKey: "benchmark.versions", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark", label: "Phiên bản & Chi tiết ĐM", icon: <ScheduleOutlined /> },
-  { pageKey: "benchmark.capacity", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark/capacity", label: "Năng lực sản xuất", icon: <BarChartOutlined /> },
-  { pageKey: "benchmark.comparison", pageGroup: "ĐỊNH MỨC", path: "/dashboard/productivity-benchmark/comparison", label: "So sánh thực tế vs ĐM", icon: <LineChartOutlined /> },
+  {
+    pageKey: "benchmark.versions",
+    pageGroup: "ĐỊNH MỨC",
+    path: "/dashboard/productivity-benchmark",
+    label: "Phiên bản & Chi tiết ĐM",
+    icon: <ScheduleOutlined />,
+  },
+  {
+    pageKey: "benchmark.capacity",
+    pageGroup: "ĐỊNH MỨC",
+    path: "/dashboard/productivity-benchmark/capacity",
+    label: "Năng lực sản xuất",
+    icon: <BarChartOutlined />,
+  },
+  {
+    pageKey: "benchmark.comparison",
+    pageGroup: "ĐỊNH MỨC",
+    path: "/dashboard/productivity-benchmark/comparison",
+    label: "So sánh thực tế vs ĐM",
+    icon: <LineChartOutlined />,
+  },
   // ĐIỆN NĂNG
-  { pageKey: "energy.prices", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/prices", label: "Đơn giá điện", icon: <ThunderboltOutlined /> },
-  { pageKey: "energy.daily-input", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/daily-input", label: "Nhập chỉ số điện", icon: <UploadOutlined /> },
-  { pageKey: "energy.reports", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/reports", label: "Báo cáo tiêu thụ", icon: <LineChartOutlined /> },
-  { pageKey: "energy.live", pageGroup: "ĐIỆN NĂNG", path: "/dashboard/energy/live", label: "Giám sát trực tiếp", icon: <DashboardOutlined /> },
+  {
+    pageKey: "energy.prices",
+    pageGroup: "ĐIỆN NĂNG",
+    path: "/dashboard/energy/prices",
+    label: "Đơn giá điện",
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    pageKey: "energy.daily-input",
+    pageGroup: "ĐIỆN NĂNG",
+    path: "/dashboard/energy/daily-input",
+    label: "Nhập chỉ số điện",
+    icon: <UploadOutlined />,
+  },
+  {
+    pageKey: "energy.reports",
+    pageGroup: "ĐIỆN NĂNG",
+    path: "/dashboard/energy/reports",
+    label: "Báo cáo tiêu thụ",
+    icon: <LineChartOutlined />,
+  },
+  {
+    pageKey: "energy.live",
+    pageGroup: "ĐIỆN NĂNG",
+    path: "/dashboard/energy/live",
+    label: "Giám sát trực tiếp",
+    icon: <DashboardOutlined />,
+  },
   // KINH DOANH
-  { pageKey: "kdsx.dashboard", pageGroup: "KINH DOANH", path: "/kdsx", label: "Dashboard tổng hợp", icon: <DashboardOutlined /> },
-  { pageKey: "kdsx.revenue", pageGroup: "KINH DOANH", path: "/kdsx/revenue", label: "Doanh thu – Lợi nhuận", icon: <DollarOutlined /> },
-  { pageKey: "kdsx.production-schedule", pageGroup: "KINH DOANH", path: "/kdsx/production-schedule", label: "Kế hoạch & Thực hiện", icon: <CalendarOutlined /> },
-  { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng (Cũ)", icon: <CalendarOutlined /> },
-  { pageKey: "kdsx.customers", pageGroup: "KINH DOANH", path: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
-  { pageKey: "kdsx.sales-orders", pageGroup: "KINH DOANH", path: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
-  { pageKey: "kdsx.monthly-quotas", pageGroup: "KINH DOANH", path: "/kdsx/monthly-quotas", label: "Phân bổ tháng", icon: <PartitionOutlined /> },
-  { pageKey: "kdsx.order-progress", pageGroup: "KINH DOANH", path: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
-  { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng (Cũ)", icon: <CheckCircleOutlined /> },
-  { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
+  {
+    pageKey: "kdsx.dashboard",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx",
+    label: "Dashboard tổng hợp",
+    icon: <DashboardOutlined />,
+  },
+  {
+    pageKey: "kdsx.revenue",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/revenue",
+    label: "Doanh thu – Lợi nhuận",
+    icon: <DollarOutlined />,
+  },
+  {
+    pageKey: "kdsx.production-schedule",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/production-schedule",
+    label: "Kế hoạch & Thực hiện",
+    icon: <CalendarOutlined />,
+  },
+  {
+    pageKey: "kdsx.plans",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/plans",
+    label: "Kế hoạch tháng (Cũ)",
+    icon: <CalendarOutlined />,
+  },
+  {
+    pageKey: "kdsx.customers",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/customers",
+    label: "Khách hàng",
+    icon: <UserOutlined />,
+  },
+  {
+    pageKey: "kdsx.sales-orders",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/sales-orders",
+    label: "Hợp đồng bán hàng",
+    icon: <FileTextOutlined />,
+  },
+  {
+    pageKey: "kdsx.monthly-quotas",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/monthly-quotas",
+    label: "Phân bổ tháng",
+    icon: <PartitionOutlined />,
+  },
+  {
+    pageKey: "kdsx.order-progress",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/order-progress",
+    label: "Tiến độ đơn hàng",
+    icon: <BarChartOutlined />,
+  },
+  {
+    pageKey: "kdsx.actuals",
+    pageGroup: "KINH DOANH",
+    path: "/kdsx/actuals",
+    label: "Thực hiện tháng (Cũ)",
+    icon: <CheckCircleOutlined />,
+  },
+  {
+    pageKey: "kdsx.sales-tracking",
+    pageGroup: "KINH DOANH",
+    path: "/sales-orders",
+    label: "Theo dõi đơn hàng",
+    icon: <UnorderedListOutlined />,
+  },
   // { pageKey: "kdsx.daily-input", pageGroup: "KINH DOANH", path: "/kd-daily-input", label: "Nhập sản lượng ngày (KD)", icon: <EditOutlined /> },
 
   // MOBILE
-  { pageKey: "mobile.input", pageGroup: "MOBILE", path: "/production/mobile-input", label: "Nhập liệu", icon: <ProductOutlined /> },
-  { pageKey: "mobile.winding", pageGroup: "MOBILE", path: "/production/mobile-winding", label: "Nhập liệu đánh ống", icon: <ThunderboltOutlined /> },
-  { pageKey: "mobile.report", pageGroup: "MOBILE", path: "/production/mobile-report", label: "Báo cáo sản lượng", icon: <BarChartOutlined /> },
-  { pageKey: "mobile.stops", pageGroup: "MOBILE", path: "/production/mobile-stops", label: "Báo sự cố", icon: <AlertOutlined /> },
-  { pageKey: "mobile.maintenance", pageGroup: "MOBILE", path: "/production/mobile-maintenance", label: "Bảo dưỡng máy", icon: <ToolOutlined /> },
+  {
+    pageKey: "mobile.input",
+    pageGroup: "MOBILE",
+    path: "/production/mobile-input",
+    label: "Nhập liệu",
+    icon: <ProductOutlined />,
+  },
+  {
+    pageKey: "mobile.winding",
+    pageGroup: "MOBILE",
+    path: "/production/mobile-winding",
+    label: "Nhập liệu đánh ống",
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    pageKey: "mobile.report",
+    pageGroup: "MOBILE",
+    path: "/production/mobile-report",
+    label: "Báo cáo sản lượng",
+    icon: <BarChartOutlined />,
+  },
+  {
+    pageKey: "mobile.stops",
+    pageGroup: "MOBILE",
+    path: "/production/mobile-stops",
+    label: "Báo sự cố",
+    icon: <AlertOutlined />,
+  },
+  {
+    pageKey: "mobile.maintenance",
+    pageGroup: "MOBILE",
+    path: "/production/mobile-maintenance",
+    label: "Bảo dưỡng máy",
+    icon: <ToolOutlined />,
+  },
   // BÁO CÁO
-  { pageKey: "report.history", pageGroup: "BÁO CÁO", path: "/production/history", label: "Lịch sử & Báo cáo", icon: <HistoryOutlined /> },
-  { pageKey: "report.production", pageGroup: "BÁO CÁO", path: "/reports/production", label: "Biểu đồ sản lượng", icon: <LineChartOutlined /> },
+  {
+    pageKey: "report.history",
+    pageGroup: "BÁO CÁO",
+    path: "/production/history",
+    label: "Lịch sử & Báo cáo",
+    icon: <HistoryOutlined />,
+  },
+  {
+    pageKey: "report.production",
+    pageGroup: "BÁO CÁO",
+    path: "/reports/production",
+    label: "Biểu đồ sản lượng",
+    icon: <LineChartOutlined />,
+  },
   // DANH MỤC SX
-  { pageKey: "catalog.factories", pageGroup: "DANH MỤC", path: "/factories", label: "Nhà máy", icon: <ApartmentOutlined /> },
-  { pageKey: "catalog.processes", pageGroup: "DANH MỤC", path: "/processes", label: "Công đoạn", icon: <PartitionOutlined /> },
-  { pageKey: "catalog.items", pageGroup: "DANH MỤC", path: "/items", label: "Mặt hàng", icon: <BarcodeOutlined /> },
-  { pageKey: "catalog.lots", pageGroup: "DANH MỤC", path: "/lots", label: "Danh mục lô hàng", icon: <TagsOutlined /> },
-  { pageKey: "catalog.shifts", pageGroup: "DANH MỤC", path: "/categories/shift", label: "Ca làm việc", icon: <ClockCircleOutlined /> },
-  { pageKey: "catalog.stop-cats", pageGroup: "DANH MỤC", path: "/dashboard/stop-categories", label: "Nguyên nhân dừng", icon: <TagsOutlined /> },
-  { pageKey: "kdsx.raw-material-rates", pageGroup: "DANH MỤC", path: "/kdsx/raw-material-rates", label: "Định mức NVL", icon: <ExperimentOutlined /> },
-  { pageKey: "kdsx.material-types", pageGroup: "DANH MỤC", path: "/kdsx/material-types", label: "Danh mục NVL", icon: <ExperimentOutlined /> },
-  { pageKey: "kdsx.material-prices", pageGroup: "DANH MỤC", path: "/kdsx/material-prices", label: "Giá NVL theo tháng", icon: <DollarOutlined /> },
+  {
+    pageKey: "catalog.factories",
+    pageGroup: "DANH MỤC",
+    path: "/factories",
+    label: "Nhà máy",
+    icon: <ApartmentOutlined />,
+  },
+  {
+    pageKey: "catalog.processes",
+    pageGroup: "DANH MỤC",
+    path: "/processes",
+    label: "Công đoạn",
+    icon: <PartitionOutlined />,
+  },
+  {
+    pageKey: "catalog.items",
+    pageGroup: "DANH MỤC",
+    path: "/items",
+    label: "Mặt hàng",
+    icon: <BarcodeOutlined />,
+  },
+  {
+    pageKey: "catalog.lots",
+    pageGroup: "DANH MỤC",
+    path: "/lots",
+    label: "Danh mục lô hàng",
+    icon: <TagsOutlined />,
+  },
+  {
+    pageKey: "catalog.shifts",
+    pageGroup: "DANH MỤC",
+    path: "/categories/shift",
+    label: "Ca làm việc",
+    icon: <ClockCircleOutlined />,
+  },
+  {
+    pageKey: "catalog.stop-cats",
+    pageGroup: "DANH MỤC",
+    path: "/dashboard/stop-categories",
+    label: "Nguyên nhân dừng",
+    icon: <TagsOutlined />,
+  },
+  {
+    pageKey: "kdsx.raw-material-rates",
+    pageGroup: "DANH MỤC",
+    path: "/kdsx/raw-material-rates",
+    label: "Mức tiêu hao NVL",
+    icon: <ExperimentOutlined />,
+  },
+  {
+    pageKey: "kdsx.material-types",
+    pageGroup: "DANH MỤC",
+    path: "/kdsx/material-types",
+    label: "Danh mục Bông Xơ",
+    icon: <ExperimentOutlined />,
+  },
+  {
+    pageKey: "kdsx.material-prices",
+    pageGroup: "DANH MỤC",
+    path: "/kdsx/material-prices",
+    label: "Giá Bông Xơ",
+    icon: <DollarOutlined />,
+  },
   // DANH MỤC ĐIỆN NĂNG
-  { pageKey: "catalog.energy-type", pageGroup: "DANH MỤC", path: "/categories/energy-type", label: "Loại điện năng", icon: <ThunderboltOutlined /> },
-  { pageKey: "catalog.meter-group", pageGroup: "DANH MỤC", path: "/categories/meter-group", label: "Nhóm đồng hồ điện", icon: <GroupOutlined /> },
-  { pageKey: "catalog.meters", pageGroup: "DANH MỤC", path: "/categories/meters", label: "Trạm & Đồng hồ", icon: <DashboardOutlined /> },
+  {
+    pageKey: "catalog.energy-type",
+    pageGroup: "DANH MỤC",
+    path: "/categories/energy-type",
+    label: "Loại điện năng",
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    pageKey: "catalog.meter-group",
+    pageGroup: "DANH MỤC",
+    path: "/categories/meter-group",
+    label: "Nhóm đồng hồ điện",
+    icon: <GroupOutlined />,
+  },
+  {
+    pageKey: "catalog.meters",
+    pageGroup: "DANH MỤC",
+    path: "/categories/meters",
+    label: "Trạm & Đồng hồ",
+    icon: <DashboardOutlined />,
+  },
   // HỆ THỐNG
-  { pageKey: "system.users", pageGroup: "HỆ THỐNG", path: "/users", label: "Quản lý Tài khoản", icon: <UserOutlined /> },
-  { pageKey: "system.permissions", pageGroup: "HỆ THỐNG", path: "/admin/permissions", label: "Phân quyền", icon: <LockOutlined /> },
-  { pageKey: "system.page-registry", pageGroup: "HỆ THỐNG", path: "/admin/page-registry", label: "Danh sách Trang", icon: <AppstoreOutlined /> },
-  { pageKey: "system.backup", pageGroup: "HỆ THỐNG", path: "/admin/backup", label: "Sao lưu & Phục hồi", icon: <CloudSyncOutlined /> },
-  { pageKey: "system.feedback", pageGroup: "HỆ THỐNG", path: "/feedback", label: "Góp ý & Đề xuất", icon: <CommentOutlined /> },
+  {
+    pageKey: "system.users",
+    pageGroup: "HỆ THỐNG",
+    path: "/users",
+    label: "Quản lý Tài khoản",
+    icon: <UserOutlined />,
+  },
+  {
+    pageKey: "system.permissions",
+    pageGroup: "HỆ THỐNG",
+    path: "/admin/permissions",
+    label: "Phân quyền",
+    icon: <LockOutlined />,
+  },
+  {
+    pageKey: "system.page-registry",
+    pageGroup: "HỆ THỐNG",
+    path: "/admin/page-registry",
+    label: "Danh sách Trang",
+    icon: <AppstoreOutlined />,
+  },
+  {
+    pageKey: "system.backup",
+    pageGroup: "HỆ THỐNG",
+    path: "/admin/backup",
+    label: "Sao lưu & Phục hồi",
+    icon: <CloudSyncOutlined />,
+  },
+  {
+    pageKey: "system.feedback",
+    pageGroup: "HỆ THỐNG",
+    path: "/feedback",
+    label: "Góp ý & Đề xuất",
+    icon: <CommentOutlined />,
+  },
 ];
 
 // ==========================================
@@ -166,10 +480,20 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "SẢN XUẤT",
     icon: <AppstoreOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "sx.machines", "sx.daily-input", "sx.daily-input-grid", "sx.winding-input", "sx.iot-import",
-      "sx.line-setup", "sx.line-diagram", "sx.qr-machines",
-      "sx.machine-stops", "sx.stop-history", "sx.maintenance",
-      "benchmark.versions", "benchmark.capacity", "benchmark.comparison",
+      "sx.machines",
+      "sx.daily-input",
+      "sx.daily-input-grid",
+      "sx.winding-input",
+      "sx.iot-import",
+      "sx.line-setup",
+      "sx.line-diagram",
+      "sx.qr-machines",
+      "sx.machine-stops",
+      "sx.stop-history",
+      "sx.maintenance",
+      "benchmark.versions",
+      "benchmark.capacity",
+      "benchmark.comparison",
     ],
   },
   {
@@ -177,7 +501,12 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "KINH DOANH",
     icon: <BarChartOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "kdsx.revenue", "kdsx.customers", "kdsx.sales-orders", "kdsx.monthly-quotas", "kdsx.production-schedule", "kdsx.order-progress",
+      "kdsx.revenue",
+      "kdsx.customers",
+      "kdsx.sales-orders",
+      "kdsx.monthly-quotas",
+      "kdsx.production-schedule",
+      "kdsx.order-progress",
       "kdsx.sales-tracking",
       // Trang cũ — ẩn khỏi sidebar, vẫn accessible qua URL:
       // "kdsx.dashboard", "kdsx.plans", "kdsx.actuals", "kdsx.daily-input",
@@ -187,29 +516,55 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     key: "group-mobile",
     label: "MOBILE",
     icon: <MobileOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["mobile.input", "mobile.winding", "mobile.report", "mobile.stops", "mobile.maintenance"],
+    pageKeys: [
+      "mobile.input",
+      "mobile.winding",
+      "mobile.report",
+      "mobile.stops",
+      "mobile.maintenance",
+    ],
   },
   {
     key: "group-energy",
     label: "ĐIỆN NĂNG",
     icon: <ThunderboltOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["energy.prices", "energy.daily-input", "energy.reports", "energy.live"],
+    pageKeys: [
+      "energy.prices",
+      "energy.daily-input",
+      "energy.reports",
+      "energy.live",
+    ],
   },
   {
     key: "group-catalog",
     label: "DANH MỤC",
     icon: <DatabaseOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "catalog.factories", "catalog.processes", "catalog.items", "catalog.lots", "catalog.shifts", "catalog.stop-cats",
-      "kdsx.raw-material-rates", "kdsx.material-types", "kdsx.material-prices",
-      "catalog.energy-type", "catalog.meter-group", "catalog.meters",
+      "catalog.factories",
+      "catalog.processes",
+      "catalog.items",
+      "catalog.lots",
+      "catalog.shifts",
+      "catalog.stop-cats",
+      "kdsx.raw-material-rates",
+      "kdsx.material-types",
+      "kdsx.material-prices",
+      "catalog.energy-type",
+      "catalog.meter-group",
+      "catalog.meters",
     ],
   },
   {
     key: "group-system",
     label: "HỆ THỐNG",
     icon: <SafetyCertificateOutlined style={{ fontSize: 10 }} />,
-    pageKeys: ["system.users", "system.permissions", "system.page-registry", "system.backup", "system.feedback"],
+    pageKeys: [
+      "system.users",
+      "system.permissions",
+      "system.page-registry",
+      "system.backup",
+      "system.feedback",
+    ],
   },
 ];
 
@@ -225,7 +580,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   // 1. Bảo vệ route
   useEffect(() => {
-    if (status === "unauthenticated" && pathname !== "/login" && pathname !== "/register") {
+    if (
+      status === "unauthenticated" &&
+      pathname !== "/login" &&
+      pathname !== "/register"
+    ) {
       router.push("/login");
     }
   }, [status, pathname, router]);
@@ -244,7 +603,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   if (status === "loading") {
     return (
-      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
         <Spin size="large" />
       </div>
     );
@@ -255,8 +621,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   // ========================================================
   const userRole = ((session?.user as any)?.userRole ?? "VIEWER") as UserRole;
   const isAdmin = userRole === "ADMIN";
-  const pagePermsRaw: { pageKey: string; canView: boolean; canEdit: boolean }[] =
-    (session?.user as any)?.pagePermissions ?? [];
+  const pagePermsRaw: {
+    pageKey: string;
+    canView: boolean;
+    canEdit: boolean;
+  }[] = (session?.user as any)?.pagePermissions ?? [];
 
   const permUser: PermUser = {
     userRole,
@@ -276,7 +645,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   // BUILD MENU ITEMS — Lọc theo quyền
   // ========================================================
   const makeGroupLabel = (text: string) => (
-    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.45)" }}>
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: 1,
+        color: "rgba(255,255,255,0.45)",
+      }}
+    >
       {text}
     </span>
   );
@@ -285,7 +661,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     const items: any[] = [];
 
     // Tổng quan — luôn hiện
-    const overviewPage = ALL_PAGES.find((p) => p.pageKey === "dashboard.overview");
+    const overviewPage = ALL_PAGES.find(
+      (p) => p.pageKey === "dashboard.overview",
+    );
     if (overviewPage && canView("dashboard.overview")) {
       items.push({
         key: overviewPage.path,
@@ -328,13 +706,16 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           });
       }
 
-
-
       // Special: Hệ thống group — filter admin-only items
       if (group.key === "group-system") {
         groupChildren = groupChildren.filter((child) => {
           // Quản lý Tài khoản, Phân quyền, Sao lưu chỉ cho ADMIN
-          const adminOnlyPaths = ["/users", "/admin/permissions", "/admin/page-registry", "/admin/backup"];
+          const adminOnlyPaths = [
+            "/users",
+            "/admin/permissions",
+            "/admin/page-registry",
+            "/admin/backup",
+          ];
           if (adminOnlyPaths.includes(child.key) && !isAdmin) return false;
           return true;
         });
@@ -390,7 +771,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   return (
     <Layout style={{ minHeight: "100vh" }}>
       {/* SIDER */}
-      <Sider trigger={null} collapsible collapsed={collapsed} width={260} theme="dark">
+      <Sider
+        trigger={null}
+        collapsible
+        collapsed={collapsed}
+        width={260}
+        theme="dark"
+      >
         <div
           style={{
             height: 64,
@@ -406,7 +793,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             borderRadius: 8,
             overflow: "hidden",
             whiteSpace: "nowrap",
-            transition: "all 0.3s"
+            transition: "all 0.3s",
           }}
         >
           {collapsed ? "PB" : "PHU BAI ERP"}
@@ -467,7 +854,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           {children}
         </Content>
 
-        <Footer style={{ textAlign: "center", color: "#888", background: 'transparent' }}>
+        <Footer
+          style={{
+            textAlign: "center",
+            color: "#888",
+            background: "transparent",
+          }}
+        >
           Sợi Phú Bài ERP ©{new Date().getFullYear()} - Developed by Minh Trí
         </Footer>
       </Layout>
