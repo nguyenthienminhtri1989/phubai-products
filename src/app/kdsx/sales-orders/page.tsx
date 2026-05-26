@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Typography,
   Table,
@@ -75,6 +75,20 @@ export default function SalesOrdersPage() {
   const [editing, setEditing] = useState<SalesOrder | null>(null);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+
+  // Theo dõi items trong form để phát hiện trùng mặt hàng
+  const watchedItems = Form.useWatch("items", form) as Array<{ itemId?: number }> | undefined;
+  const duplicateItemIds = useMemo(() => {
+    const seen = new Set<number>();
+    const dupes = new Set<number>();
+    for (const it of watchedItems ?? []) {
+      if (it?.itemId) {
+        if (seen.has(it.itemId)) dupes.add(it.itemId);
+        seen.add(it.itemId);
+      }
+    }
+    return dupes;
+  }, [watchedItems]);
   const [filterFactory, setFilterFactory] = useState<number | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -351,24 +365,36 @@ export default function SalesOrdersPage() {
             <Form.List name="items">
               {(fields, { add, remove }) => (
                 <>
-                  {fields.map(({ key, name, ...restField }) => (
+                  {fields.map(({ key, name, ...restField }) => {
+                    const currentItemId = watchedItems?.[name]?.itemId;
+                    const isDuplicate = !!currentItemId && duplicateItemIds.has(currentItemId);
+                    return (
                     <div
                       key={key}
                       style={{
                         position: "relative",
-                        border: "1px solid #f0f0f0",
+                        border: isDuplicate ? "1px solid #1677ff" : "1px solid #f0f0f0",
                         borderRadius: 6,
                         padding: "12px 12px 0 12px",
                         marginBottom: 12,
-                        background: "#fafafa",
+                        background: isDuplicate ? "#e6f4ff" : "#fafafa",
                       }}
                     >
+                      {isDuplicate && (
+                        <Tag
+                          color="blue"
+                          style={{ position: "absolute", top: 4, left: 12, fontSize: 11 }}
+                        >
+                          Cùng mặt hàng — khác cảng/container
+                        </Tag>
+                      )}
                       <div
                         style={{
                           display: "flex",
                           flexWrap: "wrap",
                           gap: "0 12px",
                           paddingRight: 56,
+                          marginTop: isDuplicate ? 20 : 0,
                         }}
                       >
                         <Form.Item
@@ -489,7 +515,8 @@ export default function SalesOrdersPage() {
                         Xóa
                       </Button>
                     </div>
-                  ))}
+                  );
+                  })}
                   <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
                     Thêm loại sợi
                   </Button>

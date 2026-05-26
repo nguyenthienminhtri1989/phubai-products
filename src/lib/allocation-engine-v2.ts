@@ -13,6 +13,7 @@ export interface AllocationLine {
   allocatedQty: number; // kg phân bổ
   unitPriceUsd: number;
   revenueUsd: number;
+  note: string | null; // ghi chú phân biệt dòng (cảng, container...)
   // Thông tin bổ sung cho calculator
   sellingCostRate: number | null;
   wasteRecoveryRate: number | null;
@@ -204,11 +205,8 @@ async function addProjectedProduction(
 /**
  * Rót sản lượng vào hợp đồng theo thứ tự ưu tiên (waterfall).
  *
- * Thứ tự sort:
- *   1. priorityOverride ASC NULLS LAST (có số → lên trước, số nhỏ trước)
- *   2. deadline ASC NULLS LAST (có deadline → lên trước, sớm trước)
- *   3. signedDate ASC NULLS LAST (ký trước → lên trước)
- *   4. SalesOrder.id ASC (ổn định)
+ * Nếu có MonthlyQuota cho item+yearMonth → dùng quota-based waterfall (FIXED trước, REMAINDER sau).
+ * Nếu không có quota → fallback waterfall cũ (sort theo priority/deadline/signedDate).
  */
 async function waterfallAllocate(
   productionByItem: ProductionByItem[],
@@ -242,16 +240,15 @@ async function waterfallAllocate(
             signedDate: true,
           },
         },
+        quotas: {
+          where: { yearMonth },
+        },
       },
     });
 
-    // Tính "còn cần SX" cho mỗi HĐ
-    // previousAllocated = tổng SL đã phân bổ từ ProductionLog CÁC THÁNG TRƯỚC
+    // Tính "còn cần SX" cho mỗi HĐ từ các tháng trước
     const contractsWithRemaining = await Promise.all(
       contracts.map(async (c: (typeof contracts)[0]) => {
-        // Dùng OrderAllocation cũ (source='KD') cho các tháng trước.
-        // Nếu chưa có allocation cũ thì coi như 0.
-        // Về sau khi chuyển hoàn toàn sang v2, sẽ có cơ chế snapshot.
         const previousAllocated = await prisma.orderAllocation.aggregate({
           where: {
             salesOrderItemId: c.id,
@@ -259,80 +256,136 @@ async function waterfallAllocate(
           },
           _sum: { allocatedQty: true },
         });
-
-        const totalPreviousAllocated =
-          (previousAllocated._sum?.allocatedQty ?? 0);
-        const remainingQty =
-          c.plannedQty - c.deliveredQty - totalPreviousAllocated;
-
+        const totalPreviousAllocated = previousAllocated._sum?.allocatedQty ?? 0;
+        const remainingQty = c.plannedQty - c.deliveredQty - totalPreviousAllocated;
         return { ...c, remainingQty };
       })
     );
 
     type ContractWithRemaining = (typeof contractsWithRemaining)[0];
 
-    // Loại bỏ HĐ đã hoàn thành
     const activeContracts = contractsWithRemaining.filter(
       (c: ContractWithRemaining) => c.remainingQty > 0
     );
 
-    // Sort theo ưu tiên
-    activeContracts.sort((a: ContractWithRemaining, b: ContractWithRemaining) => {
-      // 1. priorityOverride: có trước, số nhỏ trước
-      const aP = a.priorityOverride;
-      const bP = b.priorityOverride;
-      if (aP != null && bP == null) return -1;
-      if (aP == null && bP != null) return 1;
-      if (aP != null && bP != null && aP !== bP) return aP - bP;
-
-      // 2. deadline: có trước, sớm trước
-      const aD = a.deliveryDate ?? a.order.deliveryDate;
-      const bD = b.deliveryDate ?? b.order.deliveryDate;
-      if (aD && !bD) return -1;
-      if (!aD && bD) return 1;
-      if (aD && bD) {
-        const diff = new Date(aD).getTime() - new Date(bD).getTime();
-        if (diff !== 0) return diff;
-      }
-
-      // 3. signedDate: ký trước lên trước
-      const aS = a.order.signedDate;
-      const bS = b.order.signedDate;
-      if (aS && !bS) return -1;
-      if (!aS && bS) return 1;
-      if (aS && bS) {
-        const diff = new Date(aS).getTime() - new Date(bS).getTime();
-        if (diff !== 0) return diff;
-      }
-
-      // 4. orderId (ổn định)
-      return a.order.id - b.order.id;
-    });
-
-    // Waterfall: rót sản lượng
     let remainingProduction = prodItem.totalQty;
-    let lastContract: (typeof activeContracts)[0] | null = null;
+    let lastContract: ContractWithRemaining | null = null;
 
-    for (const contract of activeContracts) {
-      if (remainingProduction <= 0) break;
+    // Kiểm tra có MonthlyQuota cho item này không
+    const quotaContracts = activeContracts.filter(
+      (c: ContractWithRemaining) => c.quotas.length > 0
+    );
 
-      const allocateQty = Math.min(remainingProduction, contract.remainingQty);
-      if (allocateQty > 0) {
-        allocations.push({
-          itemId: prodItem.itemId,
-          itemName: prodItem.itemName,
-          orderItemId: contract.id,
-          orderId: contract.order.id,
-          orderNo: contract.order.orderNo,
-          allocatedQty: allocateQty,
-          unitPriceUsd: contract.unitPrice,
-          revenueUsd: allocateQty * contract.unitPrice,
-          sellingCostRate: contract.sellingCostRate,
-          wasteRecoveryRate: contract.wasteRecoveryRate,
-        });
+    if (quotaContracts.length > 0) {
+      // ===== QUOTA-BASED WATERFALL =====
+      // Tách FIXED và REMAINDER, sort theo sortOrder
+      const fixedQuotas = activeContracts
+        .filter((c: ContractWithRemaining) => c.quotas.length > 0 && !c.quotas[0].isRemainder)
+        .sort((a: ContractWithRemaining, b: ContractWithRemaining) =>
+          (a.quotas[0]?.sortOrder ?? 0) - (b.quotas[0]?.sortOrder ?? 0)
+        );
+      const remainderContract = activeContracts.find(
+        (c: ContractWithRemaining) => c.quotas.length > 0 && c.quotas[0].isRemainder
+      ) ?? null;
 
-        remainingProduction -= allocateQty;
-        lastContract = contract;
+      // Rót FIXED trước (bị cap bởi quotaQty)
+      for (const contract of fixedQuotas) {
+        if (remainingProduction <= 0) break;
+        const cap = Math.min(
+          contract.quotas[0].quotaQty ?? contract.remainingQty,
+          contract.remainingQty
+        );
+        const allocateQty = Math.min(remainingProduction, cap);
+        if (allocateQty > 0) {
+          allocations.push({
+            itemId: prodItem.itemId,
+            itemName: prodItem.itemName,
+            orderItemId: contract.id,
+            orderId: contract.order.id,
+            orderNo: contract.order.orderNo,
+            allocatedQty: allocateQty,
+            unitPriceUsd: contract.unitPrice,
+            revenueUsd: allocateQty * contract.unitPrice,
+            note: contract.note ?? null,
+            sellingCostRate: contract.sellingCostRate,
+            wasteRecoveryRate: contract.wasteRecoveryRate,
+          });
+          remainingProduction -= allocateQty;
+          lastContract = contract;
+        }
+      }
+
+      // Phần dư → REMAINDER
+      if (remainderContract && remainingProduction > 0) {
+        const allocateQty = Math.min(remainingProduction, remainderContract.remainingQty);
+        if (allocateQty > 0) {
+          allocations.push({
+            itemId: prodItem.itemId,
+            itemName: prodItem.itemName,
+            orderItemId: remainderContract.id,
+            orderId: remainderContract.order.id,
+            orderNo: remainderContract.order.orderNo,
+            allocatedQty: allocateQty,
+            unitPriceUsd: remainderContract.unitPrice,
+            revenueUsd: allocateQty * remainderContract.unitPrice,
+            note: remainderContract.note ?? null,
+            sellingCostRate: remainderContract.sellingCostRate,
+            wasteRecoveryRate: remainderContract.wasteRecoveryRate,
+          });
+          remainingProduction -= allocateQty;
+          lastContract = remainderContract;
+        }
+      }
+    } else {
+      // ===== FALLBACK: WATERFALL CŨ (sort theo priority/deadline/signedDate) =====
+      activeContracts.sort((a: ContractWithRemaining, b: ContractWithRemaining) => {
+        const aP = a.priorityOverride;
+        const bP = b.priorityOverride;
+        if (aP != null && bP == null) return -1;
+        if (aP == null && bP != null) return 1;
+        if (aP != null && bP != null && aP !== bP) return aP - bP;
+
+        const aD = a.deliveryDate ?? a.order.deliveryDate;
+        const bD = b.deliveryDate ?? b.order.deliveryDate;
+        if (aD && !bD) return -1;
+        if (!aD && bD) return 1;
+        if (aD && bD) {
+          const diff = new Date(aD).getTime() - new Date(bD).getTime();
+          if (diff !== 0) return diff;
+        }
+
+        const aS = a.order.signedDate;
+        const bS = b.order.signedDate;
+        if (aS && !bS) return -1;
+        if (!aS && bS) return 1;
+        if (aS && bS) {
+          const diff = new Date(aS).getTime() - new Date(bS).getTime();
+          if (diff !== 0) return diff;
+        }
+
+        return a.order.id - b.order.id;
+      });
+
+      for (const contract of activeContracts) {
+        if (remainingProduction <= 0) break;
+        const allocateQty = Math.min(remainingProduction, contract.remainingQty);
+        if (allocateQty > 0) {
+          allocations.push({
+            itemId: prodItem.itemId,
+            itemName: prodItem.itemName,
+            orderItemId: contract.id,
+            orderId: contract.order.id,
+            orderNo: contract.order.orderNo,
+            allocatedQty: allocateQty,
+            unitPriceUsd: contract.unitPrice,
+            revenueUsd: allocateQty * contract.unitPrice,
+            note: contract.note ?? null,
+            sellingCostRate: contract.sellingCostRate,
+            wasteRecoveryRate: contract.wasteRecoveryRate,
+          });
+          remainingProduction -= allocateQty;
+          lastContract = contract;
+        }
       }
     }
 
@@ -348,6 +401,7 @@ async function waterfallAllocate(
         allocatedQty: remainingProduction,
         unitPriceUsd: surplusPrice,
         revenueUsd: remainingProduction * surplusPrice,
+        note: null,
         sellingCostRate: lastContract?.sellingCostRate ?? null,
         wasteRecoveryRate: lastContract?.wasteRecoveryRate ?? null,
       });

@@ -101,6 +101,7 @@ const ALL_PAGES: PageDef[] = [
   { pageKey: "kdsx.plans", pageGroup: "KINH DOANH", path: "/kdsx/plans", label: "Kế hoạch tháng (Cũ)", icon: <CalendarOutlined /> },
   { pageKey: "kdsx.customers", pageGroup: "KINH DOANH", path: "/kdsx/customers", label: "Khách hàng", icon: <UserOutlined /> },
   { pageKey: "kdsx.sales-orders", pageGroup: "KINH DOANH", path: "/kdsx/sales-orders", label: "Hợp đồng bán hàng", icon: <FileTextOutlined /> },
+  { pageKey: "kdsx.monthly-quotas", pageGroup: "KINH DOANH", path: "/kdsx/monthly-quotas", label: "Phân bổ tháng", icon: <PartitionOutlined /> },
   { pageKey: "kdsx.order-progress", pageGroup: "KINH DOANH", path: "/kdsx/order-progress", label: "Tiến độ đơn hàng", icon: <BarChartOutlined /> },
   { pageKey: "kdsx.actuals", pageGroup: "KINH DOANH", path: "/kdsx/actuals", label: "Thực hiện tháng (Cũ)", icon: <CheckCircleOutlined /> },
   { pageKey: "kdsx.sales-tracking", pageGroup: "KINH DOANH", path: "/sales-orders", label: "Theo dõi đơn hàng", icon: <UnorderedListOutlined /> },
@@ -176,7 +177,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: "KINH DOANH",
     icon: <BarChartOutlined style={{ fontSize: 10 }} />,
     pageKeys: [
-      "kdsx.revenue", "kdsx.customers", "kdsx.sales-orders", "kdsx.production-schedule", "kdsx.order-progress",
+      "kdsx.revenue", "kdsx.customers", "kdsx.sales-orders", "kdsx.monthly-quotas", "kdsx.production-schedule", "kdsx.order-progress",
       "kdsx.sales-tracking",
       // Trang cũ — ẩn khỏi sidebar, vẫn accessible qua URL:
       // "kdsx.dashboard", "kdsx.plans", "kdsx.actuals", "kdsx.daily-input",

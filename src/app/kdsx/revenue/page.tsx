@@ -115,6 +115,7 @@ interface ContractProgress {
   customerName: string | null;
   itemId: number;
   itemName: string;
+  note: string | null;
   totalQty: number;
   deliveredQty: number;
   allocatedThisMonth: number;
@@ -125,6 +126,8 @@ interface ContractProgress {
   deadline: string | null;
   priorityOverride: number | null;
   deferToMonth: string | null;
+  quotaThisMonth: number | null;
+  isRemainder: boolean;
   status: "ACTIVE" | "COMPLETED" | "DEFERRED";
 }
 
@@ -450,6 +453,19 @@ export default function RevenueDashboard() {
           verticalAlign: "middle" as const,
         },
       }),
+    },
+    {
+      title: "Chi tiết",
+      dataIndex: "note",
+      key: "note",
+      width: 120,
+      ellipsis: true,
+      render: (note: string | null) =>
+        note ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {note}
+          </Text>
+        ) : null,
     },
     {
       title: "Cam kết (kg)",

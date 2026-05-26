@@ -55,6 +55,7 @@ MonthlyActual → ActualLineItem + FixedCostEntry
 MonthlySummarySnapshot (cache KH/TH)
 OrderAllocation (phân bổ sản lượng vào HĐ, source: KD/PRODUCTION)
 KdDailyInput (sản lượng ngày phòng KD nhập, unique: machineId+itemId+recordDate)
+MonthlyQuota (quota tháng per dòng HĐ; isRemainder=true → nhận phần dư; unique: salesOrderItemId+yearMonth)
 ```
 
 ### Công thức KD-SX
@@ -244,6 +245,8 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 
 - Export Excel báo cáo KH/TH theo format file gốc
 - Copy kế hoạch tháng trước sang tháng mới
+- UI trang nhập MonthlyQuota (Phase 2 — schema + API đã có)
+- Snapshot tháng trước cho cumProducedPrevMonths (hiện tính từ OrderAllocation)
 - Tìm kiếm/lọc khách hàng theo customerType
 - Validate email/phone/MST ở backend
 - runAllocation tích hợp vào IoT import route

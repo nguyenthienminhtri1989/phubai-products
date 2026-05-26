@@ -890,6 +890,7 @@ model SalesOrderItem {
   planLineItems   PlanLineItem[]
   actualLineItems ActualLineItem[]
   allocations     OrderAllocation[]
+  quotas          MonthlyQuota[]
 
   // Lot management
   lots Lot[]
@@ -897,6 +898,33 @@ model SalesOrderItem {
   @@index([orderId])
   @@index([itemId])
   @@map("sales_order_items")
+}
+
+/// Phân bổ quota sản lượng cho từng dòng HĐ trong tháng.
+/// Phòng KD nhập đầu mỗi tháng, quyết định rót bao nhiêu cho HĐ nào.
+model MonthlyQuota {
+  id               Int    @id @default(autoincrement())
+  salesOrderItemId Int
+  yearMonth        String @db.VarChar(7) // "2026-05"
+
+  /// Số kg tối đa rót cho dòng HĐ này trong tháng.
+  /// NULL khi isRemainder=true (tự tính = tổng SL item - tổng FIXED)
+  quotaQty    Float?
+
+  /// true = HĐ cuối cùng nhận phần dư. Mỗi item+yearMonth chỉ có 1 REMAINDER.
+  isRemainder Boolean @default(false)
+
+  /// Thứ tự rót trong waterfall (số nhỏ = rót trước). Chỉ dùng cho FIXED.
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrderItem SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([salesOrderItemId, yearMonth])
+  @@index([yearMonth])
+  @@map("monthly_quotas")
 }
 
 // --- Nhóm Thông số tháng ---

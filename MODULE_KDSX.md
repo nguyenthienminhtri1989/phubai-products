@@ -1,4 +1,4 @@
-# MODULE_KDSX.md — Cập nhật: 2026-05-24
+# MODULE_KDSX.md — Cập nhật: 2026-05-26
 
 Toàn bộ module Kinh doanh - Sản xuất (KD-SX): kế hoạch tháng, thực hiện, calculator, snapshot, đơn hàng, allocation engine, production schedule, revenue refactor v2, quản lý NVL.
 
@@ -65,10 +65,15 @@ Tiền lương, Trích trước lương, Tiền ăn ca, BHXH/YT/TN/KPCĐ, Tiền
 ### Models mới cho KD-SX
 
 ```
-① Hợp đồng bán hàng
+① Hợp đồng bán hàng (CẬP NHẬT 2026-05-26)
    Customer (+ address, phone, email, taxCode, customerType DOMESTIC|FOREIGN)
      → SalesOrder (contractCode, deliveryDate, status OrderStatus, startDate, completedDate)
        → SalesOrderItem (plannedQty, allocatedQty, deliveredQty, unitPriceUsd, priorityOverride, deferToMonth, wasteRecoveryRate)
+         - BỎ @@unique([orderId, itemId]) → cho phép cùng 1 HĐ có 2+ dòng cùng item
+         - THÊM field note: String? — ghi chú phân biệt (cảng, container)
+         - Lý do: 1 HĐ có thể tách 2 dòng cùng mặt hàng nhưng đi 2 cảng khác nhau
+           → CPBH khác → đơn giá khác
+         - Relation mới: quotas MonthlyQuota[]
      → OrderAllocation (factoryId, itemId, productionDate, allocatedQty)
 
 ② Thông số & NVL
@@ -96,6 +101,16 @@ Tiền lương, Trích trước lương, Tiền ăn ca, BHXH/YT/TN/KPCĐ, Tiền
 
 ⑦ FixedCostEntry v2 (Revenue refactor)
    FixedCostEntry dùng factoryId + yearMonth trực tiếp (thay vì FK monthlyPlanId/monthlyActualId)
+
+⑧ Phân bổ tháng (MonthlyQuota) — MỚI 2026-05-26
+   MonthlyQuota (salesOrderItemId, yearMonth, quotaQty?, isRemainder, sortOrder)
+     → SalesOrderItem @relation
+     @@unique([salesOrderItemId, yearMonth])
+
+   Mục đích: Phòng KD quyết định mỗi đầu tháng rót bao nhiêu SL cho từng dòng HĐ.
+   2 loại: FIXED (quotaQty = số cụ thể) | REMAINDER (quotaQty = NULL, nhận phần dư)
+   Mỗi item + yearMonth chỉ có tối đa 1 REMAINDER.
+   Khi không có quota → waterfall chạy tự động như cũ.
 ```
 
 ---
@@ -152,6 +167,20 @@ const rate = await prisma.rawMaterialRate.findFirst({
 - Projected qty = actual ProductionLog + benchmark EMPIRICAL cho lastRow của mỗi máy ở ngày chưa có data
 - UI hiển thị liveQty với màu cam + tag "⚡ Đã thay đổi" khi khác qty đã lưu; chỉ persist khi bấm "Tính lại tất cả"
 
+### 8. SalesOrderItem cho phép cùng orderId + itemId (2026-05-26)
+
+- KHÔNG CÒN unique constraint `@@unique([orderId, itemId])`
+- 1 HĐ có thể có 2+ dòng cùng mặt hàng (khác giá do cảng/container)
+- Dùng field `note` để phân biệt
+- Code KHÔNG ĐƯỢC dùng `findUnique({ where: { orderId_itemId } })`
+  → dùng `findFirst({ where: { orderId, itemId } })` hoặc tìm theo `id`
+
+### 9. MonthlyQuota — mỗi item+yearMonth tối đa 1 REMAINDER
+
+- Validation: `isRemainder=true` thì `quotaQty` phải NULL
+- Mỗi cặp (itemId, yearMonth) trong cùng factory chỉ có 1 dòng `isRemainder=true`
+- Khi không có quota → engine hoạt động y như cũ
+
 ---
 
 ## QUYỀN TRÌNH DUYỆT
@@ -187,6 +216,15 @@ Dashboard: So sánh KH vs TH qua MonthlySummarySnapshot
 - `wasteRecoveryRate` per-item: override định mức chung
 - Tính DT/CP/LN từ AllocationResult (`src/lib/kdsx/calculator-v2.ts`)
 
+#### Allocation Engine v2 — cập nhật MonthlyQuota (2026-05-26)
+
+- Nếu có MonthlyQuota cho item+yearMonth → chế độ quota:
+  - Rót FIXED trước (theo sortOrder), cap bởi `quotaQty`
+  - Rót REMAINDER cuối (nhận phần dư)
+  - HĐ không có quota nhưng active → waterfall thông thường sau REMAINDER
+- Nếu không có MonthlyQuota → waterfall như cũ (backward compatible)
+- `AllocationLine` thêm field `note` (ghi chú cảng/container)
+
 ### SalesOrder API
 
 | Method | Path | Description |
@@ -202,6 +240,66 @@ Dashboard: So sánh KH vs TH qua MonthlySummarySnapshot
 
 - `/kdsx/order-progress` — Dashboard card grid, card border: green=on track, orange=isAtRisk, red=OVERDUE
 - `/kdsx/sales-orders/[id]?tab=progress` — Biểu đồ tích lũy Recharts
+
+---
+
+## PHÂN BỔ THÁNG (MONTHLY QUOTA) — MỚI 2026-05-26
+
+### Bối cảnh nghiệp vụ
+
+Khi nhiều HĐ cùng 1 mặt hàng, Phòng KD cần kiểm soát "tháng này rót bao nhiêu cho HĐ nào"
+thay vì để waterfall tự rót hết cho HĐ ưu tiên cao nhất.
+
+### 3 Pattern từ Excel thực tế
+
+1. **FIXED (gõ tay)**: KD nhập số cụ thể cho từng HĐ (VD: HĐ A = 17T, HĐ B = 5T)
+2. **Tham chiếu tháng trước**: HĐ tổng − SL đã SX tháng trước = còn phải SX
+3. **REMAINDER (HĐ cuối)**: Tổng SL mặt hàng − tổng các FIXED = phần dư rơi vào HĐ cuối
+
+### Schema: MonthlyQuota
+
+| Field | Type | Mô tả |
+|-------|------|-------|
+| salesOrderItemId | Int | FK → SalesOrderItem |
+| yearMonth | String | "2026-05" |
+| quotaQty | Float? | Số kg. NULL khi isRemainder=true |
+| isRemainder | Boolean | true = HĐ cuối nhận phần dư |
+| sortOrder | Int | Thứ tự rót (FIXED: số nhỏ trước) |
+
+### Waterfall v2 với quota
+
+```
+CÓ QUOTA:
+  1. Rót FIXED trước (theo sortOrder)
+     allocQty = min(remainingProduction, quotaQty, contractRemaining)
+  2. Phần dư → REMAINDER
+     allocQty = min(remainingProduction, contractRemaining)
+  3. Vượt tất cả → surplus
+KHÔNG CÓ QUOTA: waterfall như cũ (theo priority)
+```
+
+### API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/v2/monthly-quotas | Lấy quota theo factory+yearMonth+item |
+| POST | /api/v2/monthly-quotas | Tạo/cập nhật quota |
+| POST | /api/v2/monthly-quotas/copy-from-previous | Copy từ tháng trước |
+
+### UI: Trang /kdsx/monthly-quotas
+
+Bảng nhóm theo mặt hàng, mỗi nhóm hiển thị các HĐ active với cột quota.
+Mặt hàng chỉ có 1 HĐ → không cần quota.
+
+### Kiểm soát xuyên tháng
+
+Chuỗi kiểm soát: Tổng HĐ → deliveredQty (trước PM) → Lũy kế SX các tháng trước → Còn lại → Quota tháng → Thực SX tháng → Còn lại mới.
+
+Sang tháng mới:
+- Cột "Lũy kế đã SX" hiển thị tổng SX tất cả tháng trước
+- Cột "Còn lại" = Tổng HĐ - deliveredQty - lũy kế
+- Nút "Copy từ tháng trước" pre-fill quota, tự điều chỉnh theo remaining
+- HĐ đã hoàn thành (còn lại = 0) tự ẩn
 
 ---
 
@@ -417,3 +515,15 @@ components/kdsx/
 - **CORE.md** — Tech stack, phân quyền, conventions (yearMonth, amountVnd)
 - **MODULE_PRODUCTION.md** — ProductionLog là nguồn SL thực tế cho KD-SX; Benchmark EMPIRICAL dùng trong schedule auto-fill
 - **CHANGELOG.md** — Lịch sử chi tiết các tính năng đã hoàn thành
+
+---
+
+## SPEC FILES THAM KHẢO
+
+Các file SPEC chi tiết cho từng phase implementation:
+
+| File | Nội dung |
+|------|----------|
+| SPEC_PHASE1_SCHEMA_MONTHLY_QUOTA.md | Schema MonthlyQuota + bỏ unique constraint + API CRUD |
+| SPEC_PHASE2_UI_MONTHLY_QUOTA.md | UI trang phân bổ tháng (/kdsx/monthly-quotas) |
+| SPEC_PHASE3_ENGINE_AND_MULTILINE.md | Cập nhật engine v2 + SalesOrder UI multi-line |

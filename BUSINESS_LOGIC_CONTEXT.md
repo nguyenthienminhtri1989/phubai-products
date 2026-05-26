@@ -3415,3 +3415,129 @@ Không có endpoint mới — thay đổi hoàn toàn ở frontend.
 - Không ảnh hưởng đến order ở database level (Prisma vẫn dùng `orderBy: { name: "asc" }` hoặc `id: "asc"`) — sort chỉ xảy ra ở frontend sau khi fetch
 - Nếu cần sort ở DB level, dùng PostgreSQL raw query: `ORDER BY regexp_replace(name, '\\D', '', 'g')::int`
 
+
+---
+
+## MODULE KDSX — MonthlyQuota + Multi-line SalesOrderItem (Phase 1)
+
+**Status:** ✅ Completed 2026-05-26
+
+### What was built
+
+Thêm bảng `MonthlyQuota` cho phép Phòng KD phân bổ sản lượng tháng cho từng dòng hợp đồng. Sửa allocation engine v2 để ưu tiên waterfall theo quota thay vì waterfall tự động khi có quota. API CRUD đầy đủ bao gồm copy từ tháng trước.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                              — Thêm model MonthlyQuota + relation quotas vào SalesOrderItem
+prisma/migrations/20260526100220_add_monthly_quota_and_multi_line_item/migration.sql — Tạo bảng monthly_quotas
+src/app/api/v2/monthly-quotas/route.ts                            — GET (lấy quota theo factory+tháng) + POST (upsert quota)
+src/app/api/v2/monthly-quotas/copy-from-previous/route.ts         — POST copy quota từ tháng nguồn
+src/lib/allocation-engine-v2.ts                                   — Sửa waterfallAllocate: hỗ trợ quota-based waterfall
+```
+
+### Key business logic implemented
+
+- `MonthlyQuota.isRemainder=true` → quotaQty phải NULL; nhận phần còn lại sau khi rót xong các FIXED
+- Mỗi `itemId + yearMonth` tối đa 1 dòng REMAINDER (enforce ở API layer)
+- Allocation engine: nếu có quota cho item → dùng FIXED (sort theo sortOrder ASC) rồi REMAINDER; nếu không có quota → fallback waterfall cũ (backward compatible)
+- `@@unique([orderId, itemId])` đã không tồn tại trong schema → schema hỗ trợ multi-line ngay từ đầu; field `note` đã có sẵn trên `SalesOrderItem`
+- Migration apply theo workaround thủ công (shadow DB có bug ở migration cũ 20260520000002)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/v2/monthly-quotas?factoryId=&yearMonth=&itemId= | Lấy quota + remainingTotal của từng HĐ |
+| POST   | /api/v2/monthly-quotas | Upsert quota cho tháng (body: yearMonth + quotas[]) |
+| POST   | /api/v2/monthly-quotas/copy-from-previous | Copy quota từ tháng nguồn, bỏ qua HĐ đã done |
+
+### Known limitations
+
+- Phase 1 chỉ có schema + API + engine. Chưa có UI trang nhập quota.
+- `cumProducedPrevMonths` tính từ `OrderAllocation` — chưa có snapshot tháng, nên nếu KD chưa chạy allocation tháng trước thì giá trị = 0.
+- Engine không xử lý trường hợp quota FIXED vượt remainingTotal (chỉ cảnh báo trong API GET, không block).
+
+### Data notes
+
+- `yearMonth` format: `"YYYY-MM"` (VarChar 7), indexed
+- `sortOrder`: số nguyên, nhỏ = rót trước; REMAINDER luôn rót sau cùng bất kể sortOrder
+
+---
+
+## MODULE KDSX — UI Phân bổ tháng (MonthlyQuota Phase 2)
+
+**Status:** ✅ Completed 2026-05-26
+
+### What was built
+
+Trang `/kdsx/monthly-quotas` cho Phòng KD nhập và quản lý quota sản lượng hàng tháng cho từng dòng hợp đồng. Hỗ trợ nhóm HĐ theo mặt hàng, chọn FIXED/REMAINDER, copy từ tháng trước, lưu vào DB.
+
+### Files created/modified
+
+```
+src/app/kdsx/monthly-quotas/page.tsx                   — Trang UI chính
+src/app/api/v2/monthly-quotas/route.ts                 — Bổ sung producedThisMonth (từ allocation engine)
+src/components/AdminLayout.tsx                         — Thêm "Phân bổ tháng" vào ALL_PAGES + SIDEBAR_GROUPS KINH DOANH
+prisma/seed-monthly-quotas-page.js                     — Seed PageRegistry (pageKey: kdsx.monthly-quotas)
+```
+
+### Key business logic implemented
+
+- Group HĐ theo itemId; chỉ nhóm có >= 2 HĐ mới hiển thị bảng quota (nhóm 1 HĐ hiển thị tag đơn giản)
+- REMAINDER: cột quota hiển thị "= xxx" tự tính (remainingTotal - tổng FIXED); không cho nhập
+- Chuyển REMAINDER: confirm dialog, HĐ cũ đổi thành FIXED với quotaQty = giá trị computed hiện tại
+- Validate trước khi lưu: mỗi nhóm đa-HĐ phải có đúng 1 REMAINDER
+- producedThisMonth lấy từ allocation engine v2 (REAL mode, có quota support)
+- Copy từ tháng trước: POST copy-from-previous, điều chỉnh quotaQty theo remainingTotal mới
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/v2/monthly-quotas | Đã bổ sung producedThisMonth per contract |
+
+### Known limitations
+
+- Bảng scroll ngang trên màn hình nhỏ; chưa có phím tắt tăng/giảm số
+- producedThisMonth tính từ allocation engine — chậm hơn khi có nhiều items (~1-2s)
+- Chưa có drag-and-drop để đổi thứ tự sortOrder
+- Sidebar hiện là icon PartitionOutlined (tạm dùng, phù hợp với theme phân chia)
+
+---
+
+## MODULE KDSX — Phase 3: Note field + Revenue dashboard + SalesOrder multi-line warning
+
+**Status:** ✅ Completed 2026-05-26
+
+### What was built
+
+Ba cập nhật nhỏ hoàn thiện hỗ trợ multi-line SalesOrderItem: (A) thêm `note` vào AllocationLine interface và engine; (B) cảnh báo trực quan trong form tạo HĐ khi có 2+ dòng cùng mặt hàng; (C) API progress và trang doanh thu trả thêm `note`, `quotaThisMonth`, `isRemainder`.
+
+### Files created/modified
+
+```
+src/lib/allocation-engine-v2.ts                        — Thêm note vào AllocationLine, truyền note vào tất cả allocations.push()
+src/app/api/v2/contracts/progress/route.ts             — Include quotas trong query, trả thêm note/quotaThisMonth/isRemainder
+src/app/kdsx/revenue/page.tsx                          — Mở rộng ContractProgress interface, thêm cột "Chi tiết" hiển thị note
+src/app/kdsx/sales-orders/page.tsx                     — Thêm duplicate itemId detection, highlight xanh + tag "Cùng mặt hàng"
+```
+
+### Key business logic implemented
+
+- `AllocationLine.note` lấy từ `SalesOrderItem.note` — dùng phân biệt cảng/container cho cùng mặt hàng
+- `duplicateItemIds` tính bằng `Form.useWatch("items", form)` + `useMemo`; chỉ cảnh báo trực quan, không block lưu
+- `contracts/progress` API mới trả `quotaThisMonth` (quotaQty của tháng đó) và `isRemainder` — để revenue page phân biệt FIXED vs REMAINDER
+- Revenue dashboard thêm cột "Chi tiết" (width 120px, ellipsis) hiển thị note dạng Text secondary
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/v2/contracts/progress | Đã bổ sung note, quotaThisMonth, isRemainder |
+
+### Known limitations
+
+- Duplicate warning chỉ ở phía client (Form.useWatch), không validate ở server — intentional vì multi-line là hợp lệ
+- Revenue page hiển thị note nhưng chưa có filter theo note
+- `isRemainder` trả về trong progress API nhưng chưa được dùng trong revenue UI (reserved for future)

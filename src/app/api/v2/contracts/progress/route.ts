@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
           },
         },
         item: { select: { id: true, name: true } },
+        quotas: { where: { yearMonth } },
       },
     });
 
@@ -104,6 +105,8 @@ export async function GET(req: NextRequest) {
 
       const deadline = soi.deliveryDate ?? soi.order.deliveryDate;
 
+      const quota = soi.quotas[0] ?? null;
+
       return {
         salesOrderItemId: soi.id,
         orderId: soi.order.id,
@@ -111,6 +114,7 @@ export async function GET(req: NextRequest) {
         customerName: soi.order.customer?.name ?? null,
         itemId: soi.item.id,
         itemName: soi.item.name,
+        note: soi.note ?? null,
         totalQty: soi.plannedQty,
         deliveredQty: soi.deliveredQty,
         allocatedThisMonth,
@@ -118,10 +122,12 @@ export async function GET(req: NextRequest) {
         remainingQty,
         progressPct: Math.round(progressPct * 10) / 10,
         unitPriceUsd: soi.unitPrice,
-        revenueVnd: allocatedThisMonth * soi.unitPrice, // DT tháng này (VNĐ tính khi có tỷ giá)
+        revenueVnd: allocatedThisMonth * soi.unitPrice,
         deadline: deadline?.toISOString().split("T")[0] ?? null,
         priorityOverride: soi.priorityOverride,
         deferToMonth: soi.deferToMonth,
+        quotaThisMonth: quota?.quotaQty ?? null,
+        isRemainder: quota?.isRemainder ?? false,
         status,
       };
     });
