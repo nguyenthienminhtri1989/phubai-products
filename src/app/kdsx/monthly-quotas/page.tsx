@@ -243,6 +243,7 @@ function ItemGroupCard({
               value={undefined}
               placeholder="Chưa nhập"
               min={0}
+              step={1000}
               onChange={(v) =>
                 onQuotaChange(r.salesOrderItemId, {
                   quotaQty: v,
@@ -250,9 +251,8 @@ function ItemGroupCard({
                   sortOrder: 0,
                 })
               }
-              formatter={(v) =>
-                v !== undefined ? fmtN(Number(v)) : ""
-              }
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => Number(v?.replace(/,/g, "") || 0) as any}
               style={{ width: "100%" }}
               size="small"
             />
@@ -274,12 +274,12 @@ function ItemGroupCard({
             value={q.quotaQty ?? undefined}
             min={0}
             max={r.remainingTotal}
+            step={1000}
             onChange={(v) =>
               onQuotaChange(r.salesOrderItemId, { quotaQty: v ?? null })
             }
-            formatter={(v) =>
-              v !== undefined ? fmtN(Number(v)) : ""
-            }
+            formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+            parser={(v) => Number(v?.replace(/,/g, "") || 0)}
             style={{ width: "100%" }}
             size="small"
           />
