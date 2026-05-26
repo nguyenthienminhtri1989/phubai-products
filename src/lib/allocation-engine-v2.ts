@@ -17,6 +17,7 @@ export interface AllocationLine {
   // Thông tin bổ sung cho calculator
   sellingCostRate: number | null;
   wasteRecoveryRate: number | null;
+  doubleTwistGcRate: number | null;
 }
 
 export interface ProductionByItem {
@@ -309,6 +310,7 @@ async function waterfallAllocate(
             note: contract.note ?? null,
             sellingCostRate: contract.sellingCostRate,
             wasteRecoveryRate: contract.wasteRecoveryRate,
+            doubleTwistGcRate: contract.doubleTwistGcRate,
           });
           remainingProduction -= allocateQty;
           lastContract = contract;
@@ -331,6 +333,7 @@ async function waterfallAllocate(
             note: remainderContract.note ?? null,
             sellingCostRate: remainderContract.sellingCostRate,
             wasteRecoveryRate: remainderContract.wasteRecoveryRate,
+            doubleTwistGcRate: remainderContract.doubleTwistGcRate,
           });
           remainingProduction -= allocateQty;
           lastContract = remainderContract;
@@ -382,6 +385,7 @@ async function waterfallAllocate(
             note: contract.note ?? null,
             sellingCostRate: contract.sellingCostRate,
             wasteRecoveryRate: contract.wasteRecoveryRate,
+            doubleTwistGcRate: contract.doubleTwistGcRate,
           });
           remainingProduction -= allocateQty;
           lastContract = contract;
@@ -404,6 +408,7 @@ async function waterfallAllocate(
         note: null,
         sellingCostRate: lastContract?.sellingCostRate ?? null,
         wasteRecoveryRate: lastContract?.wasteRecoveryRate ?? null,
+        doubleTwistGcRate: lastContract?.doubleTwistGcRate ?? null,
       });
     }
   }

@@ -3541,3 +3541,48 @@ src/app/kdsx/sales-orders/page.tsx                     — Thêm duplicate itemI
 - Duplicate warning chỉ ở phía client (Form.useWatch), không validate ở server — intentional vì multi-line là hợp lệ
 - Revenue page hiển thị note nhưng chưa có filter theo note
 - `isRemainder` trả về trong progress API nhưng chưa được dùng trong revenue UI (reserved for future)
+
+---
+
+## KDSX — Chuyển wasteRate + doubleTwistGcRate sang SalesOrderItem
+
+**Status:** ✅ Completed 2026-05-26
+
+### What was built
+
+Hai trường `wasteRate` và `doubleTwistGcRate` được chuyển từ `RawMaterialRate` (định mức chung) sang `SalesOrderItem` (per-contract), vì chúng có thể khác nhau theo từng hợp đồng/khách hàng. Công thức calculator v2 được cập nhật để đọc từ `AllocationLine` (truyền từ SalesOrderItem) thay vì RawMaterialRate.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                       — Thêm doubleTwistGcRate vào SalesOrderItem; @deprecated comments trên RawMaterialRate.wasteRate và .doubleTwistGcRate
+prisma/migrations/20260526110000_.../migration.sql         — ALTER TABLE sales_order_items ADD COLUMN doubleTwistGcRate
+src/lib/allocation-engine-v2.ts                            — Thêm doubleTwistGcRate vào AllocationLine interface và 4 chỗ push
+src/lib/kdsx/calculator-v2.ts                              — Sửa gcDoubleTwistVnd đọc từ line.doubleTwistGcRate; sửa wasteRecoveryVnd bỏ fallback rate.wasteRate, thêm unitPrice vào công thức
+src/app/api/kdsx/sales-orders/route.ts                     — POST: thêm wasteRecoveryRate, doubleTwistGcRate, priorityOverride, deferToMonth vào items.create
+src/app/api/kdsx/sales-orders/[id]/route.ts                — PUT: thêm doubleTwistGcRate vào items.createMany
+src/app/kdsx/sales-orders/page.tsx                         — Thêm doubleTwistGcRate field; cập nhật label/tooltip wasteRecoveryRate sang "%"
+src/app/kdsx/raw-material-rates/page.tsx                   — Xóa cột wasteRate, doubleTwistGcRate khỏi bảng và form
+src/app/api/kdsx/raw-material-rates/route.ts               — POST: bỏ wasteRate và doubleTwistGcRate khỏi body parsing
+src/app/api/kdsx/raw-material-rates/[id]/route.ts          — PUT: bỏ wasteRate và doubleTwistGcRate khỏi update data
+```
+
+### Key business logic implemented
+
+- `wasteRecoveryRate` và `doubleTwistGcRate` trên `SalesOrderItem` là FRACTION of unitPrice (0.07 = 7%), không phải USD/kg
+- Công thức mới: `gcDoubleTwistVnd = qty × doubleTwistGcRate × unitPriceUsd × exchangeRate`
+- Công thức mới: `wasteRecoveryVnd = qty × wasteRecoveryRate × unitPriceUsd × wasteAdjustmentFactor × exchangeRate`
+- RawMaterialRate.wasteRate và .doubleTwistGcRate được đánh dấu `@deprecated` nhưng KHÔNG xóa khỏi schema (giữ data cũ)
+- Data migration: copy giá trị từ RawMaterialRate sang SalesOrderItem nơi IS NULL (chỉ lấy effectiveTo IS NULL = định mức hiện hành)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/kdsx/sales-orders | Giờ nhận thêm wasteRecoveryRate, doubleTwistGcRate per item |
+| PUT | /api/kdsx/sales-orders/[id] | Giờ nhận thêm doubleTwistGcRate per item |
+
+### Known limitations
+
+- Các HĐ đã nhập `wasteRecoveryRate` theo format cũ (USD/kg, VD: 0.18) sẽ bị tính sai với công thức mới — cần review lại thủ công
+- Data migration chỉ copy từ RawMaterialRate vào SalesOrderItem nơi `wasteRecoveryRate IS NULL` — override cũ không bị ghi đè nhưng semantic đã thay đổi

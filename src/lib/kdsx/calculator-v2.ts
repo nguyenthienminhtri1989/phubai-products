@@ -151,8 +151,6 @@ export async function calculateRevenuePnL(
       cottonRate: number;
       peRate: number;
       cottonRatio: number;
-      wasteRate: number;
-      doubleTwistGcRate: number;
     }
   >();
 
@@ -170,8 +168,6 @@ export async function calculateRevenuePnL(
       cottonRate: rate?.cottonRate ?? 0,
       peRate: rate?.peRate ?? 0,
       cottonRatio: rate?.cottonRatio ?? 1.0,
-      wasteRate: rate?.wasteRate ?? 0,
-      doubleTwistGcRate: rate?.doubleTwistGcRate ?? 0,
     });
   }
 
@@ -183,8 +179,6 @@ export async function calculateRevenuePnL(
       cottonRate: 0,
       peRate: 0,
       cottonRatio: 1.0,
-      wasteRate: 0,
-      doubleTwistGcRate: 0,
     };
 
     const qty = line.allocatedQty;
@@ -206,14 +200,14 @@ export async function calculateRevenuePnL(
     const sellingCostVnd = qty * sellingCostRate * unitPrice * exchangeRate;
 
     // CP GC xe đôi = qty × doubleTwistGcRate × unitPrice × exchangeRate
+    // doubleTwistGcRate: fraction of unitPrice (VD: 0.05 = 5%)
     const gcDoubleTwistVnd =
-      qty * rate.doubleTwistGcRate * unitPrice * exchangeRate;
+      qty * (line.doubleTwistGcRate ?? 0) * unitPrice * exchangeRate;
 
-    // Phế thu hồi = qty × wasteRate × wasteAdjustmentFactor × exchangeRate
-    // wasteRate ở đây là USD/kg (VD: 0.18 USD/kg)
-    const itemWasteRate = line.wasteRecoveryRate ?? rate.wasteRate ?? 0;
+    // Phế thu hồi = qty × wasteRecoveryRate × unitPrice × wasteAdjustmentFactor × exchangeRate
+    // wasteRecoveryRate: fraction of unitPrice (VD: 0.07 = 7%)
     const wasteRecoveryVnd =
-      qty * itemWasteRate * wasteAdjustmentFactor * exchangeRate;
+      qty * (line.wasteRecoveryRate ?? 0) * unitPrice * wasteAdjustmentFactor * exchangeRate;
 
     // Revenue
     const revenueVnd = qty * unitPrice * exchangeRate;

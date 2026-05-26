@@ -229,3 +229,37 @@ Cập nhật nếu có:
 
 Claude Code KHÔNG tự thiết kế lại spec đã có trong PLAN file.
 Claude Code KHÔNG bỏ qua bước cập nhật bộ nhớ dù task nhỏ hay lớn.
+
+---
+
+## 11. Gotcha đã gặp — KHÔNG được lặp lại
+
+### ⚠️ Ant Design InputNumber: formatter PHẢI đi kèm parser
+
+**Lỗi:** Gõ số lớn (VD: `40000`) → InputNumber nhảy về `4`.
+
+**Nguyên nhân:** `formatter` format `40000` thành `"40,000"`. Khi gõ thêm `0` → chuỗi thành
+`"40,0000"`. Ant Design parse ngược lại bằng `parseInt("40,0000")` = `40`. Nếu không có
+`parser`, component không biết cách đọc chuỗi đã format.
+
+**Rule bất biến:** Mọi `InputNumber` có `formatter` BẮT BUỘC phải có `parser` đi kèm.
+
+```tsx
+// ✅ ĐÚNG
+<InputNumber
+  formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+  parser={(v) => Number(v?.replace(/,/g, "") || 0) as any}
+/>
+
+// ❌ SAI — parser thiếu → gõ số lớn bị nhảy về số nhỏ
+<InputNumber
+  formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+/>
+```
+
+**Note TypeScript:** TS đôi khi infer `InputNumber<0>` từ `min={0}` → parser bị ép kiểu trả về
+`0`. Fix: thêm `as any` vào cuối parser return value.
+
+**Files đã fix (2026-05-26):**
+- `src/app/kdsx/monthly-quotas/page.tsx` — 2 InputNumber quota
+- `src/components/kdsx/ScheduleSegmentModal.tsx` — InputNumber kgPerDay

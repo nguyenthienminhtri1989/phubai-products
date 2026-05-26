@@ -218,8 +218,6 @@ export default function RawMaterialRatesPage() {
       cottonRate: r.cottonRate,
       cottonRatio: Math.round(r.cottonRatio * 100),
       peRate: r.peRate,
-      wasteRate: r.wasteRate,
-      doubleTwistGcRate: r.doubleTwistGcRate,
       effectiveFrom: r.effectiveFrom ? dayjs(r.effectiveFrom) : dayjs(),
       effectiveTo: r.effectiveTo ? dayjs(r.effectiveTo) : null,
       note: r.note,
@@ -240,8 +238,6 @@ export default function RawMaterialRatesPage() {
         cottonRate: values.cottonRate ?? null,
         cottonRatio: values.cottonRatio != null ? values.cottonRatio / 100 : 1.0,
         peRate: values.peRate ?? null,
-        wasteRate: values.wasteRate ?? null,
-        doubleTwistGcRate: values.doubleTwistGcRate ?? null,
         effectiveFrom: values.effectiveFrom
           ? values.effectiveFrom.format("YYYY-MM-DD")
           : null,
@@ -360,29 +356,6 @@ export default function RawMaterialRatesPage() {
         ),
     },
     {
-      title: "Phế thu hồi",
-      key: "wasteRate",
-      width: 100,
-      align: "right" as const,
-      render: (_: unknown, r: RawMaterialRate) => fmtPct(r.wasteRate),
-    },
-    {
-      title: (
-        <Tooltip title="USD/kg — chỉ sợi xe đôi (/2)">
-          CP GC xe đôi <InfoCircleOutlined />
-        </Tooltip>
-      ),
-      key: "doubleTwistGcRate",
-      width: 115,
-      align: "right" as const,
-      render: (_: unknown, r: RawMaterialRate) =>
-        isDoubleTwist(r.item.name) ? (
-          <Text code>{fmt2(r.doubleTwistGcRate)}</Text>
-        ) : (
-          <Text type="secondary">—</Text>
-        ),
-    },
-    {
       title: "Hiệu lực từ",
       key: "effectiveFrom",
       width: 110,
@@ -431,7 +404,6 @@ export default function RawMaterialRatesPage() {
   // RENDER
   // =============================================
   const showPE = selectedItem ? hasPE(selectedItem) : false;
-  const showGC = selectedItem ? isDoubleTwist(selectedItem.name) : false;
 
   return (
     <div>
@@ -677,57 +649,6 @@ export default function RawMaterialRatesPage() {
                     return parseFloat(v.replace("%", "")) as unknown as 100;
                   }}
                   placeholder="VD: 100 (thuần cotton), 60 (CVCM)"
-                />
-              </Form.Item>
-            </Col>
-
-            {/* Waste Rate */}
-            <Col span={12}>
-              <Form.Item
-                name="wasteRate"
-                label="Hệ số Phế thu hồi (0.07 = 7%)"
-                rules={[{ required: true, message: "Nhập hệ số phế" }]}
-              >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  step={0.01}
-                  precision={2}
-                  min={0}
-                  max={1}
-                  placeholder="VD: 0.07"
-                  formatter={(v) =>
-                    v != null ? `${(Number(v) * 100).toFixed(0)}%` : ""
-                  }
-                  parser={(v) => {
-                    if (!v) return 0 as unknown as 0;
-                    return (parseFloat(v.replace("%", "")) / 100) as unknown as 0;
-                  }}
-                />
-              </Form.Item>
-            </Col>
-
-            {/* Double Twist GC Rate */}
-            <Col span={12}>
-              <Form.Item
-                name="doubleTwistGcRate"
-                label={
-                  <span>
-                    CP GC xe đôi (USD/kg){" "}
-                    {!showGC && (
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        (chỉ sợi /2)
-                      </Text>
-                    )}
-                  </span>
-                }
-              >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  step={0.01}
-                  precision={2}
-                  min={0}
-                  disabled={!showGC}
-                  placeholder={showGC ? "VD: 0.45" : "—"}
                 />
               </Form.Item>
             </Col>

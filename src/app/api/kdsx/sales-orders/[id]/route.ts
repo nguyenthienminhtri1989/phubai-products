@@ -115,13 +115,17 @@ export async function PUT(
   });
 
   if (body.items && Array.isArray(body.items)) {
-    // Xóa items cũ
-    await prisma.salesOrderItem.deleteMany({ where: { orderId: Number(id) } });
-    // Tạo lại từ body
-    await prisma.salesOrderItem.createMany({
-      data: body.items.map((item: any) => ({
-        orderId: Number(id),
-        itemId: item.itemId,
+    // Update-in-place: không xóa items có liên kết allocation/lot
+    const existingItems = await prisma.salesOrderItem.findMany({
+      where: { orderId: Number(id) },
+      select: { id: true, itemId: true },
+    });
+    const existingByItemId = new Map(existingItems.map((i) => [i.itemId, i.id]));
+    const incomingItemIds = new Set<number>(body.items.map((i: any) => Number(i.itemId)));
+
+    for (const item of body.items) {
+      const existingId = existingByItemId.get(Number(item.itemId));
+      const itemData = {
         plannedQty: item.plannedQty,
         unitPrice: item.unitPrice,
         sellingCostRate: item.sellingCostRate ?? null,
@@ -130,8 +134,25 @@ export async function PUT(
         priorityOverride: item.priorityOverride ?? null,
         deferToMonth: item.deferToMonth ?? null,
         wasteRecoveryRate: item.wasteRecoveryRate ?? null,
-      })),
-    });
+        doubleTwistGcRate: item.doubleTwistGcRate ?? null,
+      };
+      if (existingId !== undefined) {
+        await prisma.salesOrderItem.update({ where: { id: existingId }, data: itemData });
+      } else {
+        await prisma.salesOrderItem.create({
+          data: { orderId: Number(id), itemId: Number(item.itemId), ...itemData },
+        });
+      }
+    }
+
+    // Xóa items không còn trong danh sách — chỉ khi không có allocation/lot
+    const toRemove = existingItems.filter((i) => !incomingItemIds.has(i.itemId));
+    for (const old of toRemove) {
+      const linked = await prisma.orderAllocation.count({ where: { salesOrderItemId: old.id } });
+      if (linked === 0) {
+        await prisma.salesOrderItem.delete({ where: { id: old.id } });
+      }
+    }
   }
 
   const order = await prisma.salesOrder.findUnique({

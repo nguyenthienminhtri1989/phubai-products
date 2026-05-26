@@ -407,6 +407,7 @@ export default function ScheduleSegmentModal({
             formatter={(value) =>
               value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""
             }
+            parser={(value) => Number(value?.replace(/,/g, "") || 0) as any}
             placeholder="Tự động từ định mức hoặc nhập tay"
             onChange={() => setIsManualKg(true)}
           />

@@ -884,7 +884,8 @@ model SalesOrderItem {
   allocatedQty    Float     @default(0) // cached, cập nhật tự động
   priorityOverride  Int?      // Ưu tiên thủ công: số nhỏ = ưu tiên cao. NULL = tự động theo deadline/signDate
   deferToMonth      String?   // "YYYY-MM" — hoãn HĐ đến tháng này. NULL = active ngay
-  wasteRecoveryRate Float?    // Tỷ lệ phế thu hồi (VD: 0.18 = 0.18 USD/kg). Override per-item nếu cần
+  wasteRecoveryRate Float?    // Tỷ lệ phế thu hồi (0.0–1.0, VD: 0.07 = 7% unitPrice). Per-contract override
+  doubleTwistGcRate Float?   // CP GC sợi xe đôi (0.0–1.0, VD: 0.05 = 5% unitPrice). Chỉ sợi /2
   note            String?
 
   planLineItems   PlanLineItem[]
@@ -992,10 +993,10 @@ model RawMaterialRate {
   // peRatio = 1 - cottonRatio, không cần lưu
   cottonRatio Float @default(1.0)
 
-  // Tỷ lệ phế (0.0–1.0)
+  /// @deprecated — v2 không dùng. Đã chuyển sang SalesOrderItem.wasteRecoveryRate
   wasteRate Float?
 
-  // Đơn giá gia công sợi xe đôi (USD/kg) — chỉ cho sợi /2
+  /// @deprecated — v2 không dùng. Đã chuyển sang SalesOrderItem.doubleTwistGcRate
   doubleTwistGcRate Float?
 
   // Thời gian hiệu lực

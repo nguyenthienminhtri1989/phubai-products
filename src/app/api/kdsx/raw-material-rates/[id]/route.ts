@@ -20,8 +20,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       cottonRate: body.cottonRate ?? null,
       cottonRatio: body.cottonRatio != null ? Number(body.cottonRatio) : undefined,
       peRate: body.peRate ?? null,
-      wasteRate: body.wasteRate ?? null,
-      doubleTwistGcRate: body.doubleTwistGcRate ?? null,
       effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : undefined,
       effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
       note: body.note ?? null,

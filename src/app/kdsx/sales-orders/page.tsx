@@ -40,6 +40,7 @@ interface SalesOrderItem {
   priorityOverride: number | null;
   deferToMonth: string | null;
   wasteRecoveryRate: number | null;
+  doubleTwistGcRate: number | null;
 }
 interface SalesOrder {
   id: number;
@@ -139,6 +140,7 @@ export default function SalesOrdersPage() {
         priorityOverride: it.priorityOverride ?? null,
         deferToMonth: it.deferToMonth ? dayjs(it.deferToMonth, "YYYY-MM") : null,
         wasteRecoveryRate: it.wasteRecoveryRate ?? null,
+        doubleTwistGcRate: it.doubleTwistGcRate ?? null,
       })),
     });
     setModalOpen(true);
@@ -167,6 +169,7 @@ export default function SalesOrdersPage() {
           deferToMonth: item.deferToMonth ? item.deferToMonth.format("YYYY-MM") : null,
           priorityOverride: item.priorityOverride ?? null,
           wasteRecoveryRate: item.wasteRecoveryRate ?? null,
+          doubleTwistGcRate: item.doubleTwistGcRate ?? null,
         })),
       };
       const url = editing ? `/api/kdsx/sales-orders/${editing.id}` : "/api/kdsx/sales-orders";
@@ -485,14 +488,30 @@ export default function SalesOrdersPage() {
                         <Form.Item
                           {...restField}
                           name={[name, "wasteRecoveryRate"]}
-                          label="Phế (USD/kg)"
-                          tooltip="VD: 0.18 = thu hồi 0.18 USD/kg phế. Để trống = dùng định mức chung"
+                          label="Phế thu hồi (%)"
+                          tooltip="Tỷ lệ phế thu hồi theo đơn giá. VD: 0.07 = 7% unitPrice. Để trống = 0"
                           style={{ width: 130, marginBottom: 12 }}
                         >
                           <InputNumber
                             min={0}
+                            max={1}
                             step={0.01}
-                            placeholder="Phế"
+                            placeholder="0.07"
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "doubleTwistGcRate"]}
+                          label="CP GC xe đôi (%)"
+                          tooltip="Chi phí gia công sợi xe đôi. Chỉ sợi /2. VD: 0.05 = 5% unitPrice. Để trống = 0"
+                          style={{ width: 140, marginBottom: 12 }}
+                        >
+                          <InputNumber
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            placeholder="0.05"
                             style={{ width: "100%" }}
                           />
                         </Form.Item>
