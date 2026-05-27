@@ -46,8 +46,8 @@ export function calcOutput(params: {
 /**
  * Auto-detect ca làm việc và ngày sản xuất theo giờ hiện tại.
  * Ca 1: 13:00–20:59 → ngày hiện tại
- * Ca 2: 21:00–04:59 → ngày hiện tại (21-24h) hoặc ngày hôm trước (0-5h)
- * Ca 3: 05:00–12:59 → ngày hiện tại
+ * Ca 2: 21:00–23:59 → ngày hiện tại / 00:00–04:59 → ngày hôm trước
+ * Ca 3: 05:00–12:59 → ngày hôm trước (Ca 3 buổi sáng thuộc về ngày SX hôm trước)
  */
 export function detectShiftAndDate(): { shift: number; date: Dayjs } {
   const now = dayjs();
@@ -60,6 +60,6 @@ export function detectShiftAndDate(): { shift: number; date: Dayjs } {
   } else if (hour >= 0 && hour < 5) {
     return { shift: 2, date: now.subtract(1, "day") };
   } else {
-    return { shift: 3, date: now };
+    return { shift: 3, date: now.subtract(1, "day") };
   }
 }

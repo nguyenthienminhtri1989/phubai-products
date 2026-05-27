@@ -62,3 +62,6 @@ Desktop.ini
 .antigravity/
 .cursor/
 .idx/
+
+# --- MAINTENANCE FLAG (Tạo bởi GitHub Actions khi deploy) ---
+maintenance.flag

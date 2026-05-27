@@ -16,7 +16,7 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { calcOutput as calcOutputShared } from "@/lib/production-utils";
+import { calcOutput as calcOutputShared, detectShiftAndDate } from "@/lib/production-utils";
 import { naturalSortBy } from "@/utils/naturalSort";
 
 const { Title, Text } = Typography;
@@ -36,26 +36,6 @@ interface Machine {
 interface Item { id: number; name: string; }
 
 interface Process { id: number; name: string; factoryId: number; }
-
-// Auto-detect Ca & Ngay
-function detectShiftAndDate() {
-    const now = dayjs();
-    const hour = now.hour();
-    let shift = 1;
-    let date = now;
-
-    if (hour >= 13 && hour < 21) {
-        shift = 1; date = now;
-    } else if (hour >= 21) {
-        shift = 2; date = now;
-    } else if (hour >= 0 && hour < 5) {
-        shift = 2; date = now.subtract(1, "day");
-    } else if (hour >= 5 && hour < 13) {
-        shift = 3; date = now.subtract(1, "day");
-    }
-
-    return { shift, date };
-}
 
 const SHIFT_SHORT: Record<number, string> = {
     1: "Ca 1", 2: "Ca 2", 3: "Ca 3",

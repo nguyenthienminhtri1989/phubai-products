@@ -22,6 +22,13 @@ jobs:
           $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
           if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
 
+      - name: 0.5. Bật Maintenance Mode
+        shell: powershell
+        run: |
+          $flagPath = "$(Get-Location)\maintenance.flag"
+          New-Item -Path $flagPath -ItemType File -Force | Out-Null
+          Write-Host ">>> Maintenance mode đã BẬT: $flagPath"
+
       - name: 1. Checkout code
         uses: actions/checkout@v4
 
@@ -31,6 +38,14 @@ jobs:
           ENV_DATA: ${{ secrets.ENV_FILE }}
         run: |
           [System.IO.File]::WriteAllText("$(Get-Location)\.env", $env:ENV_DATA)
+
+          # Khôi phục maintenance.flag vì checkout ở bước 1 có thể đã xóa nó
+          # (nếu maintenance.flag không có trong .gitignore)
+          $flagPath = "$(Get-Location)\maintenance.flag"
+          if (-not (Test-Path $flagPath)) {
+            New-Item -Path $flagPath -ItemType File -Force | Out-Null
+            Write-Host ">>> Khôi phục maintenance.flag sau checkout"
+          }
 
       - name: 3. Install dependencies
         run: npm install
@@ -48,3 +63,24 @@ jobs:
         run: |
           # Thêm cờ --only phubai-erp để đảm bảo PM2 tuyệt đối không đụng đến app khác
           & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --only phubai-erp --update-env
+
+      - name: 8. Tắt Maintenance Mode
+        shell: powershell
+        run: |
+          $flagPath = "$(Get-Location)\maintenance.flag"
+          if (Test-Path $flagPath) {
+            Remove-Item -Path $flagPath -Force
+            Write-Host ">>> Maintenance mode đã TẮT. Người dùng có thể truy cập bình thường."
+          }
+
+      # Bước này chỉ chạy khi có bước nào đó thất bại
+      # Đảm bảo không để user bị kẹt màn hình maintenance
+      - name: 9. (Fallback) Tắt Maintenance Mode nếu Deploy thất bại
+        if: failure()
+        shell: powershell
+        run: |
+          $flagPath = "$(Get-Location)\maintenance.flag"
+          if (Test-Path $flagPath) {
+            Remove-Item -Path $flagPath -Force
+            Write-Host ">>> DEPLOY THẤT BẠI - Đã tắt maintenance mode để người dùng không bị kẹt."
+          }
