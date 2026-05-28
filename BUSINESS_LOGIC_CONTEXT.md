@@ -3586,3 +3586,181 @@ src/app/api/kdsx/raw-material-rates/[id]/route.ts          — PUT: bỏ wasteRa
 
 - Các HĐ đã nhập `wasteRecoveryRate` theo format cũ (USD/kg, VD: 0.18) sẽ bị tính sai với công thức mới — cần review lại thủ công
 - Data migration chỉ copy từ RawMaterialRate vào SalesOrderItem nơi `wasteRecoveryRate IS NULL` — override cũ không bị ghi đè nhưng semantic đã thay đổi
+
+---
+
+## SCHEMA — SPEC 0: Migration gộp v2 (monthly_quota process scope + production_schedule processId)
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+Gộp toàn bộ thay đổi schema của đợt cải tiến v2 vào 1 migration duy nhất (`20260528000001_v2_monthly_quota_process_scope`). Bổ sung scope công đoạn (`processId`) vào `MonthlyQuota` và `ProductionSchedule`, giúp phân biệt quota theo từng công đoạn (ống / sợi con). Đây là migration nền tảng — SPEC A/B/C sau đó chỉ cần code, không cần thêm migration.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                                  — Thêm processId+process vào ProductionSchedule; thêm factoryId+processId+relations vào MonthlyQuota; thêm quan hệ ngược monthlyQuotas/productionSchedules vào Factory/Process
+prisma/migrations/20260528000001_v2_monthly_quota_process_scope/      — Migration SQL idempotent (IF NOT EXISTS + DO block)
+src/app/api/v2/monthly-quotas/route.ts                                — POST handler nhận thêm factoryId+processId, dùng compound unique key mới
+src/app/api/v2/monthly-quotas/copy-from-previous/route.ts             — Propagate factoryId+processId từ sourceQuota khi copy
+```
+
+### Key business logic implemented
+
+- `MonthlyQuota` có unique constraint mới: `(salesOrderItemId, factoryId, processId, yearMonth)` — 1 HĐ có thể có quota khác nhau cho từng công đoạn trong cùng tháng
+- `ProductionSchedule.processId` nullable — schedule cũ chưa có processId; backfill cần chạy SQL riêng sau deploy
+- Migration SQL được viết idempotent: `ADD COLUMN IF NOT EXISTS`, `DROP INDEX IF EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`, FK trong `DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL; END $$` để tránh lỗi P3018/42710 trên production
+- Cột cũ `monthly_quotas_salesOrderItemId_yearMonth_key` được drop và thay bằng compound key 4 trường
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/v2/monthly-quotas | Không đổi signature |
+| POST | /api/v2/monthly-quotas | Nay yêu cầu thêm `factoryId` và `processId` trong body |
+| POST | /api/v2/monthly-quotas/copy-from-previous | Tự động carry factoryId+processId từ source quota |
+
+### Known limitations
+
+- Các row `monthly_quotas` cũ (trước 2026-05-28) không có factoryId/processId → cần backfill thủ công bằng SQL (xem SPEC 0 mục BACKFILL)
+- Shadow DB của Prisma không dùng được (`migrate dev`) vì migration cũ `20260520000002` bị P3006 — phải dùng `migrate deploy` khi tạo migration mới
+
+### Data notes
+
+- `factoryId` và `processId` trong `monthly_quotas` là NULLABLE trong DB (để tránh lỗi khi có data cũ) nhưng NOT NULL trong Prisma schema — API sẽ validate khi tạo/sửa
+
+---
+
+## KDSX — SPEC A: Nguồn sự thật duy nhất getMonthlyItemTotals + sửa logic ước tính
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+Tạo hàm `getMonthlyItemTotals()` làm nguồn sự thật duy nhất cho "tổng SL tháng theo mặt hàng". Logic ước tính ngày chưa nhập chuyển từ benchmark cố định (per benchmark DB) sang trung bình thực tế per combo (machineId-itemId). Cả ba nơi tính trùng (allocation engine, ScheduleComparisonDashboard, ActualProductionGrid) nay được thống nhất về 1 nguồn.
+
+### Files created/modified
+
+```
+src/lib/kdsx/monthly-item-totals.ts                                   — Hàm getMonthlyItemTotals() với 3 mode: PLAN/ACTUAL/ACTUAL_PROJECTED
+src/app/api/kdsx/item-totals/route.ts                                 — GET wrapper: ?factoryId&processId&yearMonth&mode
+src/lib/allocation-engine-v2.ts                                       — Thêm optional processId param; khi có processId dùng getMonthlyItemTotals thay addProjectedProduction
+src/components/kdsx/ScheduleComparisonDashboard.tsx                   — Thêm factoryId/processId props, fetch từ /api/kdsx/item-totals cho thByItem; line chart giữ nguyên
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — Thêm processId vào Schedule interface, truyền xuống dashboard
+```
+
+### Key business logic implemented
+
+- `getMonthlyItemTotals(factoryId, processId, yearMonth, mode)`: scope theo công đoạn → ống và sợi con TÁCH BIỆT
+- Mode ACTUAL_PROJECTED: ước tính ngày chưa nhập = `combo.totalKg / combo.days.size × remainingDays` — trung bình thực tế PER COMBO (không phải per item toàn cục, tránh bug lệch ngày giữa máy)
+- `addProjectedProduction()` giữ lại trong engine (backward compat khi không có processId), nhưng không còn là path chính
+- `ScheduleComparisonDashboard` fallback về local khi `processId` không có (backward compat với schedule cũ chưa backfill)
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/kdsx/item-totals | ?factoryId&processId&yearMonth&mode=PLAN\|ACTUAL\|ACTUAL_PROJECTED |
+
+### Known limitations
+
+- Schedule cũ (processId = null): dashboard fallback về local benchmark — sẽ fix sau khi backfill processId (SPEC 0 backfill)
+- Allocation engine callers (revenue dashboard, contracts/progress) chưa truyền processId → vẫn dùng path cũ toàn factory
+- ActualProductionGrid totals (bottom row, rowTotal) vẫn dùng benchmark local — đây là visual display, không ảnh hưởng reporting
+
+---
+
+## KDSX — SPEC B: Monthly Quota API (kdsx namespace) + UI Update
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+New `kdsx`-namespace API for monthly production quota management, scoped by `factoryId+processId`. Updated the quota UI page to add process selector and mode toggle (Actual / Dự báo), with production totals sourced from `getMonthlyItemTotals`.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/monthly-quotas/route.ts              — GET (groups with totalProductionKg) + POST (upsert quotas scoped by factoryId+processId)
+src/app/api/kdsx/monthly-quotas/copy-from-previous/route.ts — Copy quotas from previous month, scoped to processId
+src/app/kdsx/monthly-quotas/page.tsx                  — Added processId selector, mode Segmented (ACTUAL/ACTUAL_PROJECTED), uses new kdsx API
+src/lib/allocation-engine-v2.ts                       — waterfallAllocate now accepts optional processId; scopes quota lookup to factoryId+processId when provided
+```
+
+### Key business logic implemented
+
+- `GET /api/kdsx/monthly-quotas` returns `groups[]` each with `totalProductionKg` from `getMonthlyItemTotals` (single source of truth)
+- Quota lookup in waterfall allocation now scoped by `{ yearMonth, factoryId, processId }` when processId is provided — prevents cross-process quota mixing
+- `remainderQty = totalProductionKg - totalFixedQuota` (production-based, not contract-remaining-based)
+- Copy-from-previous filters source quotas by `factoryId+processId` — each process manages its own quota history
+- UI mode "Dự báo" (ACTUAL_PROJECTED) shows estimated full-month production; "Thực tế" (ACTUAL) shows only recorded data
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/kdsx/monthly-quotas?factoryId=&processId=&yearMonth=&mode= | Groups with production totals and per-contract allocation |
+| POST   | /api/kdsx/monthly-quotas | Upsert quotas (factoryId+processId+yearMonth scoped) |
+| POST   | /api/kdsx/monthly-quotas/copy-from-previous | Copy quotas from previous month for same process |
+
+### Known limitations
+
+- Old v2 GET endpoint (`/api/v2/monthly-quotas`) still doesn't scope by processId — existing callers (revenue dashboard) unaffected but get cross-process quota if any
+- Allocation engine callers that don't pass processId still use the old path (backward compat)
+- Copy-from-previous returns 409 if target month already has quotas for that process — no merge/overwrite support
+
+---
+
+## KDSX — SPEC C: Kéo-thả Segment + DT-LN Kế hoạch + Dọn dẹp V1
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+Three improvements to the production schedule detail page: (1) drag-to-resize segment edges using pointer events API (no library), (2) a 4th tab "💰 DT-LN kế hoạch" that shows projected P&L using PLAN-mode allocation from schedule segments, and (3) cleanup of dead v1 code (pages, API, sidebar links, schema comments).
+
+### Files created/modified
+
+```
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx  — drag handles + PlanPnLTab + Tab 4
+src/app/api/kdsx/production-schedule/[id]/plan-pnl/route.ts               — GET: PLAN allocation → P&L
+src/lib/allocation-engine-v2.ts                                            — mode extended to "PLAN"; PLAN path reads getMonthlyItemTotals
+src/components/AdminLayout.tsx                                             — removed kdsx.plans and kdsx.actuals entries from PAGE_CONFIG
+prisma/schema.prisma                                                       — added /// @deprecated Prisma docstring to 5 dead models
+```
+
+Deleted:
+```
+src/app/kdsx/plans/page.tsx                                                — v1 plans list page (deleted)
+src/app/kdsx/plans/[factoryId]/[yearMonth]/page.tsx                       — v1 plan detail page (deleted)
+src/app/kdsx/actuals/page.tsx                                              — v1 actuals list page (deleted)
+src/app/kdsx/actuals/[factoryId]/[yearMonth]/page.tsx                     — v1 actual detail page (deleted)
+src/app/api/kdsx/production-schedule/[id]/sync-to-plan/route.ts           — sync-to-plan API (deleted)
+```
+
+### Key business logic implemented
+
+- **PLAN mode** in `runAllocationFromProduction`: when `mode === "PLAN" && processId`, calls `getMonthlyItemTotals(factoryId, processId, yearMonth, "PLAN")` which sums segment `(toDay - fromDay + 1) * kgPerDay` as production quantities. Waterfall allocation proceeds identically to PROJECTION mode.
+- **effectiveMode**: PLAN mode maps to "PROJECTION" for date math inside allocation engine; `meta.mode` records effectiveMode not "PLAN" (since AllocationResult.meta.mode type is `"REAL" | "PROJECTION"`).
+- **Drag-to-resize**: Pointer events with `setPointerCapture`. Drag state lives in `dragStateRef` (no re-render per pixel); `dragPreview` state only updates on day-boundary change (38px threshold). Overlap check runs before calling API; conflict reverts to original.
+- **Lazy PnL fetch**: Tab 4 triggers `fetchPlanPnl()` only when first selected; subsequent visits skip re-fetch unless error.
+- **Deprecated models**: `MonthlyPlan`, `PlanLineItem`, `MonthlyActual`, `ActualLineItem`, `MonthlySummarySnapshot` marked with `/// @deprecated` triple-slash Prisma docstring — tables/columns kept in DB for backward compat, not referenced in new code.
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/kdsx/production-schedule/[id]/plan-pnl | PLAN-mode allocation + calculateRevenuePnL → PnLResult |
+
+### Known limitations
+
+- Drag is desktop-only (pointer events on mobile tablets may partially work but not officially supported)
+- PnL tab does not auto-refresh when segments are modified via drag — user must re-click the tab or navigate away and back
+- Old v1 API routes under `/api/kdsx/plans` and `/api/kdsx/actuals` were NOT deleted (only the UI pages and sync-to-plan) — they still respond but are orphaned
+- `calculateRevenuePnL` receives `"PROJECTION"` (not `"PLAN"`) as mode so date math for pro-rating uses days-in-month correctly
+
+### Data notes
+
+- No schema migration needed — no new tables or columns
+- DB tables for `MonthlyPlan`, `MonthlyActual` etc. remain intact and unmodified

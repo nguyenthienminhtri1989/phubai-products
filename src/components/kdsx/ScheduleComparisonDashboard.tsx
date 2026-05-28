@@ -35,6 +35,8 @@ interface ScheduleComparisonDashboardProps {
   holidays: number[];
   totalDays: number;
   benchmarkMap?: Record<string, number>; // Định mức theo "machineId-itemId"
+  factoryId?: number;  // Dùng với processId để gọi /api/kdsx/item-totals
+  processId?: number;  // Nếu null/undefined → fallback về tính local
 }
 
 interface ActualGrid {
@@ -68,9 +70,13 @@ export default function ScheduleComparisonDashboard({
   holidays,
   totalDays,
   benchmarkMap = {},
+  factoryId,
+  processId,
 }: ScheduleComparisonDashboardProps) {
   const [grid, setGrid] = useState<ActualGrid>({});
   const [loading, setLoading] = useState(true);
+  // apiTotals: kết quả từ getMonthlyItemTotals khi factoryId + processId có sẵn
+  const [apiThByItem, setApiThByItem] = useState<Record<number, number> | null>(null);
 
   useEffect(() => {
     fetch(`/api/kdsx/production-schedule/${scheduleId}/actual`)
@@ -80,13 +86,29 @@ export default function ScheduleComparisonDashboard({
       .finally(() => setLoading(false));
   }, [scheduleId]);
 
+  // Fetch tổng TH từ nguồn sự thật duy nhất khi có processId
+  useEffect(() => {
+    if (!factoryId || !processId) {
+      setApiThByItem(null);
+      return;
+    }
+    fetch(
+      `/api/kdsx/item-totals?factoryId=${factoryId}&processId=${processId}&yearMonth=${yearMonth}&mode=ACTUAL_PROJECTED`,
+    )
+      .then(r => r.json())
+      .then(data => {
+        const byItem: Record<number, number> = {};
+        for (const t of data.totals ?? []) byItem[t.itemId] = t.totalKg;
+        setApiThByItem(byItem);
+      })
+      .catch(() => setApiThByItem(null));
+  }, [factoryId, processId, yearMonth]);
+
   if (loading) return <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>;
 
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-  // Tổng TH theo itemId — chỉ cộng định mức cho ngày chưa có bất kỳ data nào
-  const thByItem: Record<number, number> = {};
-  // Xác định ngày nào đã có ít nhất 1 bản ghi SL thực tế
+  // ── Build dữ liệu hỗ trợ cho line chart (vẫn tính local, chỉ visual) ──
   const daysWithActualData = new Set<number>();
   for (const machineIdStr in grid) {
     const machineId = parseInt(machineIdStr);
@@ -98,7 +120,6 @@ export default function ScheduleComparisonDashboard({
       }
     }
   }
-  // Build tất cả combo (machineId-itemId) từ grid và segments
   const rowCombos = new Set<string>();
   for (const machineIdStr in grid) {
     const machineId = parseInt(machineIdStr);
@@ -109,12 +130,10 @@ export default function ScheduleComparisonDashboard({
       }
     }
   }
-  // Thêm từ segments KH (để có benchmark cho máy chưa nhập ngày nào)
   for (const seg of segments) {
     rowCombos.add(`${seg.machineId}-${seg.itemId}`);
   }
 
-  // Tính firstDay và lastDay cho mỗi combo
   const comboRange: Record<string, { firstDay: number; lastDay: number }> = {};
   for (const combo of rowCombos) {
     const [machineIdStr, itemIdStr] = combo.split("-");
@@ -132,8 +151,7 @@ export default function ScheduleComparisonDashboard({
     comboRange[combo] = { firstDay, lastDay };
   }
 
-  // Xác định combo cuối (lastDay lớn nhất) của mỗi máy
-  const lastComboPerMachine = new Map<number, string>(); // machineId → combo key
+  const lastComboPerMachine = new Map<number, string>();
   for (const combo of rowCombos) {
     const [machineIdStr] = combo.split("-");
     const machineId = parseInt(machineIdStr);
@@ -143,24 +161,32 @@ export default function ScheduleComparisonDashboard({
     }
   }
 
-  for (const combo of rowCombos) {
-    const [machineIdStr, itemIdStr] = combo.split("-");
-    const machineId = parseInt(machineIdStr);
-    const itemId = parseInt(itemIdStr);
-    const bmKg = benchmarkMap[combo] ?? 0;
-    const range = comboRange[combo];
-    const isLastCombo = lastComboPerMachine.get(machineId) === combo;
-
-    for (let day = 1; day <= totalDays; day++) {
-      if (holidays.includes(day)) continue;
-      const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
-      if (actual > 0) {
-        thByItem[itemId] = (thByItem[itemId] ?? 0) + actual;
-      } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day > range.lastDay && isLastCombo) {
-        thByItem[itemId] = (thByItem[itemId] ?? 0) + bmKg;
+  // ── Tổng TH theo item ──
+  // Ưu tiên apiThByItem (từ getMonthlyItemTotals — trung bình thực tế per combo).
+  // Fallback về local khi chưa có factoryId/processId (backward compat).
+  const thByItem: Record<number, number> = (() => {
+    if (apiThByItem !== null) return apiThByItem;
+    // Local fallback: dùng benchmark cố định cho ngày chưa nhập
+    const local: Record<number, number> = {};
+    for (const combo of rowCombos) {
+      const [machineIdStr, itemIdStr] = combo.split("-");
+      const machineId = parseInt(machineIdStr);
+      const itemId = parseInt(itemIdStr);
+      const bmKg = benchmarkMap[combo] ?? 0;
+      const range = comboRange[combo];
+      const isLastCombo = lastComboPerMachine.get(machineId) === combo;
+      for (let day = 1; day <= totalDays; day++) {
+        if (holidays.includes(day)) continue;
+        const actual = grid[machineId]?.[day]?.[itemId] ?? 0;
+        if (actual > 0) {
+          local[itemId] = (local[itemId] ?? 0) + actual;
+        } else if (bmKg > 0 && !daysWithActualData.has(day) && range.lastDay > 0 && day > range.lastDay && isLastCombo) {
+          local[itemId] = (local[itemId] ?? 0) + bmKg;
+        }
       }
     }
-  }
+    return local;
+  })();
 
   // Bar chart data: mỗi item 1 nhóm
   const barData = summary.map(item => ({

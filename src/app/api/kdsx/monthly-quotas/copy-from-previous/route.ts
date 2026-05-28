@@ -1,40 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// POST /api/v2/monthly-quotas/copy-from-previous
-// Copy quota từ tháng nguồn sang tháng mới (chỉ HĐ còn active)
+// POST /api/kdsx/monthly-quotas/copy-from-previous
+// Copy quota từ tháng nguồn sang tháng mới, scoped theo factoryId+processId
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { factoryId, yearMonth, sourceYearMonth } = body as {
+    const { factoryId, processId, yearMonth, sourceYearMonth } = body as {
       factoryId: number;
+      processId: number;
       yearMonth: string;
       sourceYearMonth: string;
     };
 
-    if (!factoryId || !yearMonth || !sourceYearMonth) {
+    if (!factoryId || !processId || !yearMonth || !sourceYearMonth) {
       return NextResponse.json(
-        { error: "factoryId, yearMonth và sourceYearMonth là bắt buộc" },
-        { status: 400 }
+        { error: "factoryId, processId, yearMonth và sourceYearMonth là bắt buộc" },
+        { status: 400 },
       );
     }
-    if (!/^\d{4}-\d{2}$/.test(yearMonth) || !/^\d{4}-\d{2}$/.test(sourceYearMonth)) {
+    if (
+      !/^\d{4}-\d{2}$/.test(yearMonth) ||
+      !/^\d{4}-\d{2}$/.test(sourceYearMonth)
+    ) {
       return NextResponse.json(
         { error: "yearMonth và sourceYearMonth phải có định dạng YYYY-MM" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     if (yearMonth <= sourceYearMonth) {
       return NextResponse.json(
         { error: "yearMonth phải sau sourceYearMonth" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Lấy tất cả quota tháng nguồn của factory này
+    // Lấy quota tháng nguồn scoped theo factoryId+processId
     const sourceQuotas = await prisma.monthlyQuota.findMany({
       where: {
         yearMonth: sourceYearMonth,
+        factoryId,
+        processId,
         salesOrderItem: {
           order: {
             factoryId,
@@ -58,22 +64,20 @@ export async function POST(req: NextRequest) {
 
     if (sourceQuotas.length === 0) {
       return NextResponse.json(
-        { error: `Không có quota nào tháng ${sourceYearMonth} cho factory ${factoryId}` },
-        { status: 404 }
+        {
+          error: `Không có quota nào tháng ${sourceYearMonth} cho factory ${factoryId} / process ${processId}`,
+        },
+        { status: 404 },
       );
     }
 
     const firstDayOfNewMonth = new Date(`${yearMonth}-01T00:00:00.000Z`);
 
-    // Tính remainingTotal cho tháng mới
     const quotasWithRemaining = await Promise.all(
       sourceQuotas.map(async (sq) => {
         const oi = sq.salesOrderItem;
 
-        // Bỏ qua HĐ bị defer sang tháng sau tháng mới
-        if (oi.deferToMonth && oi.deferToMonth > yearMonth) {
-          return null;
-        }
+        if (oi.deferToMonth && oi.deferToMonth > yearMonth) return null;
 
         const prevAllocated = await prisma.orderAllocation.aggregate({
           where: {
@@ -83,32 +87,35 @@ export async function POST(req: NextRequest) {
           _sum: { allocatedQty: true },
         });
         const cumProduced = prevAllocated._sum?.allocatedQty ?? 0;
-        const remainingTotal = oi.plannedQty - oi.deliveredQty - cumProduced;
+        const remainingTotal =
+          oi.plannedQty - oi.deliveredQty - cumProduced;
 
-        // Bỏ qua HĐ đã hoàn thành
         if (remainingTotal <= 0) return null;
 
-        // Điều chỉnh quotaQty: không vượt quá remainingTotal mới
         let newQuotaQty = sq.quotaQty;
-        if (!sq.isRemainder && newQuotaQty !== null && newQuotaQty > remainingTotal) {
+        if (
+          !sq.isRemainder &&
+          newQuotaQty !== null &&
+          newQuotaQty > remainingTotal
+        ) {
           newQuotaQty = remainingTotal;
         }
 
         return {
           salesOrderItemId: oi.id,
-          factoryId: sq.factoryId,
-          processId: sq.processId,
+          factoryId,
+          processId,
           yearMonth,
           quotaQty: newQuotaQty,
           isRemainder: sq.isRemainder,
           sortOrder: sq.sortOrder,
           remainingTotal,
         };
-      })
+      }),
     );
 
     const validQuotas = quotasWithRemaining.filter(
-      (q): q is NonNullable<typeof q> => q !== null
+      (q): q is NonNullable<typeof q> => q !== null,
     );
 
     if (validQuotas.length === 0) {
@@ -120,10 +127,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Upsert quotas mới (không ghi đè nếu đã tồn tại → 409)
+    // Kiểm tra đã có quota tháng mới chưa (scoped theo factoryId+processId)
     const existing = await prisma.monthlyQuota.count({
       where: {
         yearMonth,
+        factoryId,
+        processId,
         salesOrderItemId: { in: validQuotas.map((q) => q.salesOrderItemId) },
       },
     });
@@ -131,9 +140,9 @@ export async function POST(req: NextRequest) {
     if (existing > 0) {
       return NextResponse.json(
         {
-          error: `Tháng ${yearMonth} đã có ${existing} quota. Xóa trước hoặc dùng POST /monthly-quotas để cập nhật từng dòng.`,
+          error: `Tháng ${yearMonth} đã có ${existing} quota cho process này. Xóa trước hoặc dùng POST /kdsx/monthly-quotas để cập nhật từng dòng.`,
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -157,8 +166,8 @@ export async function POST(req: NextRequest) {
       quotas: validQuotas,
     });
   } catch (error: unknown) {
-    const message =
+    const msg =
       error instanceof Error ? error.message : "Lỗi không xác định";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

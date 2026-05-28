@@ -18,6 +18,7 @@ import {
   Radio,
   Tooltip,
   Alert,
+  Segmented,
 } from "antd";
 import {
   SaveOutlined,
@@ -34,6 +35,12 @@ const { Title, Text } = Typography;
 interface Factory {
   id: number;
   name: string;
+}
+
+interface Process {
+  id: number;
+  name: string;
+  factoryId: number;
 }
 
 interface QuotaState {
@@ -66,6 +73,7 @@ interface ContractRow {
 interface ItemGroup {
   itemId: number;
   itemName: string;
+  totalProductionKg: number;
   contracts: ContractRow[];
 }
 
@@ -94,13 +102,7 @@ function ItemGroupCard({
   onQuotaChange,
   monthLabel,
 }: ItemGroupCardProps) {
-  const { contracts } = group;
-
-  // Tổng SL item tháng này (từ allocation engine, sum tất cả contracts)
-  const totalProducedThisMonth = contracts.reduce(
-    (s, c) => s + c.producedThisMonth,
-    0
-  );
+  const { contracts, totalProductionKg } = group;
 
   // Tổng FIXED quota
   const totalFixedQuota = contracts.reduce((s, c) => {
@@ -113,19 +115,19 @@ function ItemGroupCard({
   const remainderContract = contracts.find(
     (c) => localQuotas[c.salesOrderItemId]?.isRemainder
   );
+  // Phần dư = SL thực tế của item - quota đã cố định
   const remainderQty = remainderContract
-    ? Math.max(0, remainderContract.remainingTotal - totalFixedQuota)
+    ? Math.max(0, totalProductionKg - totalFixedQuota)
     : null;
 
   // Tổng quota đã phân bổ
   const totalQuota = totalFixedQuota + (remainderQty ?? 0);
 
-  // Chênh lệch so với SL tháng này
-  const diff = totalProducedThisMonth - totalQuota;
+  // Chênh lệch so với SL thực tế
+  const diff = totalProductionKg - totalQuota;
 
   const handleTypeChange = (soid: number, newType: "FIXED" | "REMAINDER") => {
     if (newType === "REMAINDER") {
-      // Kiểm tra đã có REMAINDER khác chưa
       const existingRemainderSoid = contracts.find(
         (c) =>
           c.salesOrderItemId !== soid &&
@@ -133,14 +135,10 @@ function ItemGroupCard({
       );
 
       if (existingRemainderSoid) {
-        const existingContract = contracts.find(
-          (c) => c.salesOrderItemId === existingRemainderSoid.salesOrderItemId
-        );
         const computedRemainder = Math.max(
           0,
-          (existingContract?.remainingTotal ?? 0) - totalFixedQuota
+          totalProductionKg - totalFixedQuota
         );
-
         Modal.confirm({
           title: "Thay đổi HĐ cuối",
           content: `HĐ ${existingRemainderSoid.orderNo} đang là "Cuối". Chuyển sang "Cố định" với quota = ${fmtN(computedRemainder)} kg?`,
@@ -158,11 +156,10 @@ function ItemGroupCard({
         onQuotaChange(soid, { isRemainder: true, quotaQty: null });
       }
     } else {
-      // REMAINDER → FIXED: pre-fill với giá trị computed
-      const contract = contracts.find((c) => c.salesOrderItemId === soid);
+      // REMAINDER → FIXED: pre-fill với phần dư hiện tại
       const currentRemainderQty = Math.max(
         0,
-        (contract?.remainingTotal ?? 0) - totalFixedQuota
+        totalProductionKg - totalFixedQuota
       );
       onQuotaChange(soid, {
         isRemainder: false,
@@ -279,7 +276,7 @@ function ItemGroupCard({
               onQuotaChange(r.salesOrderItemId, { quotaQty: v ?? null })
             }
             formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-            parser={(v) => Number(v?.replace(/,/g, "") || 0)}
+            parser={(v) => Number(v?.replace(/,/g, "") || 0) as any}
             style={{ width: "100%" }}
             size="small"
           />
@@ -325,9 +322,9 @@ function ItemGroupCard({
         const q = localQuotas[r.salesOrderItemId];
         const quota =
           q?.isRemainder
-            ? (remainderContract?.salesOrderItemId === r.salesOrderItemId
-                ? (remainderQty ?? 0)
-                : 0)
+            ? remainderContract?.salesOrderItemId === r.salesOrderItemId
+              ? (remainderQty ?? 0)
+              : 0
             : (q?.quotaQty ?? 0);
         if (quota <= 0) return <Text type="secondary">—</Text>;
         const pct = Math.round((r.producedThisMonth / quota) * 100);
@@ -340,11 +337,14 @@ function ItemGroupCard({
     },
   ];
 
-  // Summary row
   const summary = () => {
     const totalPlanned = contracts.reduce((s, c) => s + c.plannedQty, 0);
     const totalCum = contracts.reduce((s, c) => s + c.cumProducedPrevMonths, 0);
     const totalRemaining = contracts.reduce((s, c) => s + c.remainingTotal, 0);
+    const totalProducedThisMonth = contracts.reduce(
+      (s, c) => s + c.producedThisMonth,
+      0
+    );
     return (
       <Table.Summary.Row style={{ fontWeight: 600, background: "#fafafa" }}>
         <Table.Summary.Cell index={0} colSpan={3}>
@@ -374,16 +374,19 @@ function ItemGroupCard({
   const headerExtra = (
     <Space size={8} wrap>
       <Text type="secondary" style={{ fontSize: 12 }}>
-        Tổng SL: <strong>{fmtN(totalProducedThisMonth)} kg</strong>
+        SL tháng: <strong>{fmtN(totalProductionKg)} kg</strong>
       </Text>
       <Text type="secondary" style={{ fontSize: 12 }}>
         | Đã phân bổ: <strong>{fmtN(totalQuota)} kg</strong>
       </Text>
-      {totalProducedThisMonth > 0 &&
+      {totalProductionKg > 0 &&
         (Math.abs(diff) < 1 ? (
           <Tag color="green">Khớp ✓</Tag>
         ) : (
-          <Tag color="orange">Chênh: {diff > 0 ? "+" : ""}{fmtN(diff)} kg</Tag>
+          <Tag color="orange">
+            Chênh: {diff > 0 ? "+" : ""}
+            {fmtN(diff)} kg
+          </Tag>
         ))}
     </Space>
   );
@@ -417,18 +420,26 @@ function ItemGroupCard({
 export default function MonthlyQuotasPage() {
   const [factories, setFactories] = useState<Factory[]>([]);
   const [factoryId, setFactoryId] = useState<number | null>(null);
+  const [allProcesses, setAllProcesses] = useState<Process[]>([]);
+  const [processId, setProcessId] = useState<number | null>(null);
   const [yearMonth, setYearMonth] = useState<string>(
     dayjs().format("YYYY-MM")
   );
+  const [mode, setMode] = useState<"ACTUAL" | "ACTUAL_PROJECTED">("ACTUAL");
 
-  const [rows, setRows] = useState<ContractRow[]>([]);
+  const [groups, setGroups] = useState<ItemGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Local quota state: { salesOrderItemId: QuotaState }
   const [localQuotas, setLocalQuotas] = useState<Record<number, QuotaState>>({});
 
-  // ── Load factories ──────────────────────────────────────────────────────────
+  // ── Processes filtered by factoryId ────────────────────────────────────────
+  const processes = useMemo(
+    () => allProcesses.filter((p) => p.factoryId === factoryId),
+    [allProcesses, factoryId]
+  );
+
+  // ── Load factories + processes ──────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/factories")
       .then((r) => r.json())
@@ -441,30 +452,51 @@ export default function MonthlyQuotasPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch("/api/processes")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setAllProcesses(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Auto-select first process when factory changes
+  useEffect(() => {
+    const forFactory = allProcesses.filter((p) => p.factoryId === factoryId);
+    if (forFactory.length > 0) setProcessId(forFactory[0].id);
+    else setProcessId(null);
+  }, [factoryId, allProcesses]);
+
   // ── Fetch data ─────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
-    if (!factoryId || !yearMonth) return;
+    if (!factoryId || !processId || !yearMonth) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({
         factoryId: String(factoryId),
+        processId: String(processId),
         yearMonth,
+        mode,
       });
-      const res = await fetch(`/api/v2/monthly-quotas?${params}`);
-      if (!res.ok) throw new Error((await res.json()).error ?? "Lỗi tải dữ liệu");
+      const res = await fetch(`/api/kdsx/monthly-quotas?${params}`);
+      if (!res.ok)
+        throw new Error((await res.json()).error ?? "Lỗi tải dữ liệu");
       const data = await res.json();
-      const fetchedRows: ContractRow[] = data.quotas ?? [];
-      setRows(fetchedRows);
+      const fetchedGroups: ItemGroup[] = data.groups ?? [];
+      setGroups(fetchedGroups);
 
       // Khởi tạo localQuotas từ DB
       const initial: Record<number, QuotaState> = {};
-      for (const r of fetchedRows) {
-        if (r.quota) {
-          initial[r.salesOrderItemId] = {
-            quotaQty: r.quota.quotaQty,
-            isRemainder: r.quota.isRemainder,
-            sortOrder: r.quota.sortOrder,
-          };
+      for (const g of fetchedGroups) {
+        for (const c of g.contracts) {
+          if (c.quota) {
+            initial[c.salesOrderItemId] = {
+              quotaQty: c.quota.quotaQty,
+              isRemainder: c.quota.isRemainder,
+              sortOrder: c.quota.sortOrder,
+            };
+          }
         }
       }
       setLocalQuotas(initial);
@@ -473,46 +505,44 @@ export default function MonthlyQuotasPage() {
     } finally {
       setLoading(false);
     }
-  }, [factoryId, yearMonth]);
+  }, [factoryId, processId, yearMonth, mode]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ── Group by item ───────────────────────────────────────────────────────────
-  // Tách: nhóm 1 HĐ (không cần quota) vs nhóm nhiều HĐ vs HĐ done
+  // ── Group into display buckets ──────────────────────────────────────────────
   const { itemGroups, singleContractItems, doneContracts } = useMemo(() => {
-    const activeRows = rows.filter((r) => r.remainingTotal > 0);
-    const done = rows.filter((r) => r.remainingTotal <= 0);
-
-    // Group by item
-    const groupMap = new Map<number, { itemId: number; itemName: string; contracts: ContractRow[] }>();
-    for (const r of activeRows) {
-      if (!groupMap.has(r.itemId)) {
-        groupMap.set(r.itemId, { itemId: r.itemId, itemName: r.itemName, contracts: [] });
-      }
-      groupMap.get(r.itemId)!.contracts.push(r);
-    }
-
     const multi: ItemGroup[] = [];
     const single: ContractRow[] = [];
-    for (const g of groupMap.values()) {
-      if (g.contracts.length >= 2) {
-        multi.push(g);
+    const done: ContractRow[] = [];
+
+    for (const g of groups) {
+      const activeContracts = g.contracts.filter((c) => c.remainingTotal > 0);
+      const doneFromGroup = g.contracts.filter((c) => c.remainingTotal <= 0);
+      done.push(...doneFromGroup);
+
+      if (activeContracts.length === 0) continue;
+      if (activeContracts.length >= 2) {
+        multi.push({ ...g, contracts: activeContracts });
       } else {
-        single.push(...g.contracts);
+        single.push(...activeContracts);
       }
     }
 
     multi.sort((a, b) => a.itemName.localeCompare(b.itemName, "vi"));
     return { itemGroups: multi, singleContractItems: single, doneContracts: done };
-  }, [rows]);
+  }, [groups]);
 
   // ── Quota change handler ───────────────────────────────────────────────────
   const handleQuotaChange = useCallback(
     (salesOrderItemId: number, patch: Partial<QuotaState>) => {
       setLocalQuotas((prev) => {
-        const existing = prev[salesOrderItemId] ?? { quotaQty: null, isRemainder: false, sortOrder: 0 };
+        const existing = prev[salesOrderItemId] ?? {
+          quotaQty: null,
+          isRemainder: false,
+          sortOrder: 0,
+        };
         return {
           ...prev,
           [salesOrderItemId]: { ...existing, ...patch },
@@ -547,9 +577,12 @@ export default function MonthlyQuotasPage() {
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (!factoryId || !processId) {
+      message.warning("Chọn nhà máy và công đoạn trước");
+      return;
+    }
     if (!validate()) return;
 
-    // Gom tất cả quota có thay đổi (chỉ các nhóm có >= 2 HĐ)
     const multiSoIds = new Set(
       itemGroups.flatMap((g) => g.contracts.map((c) => c.salesOrderItemId))
     );
@@ -569,13 +602,20 @@ export default function MonthlyQuotasPage() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/v2/monthly-quotas", {
+      const res = await fetch("/api/kdsx/monthly-quotas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yearMonth, quotas: quotasToSave }),
+        body: JSON.stringify({
+          factoryId,
+          processId,
+          yearMonth,
+          quotas: quotasToSave,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      message.success(`Đã lưu ${quotasToSave.length} quota cho tháng ${yearMonth}`);
+      message.success(
+        `Đã lưu ${quotasToSave.length} quota cho tháng ${yearMonth}`
+      );
       fetchData();
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : "Lỗi lưu dữ liệu");
@@ -586,8 +626,8 @@ export default function MonthlyQuotasPage() {
 
   // ── Copy from previous ─────────────────────────────────────────────────────
   const handleCopyFromPrevious = () => {
-    if (!factoryId) {
-      message.warning("Chọn nhà máy trước");
+    if (!factoryId || !processId) {
+      message.warning("Chọn nhà máy và công đoạn trước");
       return;
     }
     const prevMonth = getPrevYearMonth(yearMonth);
@@ -599,15 +639,19 @@ export default function MonthlyQuotasPage() {
       cancelText: "Huỷ",
       onOk: async () => {
         try {
-          const res = await fetch("/api/v2/monthly-quotas/copy-from-previous", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              factoryId,
-              yearMonth,
-              sourceYearMonth: prevMonth,
-            }),
-          });
+          const res = await fetch(
+            "/api/kdsx/monthly-quotas/copy-from-previous",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                factoryId,
+                processId,
+                yearMonth,
+                sourceYearMonth: prevMonth,
+              }),
+            }
+          );
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
           message.success(
@@ -621,10 +665,8 @@ export default function MonthlyQuotasPage() {
     });
   };
 
-  // ── Month label ─────────────────────────────────────────────────────────────
   const monthLabel = `T${yearMonth.split("-")[1]}`;
 
-  // ── Done contracts columns ──────────────────────────────────────────────────
   const doneColumns: ColumnsType<ContractRow> = [
     { title: "Số HĐ", key: "orderNo", render: (_, r) => r.orderNo, width: 100 },
     {
@@ -676,9 +718,17 @@ export default function MonthlyQuotasPage() {
           <Select
             placeholder="Chọn nhà máy"
             value={factoryId}
-            onChange={setFactoryId}
+            onChange={(v) => setFactoryId(v)}
             options={factories.map((f) => ({ label: f.name, value: f.id }))}
             style={{ width: 160 }}
+          />
+          <Select
+            placeholder="Chọn công đoạn"
+            value={processId}
+            onChange={(v) => setProcessId(v)}
+            options={processes.map((p) => ({ label: p.name, value: p.id }))}
+            style={{ width: 160 }}
+            disabled={processes.length === 0}
           />
           <DatePicker
             picker="month"
@@ -687,10 +737,18 @@ export default function MonthlyQuotasPage() {
             format="MM/YYYY"
             style={{ width: 120 }}
           />
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as "ACTUAL" | "ACTUAL_PROJECTED")}
+            options={[
+              { label: "Thực tế", value: "ACTUAL" },
+              { label: "Dự báo", value: "ACTUAL_PROJECTED" },
+            ]}
+          />
           <Button
             icon={<CopyOutlined />}
             onClick={handleCopyFromPrevious}
-            disabled={!factoryId}
+            disabled={!factoryId || !processId}
           >
             Copy từ tháng trước
           </Button>
@@ -699,7 +757,7 @@ export default function MonthlyQuotasPage() {
             icon={<SaveOutlined />}
             onClick={handleSave}
             loading={saving}
-            disabled={!factoryId}
+            disabled={!factoryId || !processId}
           >
             Lưu phân bổ
           </Button>
@@ -713,7 +771,10 @@ export default function MonthlyQuotasPage() {
         icon={<InfoCircleOutlined />}
         message={
           <Text style={{ fontSize: 12 }}>
-            <strong>Cách dùng:</strong> Mỗi mặt hàng có nhiều HĐ — nhập quota (kg) cho từng HĐ "Cố định", chọn HĐ cuối là "Cuối" (nhận phần dư). Mỗi mặt hàng chỉ được 1 HĐ "Cuối". Mặt hàng chỉ có 1 HĐ không cần phân bổ.
+            <strong>Cách dùng:</strong> Mỗi mặt hàng có nhiều HĐ — nhập
+            quota (kg) cho từng HĐ "Cố định", chọn HĐ cuối là "Cuối" (nhận
+            phần dư). Mỗi mặt hàng chỉ được 1 HĐ "Cuối". Mặt hàng chỉ có 1
+            HĐ không cần phân bổ. Chọn "Dự báo" để xem SL ước tính cả tháng.
           </Text>
         }
         style={{ marginBottom: 16 }}
@@ -725,11 +786,13 @@ export default function MonthlyQuotasPage() {
         <div style={{ textAlign: "center", padding: 64 }}>
           <Spin size="large" />
         </div>
-      ) : !factoryId ? (
-        <Empty description="Chọn nhà máy để xem dữ liệu" style={{ padding: 48 }} />
+      ) : !factoryId || !processId ? (
+        <Empty
+          description="Chọn nhà máy và công đoạn để xem dữ liệu"
+          style={{ padding: 48 }}
+        />
       ) : (
         <>
-          {/* Nhóm nhiều HĐ cùng item */}
           {itemGroups.length === 0 && singleContractItems.length === 0 ? (
             <Empty
               description="Không có HĐ active nào trong tháng này"
@@ -747,13 +810,13 @@ export default function MonthlyQuotasPage() {
                 />
               ))}
 
-              {/* Mặt hàng chỉ có 1 HĐ */}
               {singleContractItems.length > 0 && (
                 <Card
                   size="small"
                   title={
                     <Text type="secondary">
-                      Mặt hàng chỉ có 1 HĐ — không cần phân bổ ({singleContractItems.length})
+                      Mặt hàng chỉ có 1 HĐ — không cần phân bổ (
+                      {singleContractItems.length})
                     </Text>
                   }
                   style={{ marginBottom: 12, opacity: 0.75 }}
@@ -764,15 +827,13 @@ export default function MonthlyQuotasPage() {
                       <Tag key={r.salesOrderItemId} color="default">
                         {r.itemName} — {r.orderNo}
                         {r.customerName ? ` (${r.customerName})` : ""}
-                        {" · "}
-                        Còn {fmtN(r.remainingTotal)} kg
+                        {" · "}Còn {fmtN(r.remainingTotal)} kg
                       </Tag>
                     ))}
                   </Space>
                 </Card>
               )}
 
-              {/* HĐ đã hoàn thành */}
               {doneContracts.length > 0 && (
                 <Collapse
                   ghost
@@ -782,7 +843,8 @@ export default function MonthlyQuotasPage() {
                       key: "done",
                       label: (
                         <Text type="secondary">
-                          HĐ đã hoàn thành trong tháng này ({doneContracts.length})
+                          HĐ đã hoàn thành trong tháng này (
+                          {doneContracts.length})
                         </Text>
                       ),
                       children: (

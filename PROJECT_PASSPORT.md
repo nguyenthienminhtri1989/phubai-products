@@ -86,8 +86,6 @@ LN ròng = LN gộp − Tổng CP cố định + DOANH_THU_HDTC
 
 ```
 /kdsx                    → Executive dashboard (Ban GĐ, filter nhà máy + tháng)
-/kdsx/plans              → Kế hoạch tháng (DRAFT/SUBMITTED/APPROVED)
-/kdsx/actuals            → Thực hiện tháng
 /kdsx/sales-orders       → Hợp đồng bán hàng (tạo/sửa/xem)
 /kdsx/sales-orders/[id]  → Chi tiết HĐ + tab Tiến độ (OrderProgressTab)
 /kdsx/order-progress     → Dashboard tiến độ tất cả HĐ (card grid)
@@ -199,9 +197,10 @@ ScheduleSegment
 
 - **Auto-fill** kgPerDay từ EMPIRICAL benchmark (hoạt động với cả 1 máy hoặc nhiều máy cùng model)
 - **Color picker** ngay trên grid, lưu vào `itemColors` per-schedule
-- **3 Tabs**: Kế hoạch (grid edit) | Thực hiện (read-only, màu so sánh) | So sánh KH/TH (Recharts)
+- **4 Tabs**: Kế hoạch (grid edit + drag resize) | Thực hiện (read-only, màu so sánh) | So sánh KH/TH (Recharts) | DT-LN kế hoạch (PLAN allocation P&L)
 - Nguồn dữ liệu TH: KdDailyInput → fallback ProductionLog.groupBy
-- Workflow: DRAFT → SUBMITTED → APPROVED → sync-to-plan (sang MonthlyPlan)
+- Tab 4 DT-LN kế hoạch: PLAN mode allocation dùng SL từ ScheduleSegments → waterfall → P&L summary + by contract
+- Drag-to-resize: kéo cạnh trái/phải segment cell để co giãn fromDay/toDay (pointer events, no library)
 
 ### Files chính
 
@@ -211,6 +210,7 @@ src/components/kdsx/ScheduleSegmentModal.tsx      — multi-machine OK (Phase 2 
 src/components/kdsx/ActualProductionGrid.tsx      — Grid TH read-only [MỚI]
 src/components/kdsx/ScheduleComparisonDashboard.tsx — Bar+Line+Table [MỚI]
 src/app/api/kdsx/production-schedule/[id]/actual/route.ts [MỚI]
+src/app/api/kdsx/production-schedule/[id]/plan-pnl/route.ts [MỚI] — PLAN allocation → P&L
 ```
 
 ### Quy tắc benchmark fill (2026-05-07)
@@ -226,7 +226,9 @@ src/app/api/kdsx/production-schedule/[id]/actual/route.ts [MỚI]
 
 ```
 src/lib/kdsx/calculator.ts         — calculateLineItem(), refreshSummarySnapshot()
+src/lib/kdsx/calculator-v2.ts      — calculateRevenuePnL() — dùng cho SPEC A/C P&L tab
 src/lib/allocation-engine.ts       — runAllocation(), runAllocationKD(), recalculateAllocation()
+src/lib/allocation-engine-v2.ts    — runAllocationFromProduction(factoryId, yearMonth, mode, processId?) — PLAN/REAL/PROJECTION
 src/lib/estimate-completion.ts     — calcEstimatedDoneDate()
 src/lib/permissions.ts             — canViewModule(), canAccessKdsx()
 src/utils/benchmark.ts             — calcTheoreticalOutput() — KHÔNG sửa
@@ -245,7 +247,8 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 
 - Export Excel báo cáo KH/TH theo format file gốc
 - Copy kế hoạch tháng trước sang tháng mới
-- UI trang nhập MonthlyQuota (Phase 2 — schema + API đã có)
+- ~~UI trang nhập MonthlyQuota theo processId~~ ✅ Done SPEC B (monthly-quotas page có processId selector)
+- Backfill processId cho production_schedules cũ và factoryId/processId cho monthly_quotas cũ (xem SPEC 0)
 - Snapshot tháng trước cho cumProducedPrevMonths (hiện tính từ OrderAllocation)
 - Tìm kiếm/lọc khách hàng theo customerType
 - Validate email/phone/MST ở backend

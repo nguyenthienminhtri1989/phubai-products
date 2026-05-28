@@ -227,13 +227,6 @@ const ALL_PAGES: PageDef[] = [
     icon: <CalendarOutlined />,
   },
   {
-    pageKey: "kdsx.plans",
-    pageGroup: "KINH DOANH",
-    path: "/kdsx/plans",
-    label: "Kế hoạch tháng (Cũ)",
-    icon: <CalendarOutlined />,
-  },
-  {
     pageKey: "kdsx.customers",
     pageGroup: "KINH DOANH",
     path: "/kdsx/customers",
@@ -260,13 +253,6 @@ const ALL_PAGES: PageDef[] = [
     path: "/kdsx/order-progress",
     label: "Tiến độ đơn hàng",
     icon: <BarChartOutlined />,
-  },
-  {
-    pageKey: "kdsx.actuals",
-    pageGroup: "KINH DOANH",
-    path: "/kdsx/actuals",
-    label: "Thực hiện tháng (Cũ)",
-    icon: <CheckCircleOutlined />,
   },
   {
     pageKey: "kdsx.sales-tracking",

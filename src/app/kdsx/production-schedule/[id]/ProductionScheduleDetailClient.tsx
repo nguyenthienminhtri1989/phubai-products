@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Button,
   Typography,
@@ -8,18 +8,21 @@ import {
   Spin,
   Breadcrumb,
   Space,
-  Popconfirm,
   Card,
   Row,
   Col,
   Modal,
   Tabs,
   InputNumber,
+  Table,
+  Statistic,
+  Alert,
+  Tag,
 } from "antd";
 import {
   ArrowLeftOutlined,
-  SyncOutlined,
   FilterOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import ScheduleSegmentModal from "@/components/kdsx/ScheduleSegmentModal";
@@ -62,6 +65,7 @@ interface Segment {
 interface Schedule {
   id: number;
   factoryId: number;
+  processId?: number | null;
   factory: { id: number; name: string };
   yearMonth: string;
   status: "DRAFT" | "SUBMITTED" | "APPROVED";
@@ -79,6 +83,240 @@ interface SummaryItem {
   totalTons: number;
   segmentCount: number;
   machinesInvolved: number[];
+}
+
+// ── DT-LN kế hoạch types (từ calculator-v2) ──
+interface PlanPnLSummary {
+  totalQtyKg: number;
+  totalRevenueVnd: number;
+  totalVariableCostVnd: number;
+  totalFixedCostVnd: number;
+  financialIncomeVnd: number;
+  totalProfitVnd: number;
+}
+interface PlanContractPnL {
+  orderItemId: number | null;
+  orderId: number | null;
+  orderNo: string | null;
+  itemId: number;
+  itemName: string;
+  allocatedQty: number;
+  unitPriceUsd: number;
+  revenueVnd: number;
+  variableCostVnd: number;
+  profitContributionVnd: number;
+}
+interface PlanFixedCostLine {
+  costType: string;
+  label: string;
+  amountVnd: number;
+}
+interface PlanPnLResult {
+  summary: PlanPnLSummary;
+  byContract: PlanContractPnL[];
+  fixedCosts: PlanFixedCostLine[];
+  meta: { exchangeRate: number; mode: string };
+}
+
+// ── PlanPnLTab component ───────────────────────────────────────────────────
+function fmtTy(vnd: number) {
+  return (vnd / 1e9).toFixed(3) + " tỷ";
+}
+function fmtKg(kg: number) {
+  return new Intl.NumberFormat("vi-VN").format(Math.round(kg)) + " kg";
+}
+
+interface PlanPnLTabProps {
+  scheduleId: number;
+  hasProcessId: boolean;
+  planPnlData: PlanPnLResult | null;
+  loading: boolean;
+  error: string | null;
+}
+
+function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabProps) {
+  if (!hasProcessId) {
+    return (
+      <Alert
+        type="warning"
+        message="Lịch sản xuất chưa liên kết công đoạn (processId)"
+        description="Cần cập nhật lịch sản xuất để liên kết với công đoạn trước khi tính DT-LN kế hoạch."
+        showIcon
+        style={{ marginTop: 16 }}
+      />
+    );
+  }
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 40 }}>
+        <Spin size="large" tip="Đang tính DT-LN kế hoạch..." />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <Alert
+        type="error"
+        message="Lỗi tính DT-LN kế hoạch"
+        description={error}
+        showIcon
+        style={{ marginTop: 16 }}
+      />
+    );
+  }
+  if (!planPnlData) {
+    return (
+      <Alert
+        type="info"
+        message="Chuyển sang tab này để tải dữ liệu DT-LN kế hoạch"
+        showIcon
+        style={{ marginTop: 16 }}
+      />
+    );
+  }
+
+  const { summary, byContract, fixedCosts, meta } = planPnlData;
+
+  const contractColumns = [
+    { title: "Số HĐ", dataIndex: "orderNo", key: "orderNo", render: (v: string | null) => v ?? <Tag color="orange">Surplus</Tag>, width: 110 },
+    { title: "Mặt hàng", dataIndex: "itemName", key: "itemName", width: 120 },
+    {
+      title: "SL KH (kg)",
+      dataIndex: "allocatedQty",
+      key: "allocatedQty",
+      align: "right" as const,
+      render: (v: number) => fmtKg(v),
+      width: 110,
+    },
+    {
+      title: "DT (tỷ VNĐ)",
+      dataIndex: "revenueVnd",
+      key: "revenueVnd",
+      align: "right" as const,
+      render: (v: number) => <span style={{ color: "#1677ff", fontWeight: 600 }}>{fmtTy(v)}</span>,
+      width: 110,
+    },
+    {
+      title: "CP biến đổi (tỷ)",
+      dataIndex: "variableCostVnd",
+      key: "variableCostVnd",
+      align: "right" as const,
+      render: (v: number) => fmtTy(v),
+      width: 130,
+    },
+    {
+      title: "Đóng góp LN (tỷ)",
+      dataIndex: "profitContributionVnd",
+      key: "profitContributionVnd",
+      align: "right" as const,
+      render: (v: number) => (
+        <span style={{ color: v >= 0 ? "#52c41a" : "#ff4d4f", fontWeight: 700 }}>
+          {v >= 0 ? "+" : ""}{fmtTy(v)}
+        </span>
+      ),
+      width: 140,
+    },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Summary cards */}
+      <Row gutter={16}>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="SL kế hoạch"
+              value={fmtKg(summary.totalQtyKg)}
+              valueStyle={{ fontSize: 16 }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="Doanh thu KH"
+              value={fmtTy(summary.totalRevenueVnd)}
+              valueStyle={{ color: "#1677ff", fontSize: 16 }}
+              prefix={<DollarOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="CP biến đổi KH"
+              value={fmtTy(summary.totalVariableCostVnd)}
+              valueStyle={{ fontSize: 16 }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small">
+            <Statistic
+              title="LN ước tính KH"
+              value={fmtTy(summary.totalProfitVnd)}
+              valueStyle={{
+                color: summary.totalProfitVnd >= 0 ? "#52c41a" : "#ff4d4f",
+                fontSize: 16,
+                fontWeight: 700,
+              }}
+              prefix={<DollarOutlined />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Contract detail table */}
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+          📋 Chi tiết theo hợp đồng (Tỷ giá: {meta.exchangeRate.toLocaleString()} VNĐ/USD)
+        </div>
+        <Table
+          dataSource={byContract.map((r, i) => ({ ...r, key: r.orderItemId ?? `surplus-${i}` }))}
+          columns={contractColumns}
+          pagination={false}
+          size="small"
+          scroll={{ x: 700 }}
+          summary={() => (
+            <Table.Summary.Row style={{ fontWeight: 700, background: "#f0f5ff" }}>
+              <Table.Summary.Cell index={0} colSpan={2}>TỔNG</Table.Summary.Cell>
+              <Table.Summary.Cell index={2} align="right">{fmtKg(summary.totalQtyKg)}</Table.Summary.Cell>
+              <Table.Summary.Cell index={3} align="right"><span style={{ color: "#1677ff" }}>{fmtTy(summary.totalRevenueVnd)}</span></Table.Summary.Cell>
+              <Table.Summary.Cell index={4} align="right">{fmtTy(summary.totalVariableCostVnd)}</Table.Summary.Cell>
+              <Table.Summary.Cell index={5} align="right">
+                <span style={{ color: summary.totalProfitVnd >= 0 ? "#52c41a" : "#ff4d4f" }}>
+                  {fmtTy(summary.totalProfitVnd)}
+                </span>
+              </Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
+      </div>
+
+      {/* Fixed costs */}
+      {fixedCosts.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>📌 Chi phí cố định tháng</div>
+          <Table
+            dataSource={fixedCosts.map((r, i) => ({ ...r, key: i }))}
+            columns={[
+              { title: "Loại", dataIndex: "label", key: "label" },
+              {
+                title: "Số tiền (tỷ VNĐ)",
+                dataIndex: "amountVnd",
+                key: "amountVnd",
+                align: "right" as const,
+                render: (v: number) => fmtTy(v),
+              },
+            ]}
+            pagination={false}
+            size="small"
+            style={{ maxWidth: 400 }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 const DEFAULT_COLORS = [
@@ -139,7 +377,7 @@ export default function ProductionScheduleDetailClient({
   );
   const [defaultDay, setDefaultDay] = useState<number | undefined>(undefined);
   const [highlightItemId, setHighlightItemId] = useState<number | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [_actionLoading] = useState(false); // kept for type compat — unused
   const [activeTab, setActiveTab] = useState("plan");
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(
     null,
@@ -163,6 +401,25 @@ export default function ProductionScheduleDetailClient({
   // Process filter — ActualProductionGrid độc lập với segments
   const [factoryProcesses, setFactoryProcesses] = useState<Process[]>([]);
   const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
+
+  // ── Drag-resize state ──────────────────────────────────────────────────────
+  const DAY_WIDTH = 38; // px — khớp với minWidth ô ngày trong bảng
+  const dragStateRef = useRef<{
+    segId: number;
+    edge: "left" | "right";
+    startClientX: number;
+    originalFromDay: number;
+    originalToDay: number;
+  } | null>(null);
+  const lastDragRangeRef = useRef<Record<number, { fromDay: number; toDay: number }>>({});
+  const [dragPreview, setDragPreview] = useState<
+    Record<number, { fromDay: number; toDay: number }>
+  >({});
+
+  // ── DT-LN kế hoạch ────────────────────────────────────────────────────────
+  const [planPnlData, setPlanPnlData] = useState<PlanPnLResult | null>(null);
+  const [planPnlLoading, setPlanPnlLoading] = useState(false);
+  const [planPnlError, setPlanPnlError] = useState<string | null>(null);
 
   const fetchSchedule = useCallback(async () => {
     try {
@@ -340,18 +597,6 @@ export default function ProductionScheduleDetailClient({
     });
   };
 
-  const handleSyncToPlan = async () => {
-    setActionLoading(true);
-    const res = await fetch(
-      `/api/kdsx/production-schedule/${scheduleId}/sync-to-plan`,
-      { method: "POST" },
-    );
-    const data = await res.json();
-    if (!res.ok) message.error(data.error ?? "Lỗi đồng bộ");
-    else message.success(data.message ?? "Đã đồng bộ sang kế hoạch DT");
-    setActionLoading(false);
-  };
-
   const handleSaveSegment = async (values: any) => {
     const url = editSegment
       ? `/api/kdsx/production-schedule/${scheduleId}/segments/${editSegment.id}`
@@ -395,6 +640,130 @@ export default function ProductionScheduleDetailClient({
       await refresh();
     }
   };
+
+  // ── Drag-resize helpers ────────────────────────────────────────────────────
+  function computeDragRange(clientX: number) {
+    const ds = dragStateRef.current;
+    if (!ds) return null;
+    const deltaDays = Math.round((clientX - ds.startClientX) / DAY_WIDTH);
+    if (ds.edge === "left") {
+      const newFrom = Math.max(1, Math.min(ds.originalFromDay + deltaDays, ds.originalToDay));
+      return { fromDay: newFrom, toDay: ds.originalToDay };
+    } else {
+      const newTo = Math.min(
+        schedule?.yearMonth ? daysInMonthFn(schedule.yearMonth) : 31,
+        Math.max(ds.originalToDay + deltaDays, ds.originalFromDay),
+      );
+      return { fromDay: ds.originalFromDay, toDay: newTo };
+    }
+  }
+
+  function getEffectiveSeg(machineId: number, day: number): Segment | undefined {
+    const segs = (schedule?.segments ?? []).filter((s) => s.machineId === machineId);
+    for (const s of segs) {
+      const preview = dragPreview[s.id];
+      const from = preview ? preview.fromDay : s.fromDay;
+      const to = preview ? preview.toDay : s.toDay;
+      if (day >= from && day <= to) return s;
+    }
+    return undefined;
+  }
+
+  function hasOverlapPreview(machineId: number, segId: number, fromDay: number, toDay: number): boolean {
+    return (schedule?.segments ?? []).some(
+      (s) => s.machineId === machineId && s.id !== segId &&
+        fromDay <= s.toDay && toDay >= s.fromDay,
+    );
+  }
+
+  function handleHandlePointerDown(
+    e: React.PointerEvent,
+    segId: number,
+    edge: "left" | "right",
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const seg = schedule!.segments.find((s) => s.id === segId)!;
+    dragStateRef.current = {
+      segId,
+      edge,
+      startClientX: e.clientX,
+      originalFromDay: seg.fromDay,
+      originalToDay: seg.toDay,
+    };
+  }
+
+  function handleHandlePointerMove(e: React.PointerEvent, segId: number) {
+    if (!dragStateRef.current || dragStateRef.current.segId !== segId) return;
+    const newRange = computeDragRange(e.clientX);
+    if (!newRange) return;
+    const prev = lastDragRangeRef.current[segId];
+    if (!prev || prev.fromDay !== newRange.fromDay || prev.toDay !== newRange.toDay) {
+      lastDragRangeRef.current[segId] = newRange;
+      setDragPreview((p) => ({ ...p, [segId]: newRange }));
+    }
+  }
+
+  async function handleHandlePointerUp(e: React.PointerEvent, segId: number) {
+    const ds = dragStateRef.current;
+    if (!ds || ds.segId !== segId) return;
+    const finalRange = computeDragRange(e.clientX);
+    dragStateRef.current = null;
+    delete lastDragRangeRef.current[segId];
+
+    if (!finalRange || (finalRange.fromDay === ds.originalFromDay && finalRange.toDay === ds.originalToDay)) {
+      setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
+      return;
+    }
+
+    const seg = schedule!.segments.find((s) => s.id === segId)!;
+    if (hasOverlapPreview(seg.machineId, segId, finalRange.fromDay, finalRange.toDay)) {
+      message.warning("Khoảng ngày bị chồng với segment khác trên cùng máy");
+      setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
+      return;
+    }
+
+    const res = await fetch(
+      `/api/kdsx/production-schedule/${scheduleId}/segments/${segId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromDay: finalRange.fromDay, toDay: finalRange.toDay }),
+      },
+    );
+    setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
+    if (!res.ok) {
+      const data = await res.json();
+      message.error(data.error ?? "Lỗi cập nhật khoảng ngày");
+    } else {
+      message.success("Đã cập nhật khoảng ngày");
+      await refresh();
+    }
+  }
+
+  function handleDragCancel(segId: number) {
+    dragStateRef.current = null;
+    delete lastDragRangeRef.current[segId];
+    setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
+  }
+
+  // ── Plan PnL fetch ─────────────────────────────────────────────────────────
+  const fetchPlanPnl = useCallback(async () => {
+    if (planPnlData || planPnlLoading) return; // Already loaded/loading
+    setPlanPnlLoading(true);
+    setPlanPnlError(null);
+    try {
+      const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/plan-pnl`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Lỗi tải DT-LN kế hoạch");
+      setPlanPnlData(data);
+    } catch (err: unknown) {
+      setPlanPnlError(err instanceof Error ? err.message : "Lỗi tải dữ liệu");
+    } finally {
+      setPlanPnlLoading(false);
+    }
+  }, [scheduleId, planPnlData, planPnlLoading]);
 
   if (loading)
     return (
@@ -806,19 +1175,24 @@ export default function ProductionScheduleDetailClient({
                   {/* Ô ngày */}
                   {dayNumbers.map((day) => {
                     const isHoliday = holidayArr.includes(day);
-                    const seg = machineSegs.find(
-                      (s) => day >= s.fromDay && day <= s.toDay,
-                    );
+                    const seg = getEffectiveSeg(machine.id, day);
                     const dimmed =
                       highlightItemId !== null &&
                       seg &&
                       seg.itemId !== highlightItemId;
+
+                    // Effective boundaries (may differ during drag preview)
+                    const effFrom = seg ? (dragPreview[seg.id]?.fromDay ?? seg.fromDay) : seg;
+                    const effTo = seg ? (dragPreview[seg.id]?.toDay ?? seg.toDay) : seg;
+                    const isFromDay = seg && day === effFrom;
+                    const isToDay = seg && day === effTo;
 
                     return (
                       <td
                         key={day}
                         style={{
                           ...tdStyle,
+                          position: "relative",
                           background: isHoliday
                             ? "#ffebe8"
                             : seg
@@ -826,14 +1200,12 @@ export default function ProductionScheduleDetailClient({
                               : undefined,
                           opacity: dimmed ? 0.25 : 1,
                           cursor: "pointer",
-                          borderLeft:
-                            seg && day === seg.fromDay
-                              ? `2px solid ${getBorder(seg.itemId)}`
-                              : "1px solid #d0d0d0",
-                          borderRight:
-                            seg && day === seg.toDay
-                              ? `2px solid ${getBorder(seg.itemId)}`
-                              : "1px solid #d0d0d0",
+                          borderLeft: isFromDay
+                            ? `2px solid ${getBorder(seg!.itemId)}`
+                            : "1px solid #d0d0d0",
+                          borderRight: isToDay
+                            ? `2px solid ${getBorder(seg!.itemId)}`
+                            : "1px solid #d0d0d0",
                         }}
                         onClick={() => {
                           if (seg) {
@@ -848,10 +1220,42 @@ export default function ProductionScheduleDetailClient({
                         }}
                         title={
                           seg
-                            ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa)`
+                            ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa | Kéo cạnh để co giãn)`
                             : "Click để thêm segment"
                         }
                       >
+                        {/* Drag handle — cạnh trái (fromDay) */}
+                        {seg && isFromDay && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 0, left: 0, bottom: 0, width: 8,
+                              cursor: "ew-resize",
+                              zIndex: 5,
+                              borderRadius: "2px 0 0 2px",
+                            }}
+                            onPointerDown={(e) => handleHandlePointerDown(e, seg.id, "left")}
+                            onPointerMove={(e) => handleHandlePointerMove(e, seg.id)}
+                            onPointerUp={(e) => handleHandlePointerUp(e, seg.id)}
+                            onPointerCancel={() => handleDragCancel(seg.id)}
+                          />
+                        )}
+                        {/* Drag handle — cạnh phải (toDay) */}
+                        {seg && isToDay && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 0, right: 0, bottom: 0, width: 8,
+                              cursor: "ew-resize",
+                              zIndex: 5,
+                              borderRadius: "0 2px 2px 0",
+                            }}
+                            onPointerDown={(e) => handleHandlePointerDown(e, seg.id, "right")}
+                            onPointerMove={(e) => handleHandlePointerMove(e, seg.id)}
+                            onPointerUp={(e) => handleHandlePointerUp(e, seg.id)}
+                            onPointerCancel={() => handleDragCancel(seg.id)}
+                          />
+                        )}
                         {isHoliday ? (
                           <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                         ) : seg ? (
@@ -1009,21 +1413,6 @@ export default function ProductionScheduleDetailClient({
         </div>
 
         <Space wrap>
-          <Popconfirm
-            title="Đồng bộ sản lượng sang Kế hoạch DT?"
-            description="Sẽ cập nhật/tạo PlanLineItem.qty"
-            onConfirm={handleSyncToPlan}
-            okText="Đồng bộ"
-            okType="primary"
-          >
-            <Button
-              type="primary"
-              icon={<SyncOutlined />}
-              loading={actionLoading}
-            >
-              Đồng bộ sang KH DT
-            </Button>
-          </Popconfirm>
           <Button
             type="dashed"
             icon={<span>+</span>}
@@ -1681,10 +2070,13 @@ export default function ProductionScheduleDetailClient({
         );
       })()}
 
-      {/* Tabs: Kế hoạch / Thực hiện / So sánh */}
+      {/* Tabs: Kế hoạch / Thực hiện / So sánh / DT-LN */}
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={(key) => {
+          setActiveTab(key);
+          if (key === "plan-pnl") fetchPlanPnl();
+        }}
         items={[
           {
             key: "plan",
@@ -1790,8 +2182,21 @@ export default function ProductionScheduleDetailClient({
                 holidays={holidayArr}
                 totalDays={totalDays}
                 benchmarkMap={actualBenchmarkMap}
+                factoryId={schedule.factoryId}
+                processId={schedule.processId ?? undefined}
               />
             ),
+          },
+          {
+            key: "plan-pnl",
+            label: "💰 DT-LN kế hoạch",
+            children: <PlanPnLTab
+              scheduleId={scheduleId}
+              hasProcessId={!!schedule.processId}
+              planPnlData={planPnlData}
+              loading={planPnlLoading}
+              error={planPnlError}
+            />,
           },
         ]}
       />

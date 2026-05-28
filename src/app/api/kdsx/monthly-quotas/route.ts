@@ -1,36 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAllocationFromProduction } from "@/lib/allocation-engine-v2";
+import {
+  getMonthlyItemTotals,
+  ItemTotalMode,
+} from "@/lib/kdsx/monthly-item-totals";
 
-// ===== GET =====
-// GET /api/v2/monthly-quotas?factoryId=1&yearMonth=2026-05&itemId=3
-// Lấy danh sách quota cho factory+tháng, optional filter theo itemId
+// GET /api/kdsx/monthly-quotas?factoryId=3&processId=5&yearMonth=2026-05&mode=ACTUAL_PROJECTED
 export async function GET(req: NextRequest) {
-  const factoryId = Number(req.nextUrl.searchParams.get("factoryId"));
-  const yearMonth = req.nextUrl.searchParams.get("yearMonth") ?? "";
-  const itemIdParam = req.nextUrl.searchParams.get("itemId");
-  const itemId = itemIdParam ? Number(itemIdParam) : undefined;
+  const sp = new URL(req.url).searchParams;
+  const factoryId = parseInt(sp.get("factoryId") ?? "0");
+  const processId = parseInt(sp.get("processId") ?? "0");
+  const yearMonth = sp.get("yearMonth") ?? "";
+  const mode = (sp.get("mode") ?? "ACTUAL") as ItemTotalMode;
 
-  if (!factoryId || !yearMonth) {
+  if (!factoryId || !processId || !/^\d{4}-\d{2}$/.test(yearMonth)) {
     return NextResponse.json(
-      { error: "factoryId và yearMonth là bắt buộc" },
-      { status: 400 }
+      { error: "factoryId, processId và yearMonth là bắt buộc" },
+      { status: 400 },
     );
   }
-  if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+  if (!["ACTUAL", "ACTUAL_PROJECTED"].includes(mode)) {
     return NextResponse.json(
-      { error: "yearMonth phải có định dạng YYYY-MM" },
-      { status: 400 }
+      { error: "mode phải là ACTUAL hoặc ACTUAL_PROJECTED" },
+      { status: 400 },
     );
   }
 
   try {
     const firstDayOfMonth = new Date(`${yearMonth}-01T00:00:00.000Z`);
 
-    // Lấy tất cả SalesOrderItem active của factory, kèm quota tháng này
+    // 1. Tổng SL theo item từ nguồn sự thật duy nhất
+    const itemTotals = await getMonthlyItemTotals(
+      factoryId,
+      processId,
+      yearMonth,
+      mode,
+    );
+    const productionByItemId = new Map(
+      itemTotals.map((t) => [t.itemId, t.totalKg]),
+    );
+
+    // 2. Allocation per contract để lấy producedThisMonth
+    const allocationByContractId = new Map<number, number>();
+    try {
+      const engineMode =
+        mode === "ACTUAL_PROJECTED" ? "PROJECTION" : "REAL";
+      const allocResult = await runAllocationFromProduction(
+        factoryId,
+        yearMonth,
+        engineMode,
+        processId,
+      );
+      for (const line of allocResult.allocations) {
+        if (line.orderItemId) {
+          allocationByContractId.set(
+            line.orderItemId,
+            (allocationByContractId.get(line.orderItemId) ?? 0) +
+              line.allocatedQty,
+          );
+        }
+      }
+    } catch {
+      // No production data yet — OK
+    }
+
+    // 3. Tất cả SalesOrderItem active của factory, quota scoped theo processId
     const orderItems = await prisma.salesOrderItem.findMany({
       where: {
-        ...(itemId ? { itemId } : {}),
         order: {
           factoryId,
           status: "ACTIVE",
@@ -53,29 +90,13 @@ export async function GET(req: NextRequest) {
         },
         item: { select: { id: true, name: true } },
         quotas: {
-          where: { yearMonth },
+          where: { yearMonth, factoryId, processId },
         },
       },
     });
 
-    // Chạy allocation engine để lấy producedThisMonth per contract
-    let allocationByContractId = new Map<number, number>();
-    try {
-      const allocResult = await runAllocationFromProduction(factoryId, yearMonth, "REAL");
-      for (const line of allocResult.allocations) {
-        if (line.orderItemId) {
-          allocationByContractId.set(
-            line.orderItemId,
-            (allocationByContractId.get(line.orderItemId) ?? 0) + line.allocatedQty
-          );
-        }
-      }
-    } catch {
-      // fallback: không có production data
-    }
-
-    // Tính cumProducedPrevMonths từ OrderAllocation các tháng trước
-    const quotas = await Promise.all(
+    // 4. Tính cumProducedPrevMonths và remainingTotal
+    const contracts = await Promise.all(
       orderItems.map(async (oi) => {
         const prevAllocated = await prisma.orderAllocation.aggregate({
           where: {
@@ -84,10 +105,12 @@ export async function GET(req: NextRequest) {
           },
           _sum: { allocatedQty: true },
         });
-        const cumProducedPrevMonths = prevAllocated._sum?.allocatedQty ?? 0;
-        const remainingTotal =
-          oi.plannedQty - oi.deliveredQty - cumProducedPrevMonths;
-
+        const cumProducedPrevMonths =
+          prevAllocated._sum?.allocatedQty ?? 0;
+        const remainingTotal = Math.max(
+          0,
+          oi.plannedQty - oi.deliveredQty - cumProducedPrevMonths,
+        );
         const quota = oi.quotas[0] ?? null;
         return {
           salesOrderItemId: oi.id,
@@ -100,7 +123,7 @@ export async function GET(req: NextRequest) {
           deliveredQty: oi.deliveredQty,
           note: oi.note,
           cumProducedPrevMonths,
-          remainingTotal: Math.max(0, remainingTotal),
+          remainingTotal,
           producedThisMonth: allocationByContractId.get(oi.id) ?? 0,
           quota: quota
             ? {
@@ -111,55 +134,45 @@ export async function GET(req: NextRequest) {
               }
             : null,
         };
-      })
+      }),
     );
 
-    // Nhóm theo itemId để tính itemSummary
-    const itemGroups = new Map<
+    // 5. Group by item
+    const groupMap = new Map<
       number,
-      { itemName: string; items: typeof quotas }
-    >();
-    for (const q of quotas) {
-      if (!itemGroups.has(q.itemId)) {
-        itemGroups.set(q.itemId, { itemName: q.itemName, items: [] });
+      {
+        itemId: number;
+        itemName: string;
+        contracts: (typeof contracts)[0][];
       }
-      itemGroups.get(q.itemId)!.items.push(q);
+    >();
+    for (const c of contracts) {
+      if (!groupMap.has(c.itemId)) {
+        groupMap.set(c.itemId, {
+          itemId: c.itemId,
+          itemName: c.itemName,
+          contracts: [],
+        });
+      }
+      groupMap.get(c.itemId)!.contracts.push(c);
     }
 
-    const itemSummaries = Array.from(itemGroups.entries()).map(
-      ([iId, group]) => {
-        const totalFixedQuota = group.items
-          .filter((i) => i.quota && !i.quota.isRemainder)
-          .reduce((sum, i) => sum + (i.quota?.quotaQty ?? 0), 0);
-        const hasRemainder = group.items.some(
-          (i) => i.quota?.isRemainder === true
-        );
-        return {
-          itemId: iId,
-          itemName: group.itemName,
-          totalFixedQuota,
-          hasRemainder,
-          contractCount: group.items.length,
-        };
-      }
-    );
+    const groups = [...groupMap.values()].map((g) => ({
+      itemId: g.itemId,
+      itemName: g.itemName,
+      totalProductionKg: productionByItemId.get(g.itemId) ?? 0,
+      contracts: g.contracts,
+    }));
 
-    return NextResponse.json({
-      factoryId,
-      yearMonth,
-      quotas,
-      itemSummaries,
-    });
+    return NextResponse.json({ factoryId, processId, yearMonth, mode, groups });
   } catch (error: unknown) {
-    const message =
+    const msg =
       error instanceof Error ? error.message : "Lỗi không xác định";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// ===== POST =====
-// POST /api/v2/monthly-quotas
-// Upsert quota cho 1 tháng
+// POST /api/kdsx/monthly-quotas — same logic as /api/v2/monthly-quotas POST
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -178,24 +191,23 @@ export async function POST(req: NextRequest) {
     if (!factoryId || !processId || !yearMonth || !Array.isArray(quotas)) {
       return NextResponse.json(
         { error: "factoryId, processId, yearMonth và quotas là bắt buộc" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
       return NextResponse.json(
         { error: "yearMonth phải có định dạng YYYY-MM" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Validation: isRemainder=true thì quotaQty phải null
     for (const q of quotas) {
       if (q.isRemainder && q.quotaQty !== null && q.quotaQty !== undefined) {
         return NextResponse.json(
           {
             error: `salesOrderItemId ${q.salesOrderItemId}: isRemainder=true thì quotaQty phải là null`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
       if (!q.isRemainder && (q.quotaQty === null || q.quotaQty === undefined)) {
@@ -203,7 +215,7 @@ export async function POST(req: NextRequest) {
           {
             error: `salesOrderItemId ${q.salesOrderItemId}: isRemainder=false thì quotaQty phải có giá trị`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
       if (!q.isRemainder && q.quotaQty !== null && q.quotaQty! < 0) {
@@ -211,17 +223,16 @@ export async function POST(req: NextRequest) {
           {
             error: `salesOrderItemId ${q.salesOrderItemId}: quotaQty không được âm`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
 
-    // Validation: tối đa 1 REMAINDER per item+yearMonth
-    // Lấy itemId của từng salesOrderItemId để nhóm
+    // Validate max 1 REMAINDER per item+yearMonth
     const orderItemIds = quotas.map((q) => q.salesOrderItemId);
     const orderItems = await prisma.salesOrderItem.findMany({
       where: { id: { in: orderItemIds } },
-      select: { id: true, itemId: true, orderId: true },
+      select: { id: true, itemId: true },
     });
 
     if (orderItems.length !== orderItemIds.length) {
@@ -229,12 +240,11 @@ export async function POST(req: NextRequest) {
       const missing = orderItemIds.filter((id) => !foundIds.has(id));
       return NextResponse.json(
         { error: `salesOrderItemId không tồn tại: ${missing.join(", ")}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const itemIdMap = new Map(orderItems.map((o) => [o.id, o.itemId]));
-    // Nhóm quota theo itemId, check max 1 REMAINDER
     const remainderByItem = new Map<number, number>();
     for (const q of quotas) {
       if (q.isRemainder) {
@@ -245,13 +255,12 @@ export async function POST(req: NextRequest) {
             {
               error: `itemId ${iId}: không được có quá 1 dòng REMAINDER trong cùng tháng`,
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
     }
 
-    // Upsert từng quota
     const results = await Promise.all(
       quotas.map((q) =>
         prisma.monthlyQuota.upsert({
@@ -277,17 +286,14 @@ export async function POST(req: NextRequest) {
             isRemainder: q.isRemainder,
             sortOrder: q.sortOrder ?? 0,
           },
-        })
-      )
+        }),
+      ),
     );
 
-    return NextResponse.json({
-      saved: results.length,
-      yearMonth,
-    });
+    return NextResponse.json({ saved: results.length, yearMonth });
   } catch (error: unknown) {
-    const message =
+    const msg =
       error instanceof Error ? error.message : "Lỗi không xác định";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

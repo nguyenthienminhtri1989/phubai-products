@@ -65,6 +65,9 @@ model Factory {
   // Module Kế hoạch SX tháng
   productionSchedules ProductionSchedule[]
 
+  // Monthly quota
+  monthlyQuotas MonthlyQuota[]
+
   // Users assigned to this factory
   users         User[]
   userFactories UserFactory[] // Pivot table cho phân quyền nhiều NM
@@ -96,6 +99,12 @@ model Process {
 
   // Định mức năng suất
   productivityBenchmarks ProductivityBenchmark[]
+
+  // Module Kế hoạch SX tháng
+  productionSchedules ProductionSchedule[]
+
+  // Monthly quota
+  monthlyQuotas MonthlyQuota[]
 
   @@map("processes")
 }
@@ -906,6 +915,8 @@ model SalesOrderItem {
 model MonthlyQuota {
   id               Int    @id @default(autoincrement())
   salesOrderItemId Int
+  factoryId        Int    // scope: nhà máy
+  processId        Int    // scope: công đoạn (ống / sợi con tách biệt)
   yearMonth        String @db.VarChar(7) // "2026-05"
 
   /// Số kg tối đa rót cho dòng HĐ này trong tháng.
@@ -922,9 +933,11 @@ model MonthlyQuota {
   updatedAt DateTime @updatedAt
 
   salesOrderItem SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+  factory        Factory        @relation(fields: [factoryId], references: [id])
+  process        Process        @relation(fields: [processId], references: [id])
 
-  @@unique([salesOrderItemId, yearMonth])
-  @@index([yearMonth])
+  @@unique([salesOrderItemId, factoryId, processId, yearMonth])
+  @@index([factoryId, processId, yearMonth])
   @@map("monthly_quotas")
 }
 
@@ -1015,8 +1028,7 @@ model RawMaterialRate {
 
 // --- Nhóm Kế hoạch (KH) ---
 
-// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
-// 6. Kế hoạch tháng
+/// @deprecated v2 — không dùng. Giữ DB để backward compat, không tham chiếu trong code mới.
 model MonthlyPlan {
   id        Int        @id @default(autoincrement())
   factoryId Int
@@ -1036,8 +1048,7 @@ model MonthlyPlan {
   @@map("monthly_plans")
 }
 
-// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
-// 7. Chi tiết từng dòng sợi trong kế hoạch
+/// @deprecated v2 — không dùng. Giữ DB để backward compat, không tham chiếu trong code mới.
 model PlanLineItem {
   id     Int         @id @default(autoincrement())
   planId Int
@@ -1104,8 +1115,7 @@ model FixedCostEntry {
 
 // --- Nhóm Thực hiện (TH) ---
 
-// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
-// 9. Thực hiện tháng
+/// @deprecated v2 — không dùng. Giữ DB để backward compat, không tham chiếu trong code mới.
 model MonthlyActual {
   id        Int     @id @default(autoincrement())
   factoryId Int
@@ -1124,8 +1134,7 @@ model MonthlyActual {
   @@map("monthly_actuals")
 }
 
-// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
-// 10. Chi tiết từng dòng sợi thực hiện
+/// @deprecated v2 — không dùng. Giữ DB để backward compat, không tham chiếu trong code mới.
 model ActualLineItem {
   id       Int           @id @default(autoincrement())
   actualId Int
@@ -1292,8 +1301,7 @@ model KdDailyInput {
 
 // --- Dashboard Cache ---
 
-// DEPRECATED — v2 không dùng. Giữ lại cho backward compatible. Không xóa.
-// 11. Cache tổng hợp 3 nhà máy cho dashboard Ban GĐ
+/// @deprecated v2 — không dùng. Giữ DB để backward compat, không tham chiếu trong code mới.
 model MonthlySummarySnapshot {
   id        Int          @id @default(autoincrement())
   factoryId Int
@@ -1369,6 +1377,9 @@ model ProductionSchedule {
 
   // Bảng màu per-item trong schedule này: {"1":"#4CAF50","5":"#2196F3",...}
   itemColors Json @default("{}")
+
+  processId Int?    // Công đoạn. Mỗi (factory, process, yearMonth) = 1 schedule
+  process   Process? @relation(fields: [processId], references: [id])
 
   segments ScheduleSegment[]
 

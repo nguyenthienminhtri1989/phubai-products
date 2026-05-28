@@ -1,6 +1,7 @@
 // src/lib/allocation-engine-v2.ts
 
 import { prisma } from "@/lib/prisma";
+import { getMonthlyItemTotals } from "@/lib/kdsx/monthly-item-totals";
 
 // ===== INTERFACES =====
 
@@ -50,33 +51,54 @@ export interface AllocationResult {
  * @param factoryId - ID nhà máy
  * @param yearMonth - "YYYY-MM"
  * @param mode - 'REAL' (đến hôm nay) | 'PROJECTION' (cả tháng)
+ * @param processId - (optional) Scope theo công đoạn. Khi cung cấp, dùng
+ *   getMonthlyItemTotals để tính SL (trung bình thực tế thay benchmark cố định).
+ *   Khi không cung cấp, fallback về toàn bộ factory (backward compat).
  */
 export async function runAllocationFromProduction(
   factoryId: number,
   yearMonth: string,
-  mode: "REAL" | "PROJECTION" = "REAL"
+  mode: "REAL" | "PROJECTION" | "PLAN" = "REAL",
+  processId?: number,
 ): Promise<AllocationResult> {
   const [year, month] = yearMonth.split("-").map(Number);
   const firstDay = new Date(`${yearMonth}-01T00:00:00.000Z`);
-  const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)); // ngày cuối tháng
+  const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
 
+  // PLAN mode → treat as full-month PROJECTION for date math
+  const effectiveMode: "REAL" | "PROJECTION" =
+    mode === "PLAN" ? "PROJECTION" : mode;
+
   const toDate =
-    mode === "REAL" ? (today < lastDay ? today : lastDay) : lastDay;
+    effectiveMode === "REAL" ? (today < lastDay ? today : lastDay) : lastDay;
 
-  // ===== BƯỚC 1: Lấy sản lượng theo mặt hàng =====
-  const productionByItem = await getProductionByItem(factoryId, firstDay, toDate);
+  let productionByItem: ProductionByItem[];
 
-  // Nếu mode PROJECTION: cộng thêm SL ước tính cho ngày tương lai
-  if (mode === "PROJECTION" && today < lastDay) {
-    await addProjectedProduction(
-      productionByItem,
-      factoryId,
-      today,
-      lastDay,
-      firstDay
-    );
+  if (mode === "PLAN" && processId) {
+    // Dùng SL kế hoạch từ segments (getMonthlyItemTotals PLAN mode)
+    const totals = await getMonthlyItemTotals(factoryId, processId, yearMonth, "PLAN");
+    productionByItem = totals.map((t) => ({
+      itemId: t.itemId,
+      itemName: t.itemName,
+      totalQty: t.totalKg,
+    }));
+  } else if (processId) {
+    // Dùng nguồn sự thật duy nhất: getMonthlyItemTotals (trung bình thực tế)
+    const itemMode = effectiveMode === "PROJECTION" ? "ACTUAL_PROJECTED" : "ACTUAL";
+    const totals = await getMonthlyItemTotals(factoryId, processId, yearMonth, itemMode);
+    productionByItem = totals.map((t) => ({
+      itemId: t.itemId,
+      itemName: t.itemName,
+      totalQty: t.totalKg,
+    }));
+  } else {
+    // Backward compat: toàn bộ factory, phương pháp cũ
+    productionByItem = await getProductionByItem(factoryId, firstDay, toDate);
+    if (effectiveMode === "PROJECTION" && today < lastDay) {
+      await addProjectedProduction(productionByItem, factoryId, today, lastDay, firstDay);
+    }
   }
 
   // ===== BƯỚC 2 + 3: Waterfall allocation =====
@@ -84,7 +106,8 @@ export async function runAllocationFromProduction(
     productionByItem,
     factoryId,
     yearMonth,
-    firstDay
+    firstDay,
+    processId,
   );
 
   return {
@@ -93,7 +116,7 @@ export async function runAllocationFromProduction(
     meta: {
       factoryId,
       yearMonth,
-      mode,
+      mode: effectiveMode,
       fromDate: firstDay.toISOString().split("T")[0],
       toDate: toDate.toISOString().split("T")[0],
       calculatedAt: new Date().toISOString(),
@@ -213,7 +236,8 @@ async function waterfallAllocate(
   productionByItem: ProductionByItem[],
   factoryId: number,
   yearMonth: string,
-  firstDayOfMonth: Date
+  firstDayOfMonth: Date,
+  processId?: number,
 ): Promise<AllocationLine[]> {
   const allocations: AllocationLine[] = [];
 
@@ -242,7 +266,9 @@ async function waterfallAllocate(
           },
         },
         quotas: {
-          where: { yearMonth },
+          where: processId
+            ? { yearMonth, factoryId, processId }
+            : { yearMonth },
         },
       },
     });
