@@ -261,6 +261,8 @@ function MobileInputContent() {
 
     const currentMachine = machines[currentIndex];
     const currentState = currentMachine ? inputStates[currentMachine.id] : null;
+    // Máy CT1: nhập kg trực tiếp (finalOutput = số nhập), không cần chỉ số trước/sau
+    const isDirectOutput = currentMachine?.formulaType === 1;
 
     // Kiểm tra ca thiếu khi đổi máy, ngày, hoặc ca
     useEffect(() => {
@@ -872,47 +874,63 @@ function MobileInputContent() {
                             {currentState.isStopped ? "MÁY DỪNG" : "ĐANG CHẠY"}
                         </div>
                     </div>
-                    <div
-                        onClick={() => !currentState.isStopped && updateCurrentState("isReset", !currentState.isReset)}
-                        style={{
-                            ...styles.switchCard,
-                            background: currentState.isReset ? "#fffbe6" : "#f5f5f5",
-                            border: currentState.isReset ? "2px solid #faad14" : "2px solid transparent",
-                            opacity: currentState.isStopped ? 0.4 : 1,
-                        }}>
-                        <WarningOutlined style={{ fontSize: 22, color: currentState.isReset ? "#faad14" : "#bbb" }} />
-                        <div style={{ fontSize: 14, fontWeight: 600, color: currentState.isReset ? "#d48806" : "#888" }}>
-                            {currentState.isReset ? "Sửa chỉ số trước" : "Bình thường"}
+                    {!isDirectOutput && (
+                        <div
+                            onClick={() => !currentState.isStopped && updateCurrentState("isReset", !currentState.isReset)}
+                            style={{
+                                ...styles.switchCard,
+                                background: currentState.isReset ? "#fffbe6" : "#f5f5f5",
+                                border: currentState.isReset ? "2px solid #faad14" : "2px solid transparent",
+                                opacity: currentState.isStopped ? 0.4 : 1,
+                            }}>
+                            <WarningOutlined style={{ fontSize: 22, color: currentState.isReset ? "#faad14" : "#bbb" }} />
+                            <div style={{ fontSize: 14, fontWeight: 600, color: currentState.isReset ? "#d48806" : "#888" }}>
+                                {currentState.isReset ? "Sửa chỉ số trước" : "Bình thường"}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Chi so */}
-                <div style={styles.indexRow}>
-                    <div style={styles.indexBox}>
-                        <div style={styles.indexLabel}>Chỉ số TRƯỚC</div>
-                        <InputNumber
-                            value={currentState.startIndex}
-                            onChange={val => updateCurrentState("startIndex", val ?? 0)}
-                            readOnly={!currentState.isReset}
-                            disabled={currentState.isStopped}
-                            style={styles.indexInput}
-                            controls={false} inputMode="decimal"
-                        />
-                    </div>
-                    <ArrowRightOutlined style={{ fontSize: 24, color: "#1677ff", marginTop: 28 }} />
-                    <div style={styles.indexBox}>
-                        <div style={styles.indexLabel}>Chỉ số SAU</div>
+                {isDirectOutput ? (
+                    <div style={{ padding: "0 16px", marginBottom: 12 }}>
+                        <div style={styles.indexLabel}>Sản lượng (kg)</div>
                         <InputNumber
                             ref={endIndexRef}
                             value={currentState.endIndex}
                             onChange={val => updateCurrentState("endIndex", val)}
                             disabled={currentState.isStopped}
                             style={{ ...styles.indexInput, borderColor: "#1677ff", borderWidth: 2 }}
-                            controls={false} inputMode="decimal" placeholder="Nhap..."
+                            controls={false} inputMode="decimal" placeholder="Nhập sản lượng..."
                         />
                     </div>
-                </div>
+                ) : (
+                    <div style={styles.indexRow}>
+                        <div style={styles.indexBox}>
+                            <div style={styles.indexLabel}>Chỉ số TRƯỚC</div>
+                            <InputNumber
+                                value={currentState.startIndex}
+                                onChange={val => updateCurrentState("startIndex", val ?? 0)}
+                                readOnly={!currentState.isReset}
+                                disabled={currentState.isStopped}
+                                style={styles.indexInput}
+                                controls={false} inputMode="decimal"
+                            />
+                        </div>
+                        <ArrowRightOutlined style={{ fontSize: 24, color: "#1677ff", marginTop: 28 }} />
+                        <div style={styles.indexBox}>
+                            <div style={styles.indexLabel}>Chỉ số SAU</div>
+                            <InputNumber
+                                ref={endIndexRef}
+                                value={currentState.endIndex}
+                                onChange={val => updateCurrentState("endIndex", val)}
+                                disabled={currentState.isStopped}
+                                style={{ ...styles.indexInput, borderColor: "#1677ff", borderWidth: 2 }}
+                                controls={false} inputMode="decimal" placeholder="Nhap..."
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* NE */}
                 {(currentMachine.formulaType === 3 || currentMachine.formulaType === 4) && (
