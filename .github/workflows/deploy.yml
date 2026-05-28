@@ -10,59 +10,61 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: 1. Checkout code
-        uses: actions/checkout@v4
-
-      - name: 2. Create .env file from Secrets
-        shell: powershell
-        env:
-          ENV_DATA: ${{ secrets.ENV_FILE }}
-        run: |
-          [System.IO.File]::WriteAllText("$(Get-Location)\.env", $env:ENV_DATA)
-
-      - name: 3. Stop PM2 + Start Maintenance Server trên port 3001
+      # QUAN TRỌNG: Stop PM2 + bật maintenance TRƯỚC checkout.
+      # Lý do: actions/checkout chạy `git clean -ffdx` (xóa cả node_modules) và
+      # có thể recreate workspace. Nếu app Next.js còn chạy, nó giữ lock
+      # node_modules\.prisma\client\query_engine-windows.dll.node → checkout fail
+      # với EPERM "operation not permitted, unlink". Phải giải phóng lock trước.
+      - name: 1. Stop PM2 + Start Maintenance Server trên port 3001 (trước checkout)
         shell: powershell
         run: |
-          $workdir = Get-Location
+          # Workspace có thể chưa tồn tại ở lần chạy đầu — dùng đường dẫn runner cố định.
+          $workdir = "$env:GITHUB_WORKSPACE"
 
-          # 3.1 Bật flag (để app Next.js mới khi khởi động lại biết đang trong giai đoạn maintenance)
-          New-Item -Path "$workdir\maintenance.flag" -ItemType File -Force | Out-Null
-
-          # 3.2 Stop PM2 app phubai-erp để giải phóng port 3001 và file lock
+          # 1.1 Stop PM2 app phubai-erp để giải phóng port 3001 và file lock
           $pm2 = "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd"
           if (Test-Path $pm2) { & $pm2 stop phubai-erp 2>$null }
 
-          # 3.3 Giết bất kỳ tiến trình nào còn bám port 3001
+          # 1.2 Giết bất kỳ tiến trình nào còn bám port 3001
           $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
           if ($conn) {
             Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
           }
           Start-Sleep -Seconds 2
 
-          # 3.4 Start maintenance server (background) chiếm port 3001
-          # → Cloudflare Tunnel vẫn route tới 3001 và user thấy trang maintenance,
-          #   không thấy lỗi 502/523 của Cloudflare.
-          $proc = Start-Process `
-            -FilePath "node" `
-            -ArgumentList "$workdir\scripts\maintenance-server.js" `
-            -WorkingDirectory "$workdir" `
-            -PassThru `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput "$workdir\maintenance-server.log" `
-            -RedirectStandardError "$workdir\maintenance-server.err.log"
-
-          $proc.Id | Out-File "$workdir\maintenance-server.pid" -Encoding ASCII
-          Write-Host ">>> Maintenance server started, PID = $($proc.Id)"
-          Start-Sleep -Seconds 3
-
-          # 3.5 Verify server đang chạy trên 3001
-          $check = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
-          if (-not $check) {
-            Write-Warning "Maintenance server có vẻ không listening trên 3001 — xem maintenance-server.err.log"
-            Get-Content "$workdir\maintenance-server.err.log" -ErrorAction SilentlyContinue
+          # 1.3 Start maintenance server (nếu script còn trên đĩa từ lần deploy trước).
+          # Tiến trình node load script vào RAM nên vẫn phục vụ kể cả khi checkout
+          # xóa file. → Cloudflare Tunnel route tới 3001, user thấy trang maintenance.
+          $msScript = Join-Path $workdir "scripts\maintenance-server.js"
+          if (Test-Path $msScript) {
+            New-Item -Path (Join-Path $workdir "maintenance.flag") -ItemType File -Force | Out-Null
+            $proc = Start-Process `
+              -FilePath "node" `
+              -ArgumentList $msScript `
+              -WorkingDirectory $workdir `
+              -PassThru `
+              -WindowStyle Hidden `
+              -RedirectStandardOutput (Join-Path $workdir "maintenance-server.log") `
+              -RedirectStandardError (Join-Path $workdir "maintenance-server.err.log")
+            $proc.Id | Out-File (Join-Path $workdir "maintenance-server.pid") -Encoding ASCII
+            Write-Host ">>> Maintenance server started, PID = $($proc.Id)"
+            Start-Sleep -Seconds 3
+            $check = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
+            if ($check) { Write-Host ">>> Maintenance server đang phục vụ trên port 3001" }
+            else { Write-Warning "Maintenance server không listening — xem maintenance-server.err.log" }
           } else {
-            Write-Host ">>> Maintenance server đang phục vụ trên port 3001"
+            Write-Host ">>> Chưa có scripts\maintenance-server.js (lần deploy đầu) — bỏ qua maintenance."
           }
+
+      - name: 2. Checkout code
+        uses: actions/checkout@v4
+
+      - name: 3. Create .env file from Secrets
+        shell: powershell
+        env:
+          ENV_DATA: ${{ secrets.ENV_FILE }}
+        run: |
+          [System.IO.File]::WriteAllText("$(Get-Location)\.env", $env:ENV_DATA)
 
       - name: 4. Install dependencies
         run: npm install
