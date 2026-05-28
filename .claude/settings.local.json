@@ -43,7 +43,9 @@
       "Bash(Select-Object Name)",
       "Bash(ls -la D:\\\\\\\\DU-AN-PHAN-MEM\\\\\\\\PHUBAI-ERP\\\\\\\\src/)",
       "Bash(xargs head -150)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(git rm *)",
+      "Bash(git push *)"
     ]
   }
 }
