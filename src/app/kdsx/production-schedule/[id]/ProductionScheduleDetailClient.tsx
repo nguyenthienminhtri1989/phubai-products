@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Button,
   Typography,
@@ -377,7 +377,6 @@ export default function ProductionScheduleDetailClient({
   );
   const [defaultDay, setDefaultDay] = useState<number | undefined>(undefined);
   const [highlightItemId, setHighlightItemId] = useState<number | null>(null);
-  const [_actionLoading] = useState(false); // kept for type compat — unused
   const [activeTab, setActiveTab] = useState("plan");
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(
     null,
@@ -401,20 +400,6 @@ export default function ProductionScheduleDetailClient({
   // Process filter — ActualProductionGrid độc lập với segments
   const [factoryProcesses, setFactoryProcesses] = useState<Process[]>([]);
   const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
-
-  // ── Drag-resize state ──────────────────────────────────────────────────────
-  const DAY_WIDTH = 38; // px — khớp với minWidth ô ngày trong bảng
-  const dragStateRef = useRef<{
-    segId: number;
-    edge: "left" | "right";
-    startClientX: number;
-    originalFromDay: number;
-    originalToDay: number;
-  } | null>(null);
-  const lastDragRangeRef = useRef<Record<number, { fromDay: number; toDay: number }>>({});
-  const [dragPreview, setDragPreview] = useState<
-    Record<number, { fromDay: number; toDay: number }>
-  >({});
 
   // ── DT-LN kế hoạch ────────────────────────────────────────────────────────
   const [planPnlData, setPlanPnlData] = useState<PlanPnLResult | null>(null);
@@ -640,113 +625,6 @@ export default function ProductionScheduleDetailClient({
       await refresh();
     }
   };
-
-  // ── Drag-resize helpers ────────────────────────────────────────────────────
-  function computeDragRange(clientX: number) {
-    const ds = dragStateRef.current;
-    if (!ds) return null;
-    const deltaDays = Math.round((clientX - ds.startClientX) / DAY_WIDTH);
-    if (ds.edge === "left") {
-      const newFrom = Math.max(1, Math.min(ds.originalFromDay + deltaDays, ds.originalToDay));
-      return { fromDay: newFrom, toDay: ds.originalToDay };
-    } else {
-      const newTo = Math.min(
-        schedule?.yearMonth ? daysInMonthFn(schedule.yearMonth) : 31,
-        Math.max(ds.originalToDay + deltaDays, ds.originalFromDay),
-      );
-      return { fromDay: ds.originalFromDay, toDay: newTo };
-    }
-  }
-
-  function getEffectiveSeg(machineId: number, day: number): Segment | undefined {
-    const segs = (schedule?.segments ?? []).filter((s) => s.machineId === machineId);
-    for (const s of segs) {
-      const preview = dragPreview[s.id];
-      const from = preview ? preview.fromDay : s.fromDay;
-      const to = preview ? preview.toDay : s.toDay;
-      if (day >= from && day <= to) return s;
-    }
-    return undefined;
-  }
-
-  function hasOverlapPreview(machineId: number, segId: number, fromDay: number, toDay: number): boolean {
-    return (schedule?.segments ?? []).some(
-      (s) => s.machineId === machineId && s.id !== segId &&
-        fromDay <= s.toDay && toDay >= s.fromDay,
-    );
-  }
-
-  function handleHandlePointerDown(
-    e: React.PointerEvent,
-    segId: number,
-    edge: "left" | "right",
-  ) {
-    e.preventDefault();
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const seg = schedule!.segments.find((s) => s.id === segId)!;
-    dragStateRef.current = {
-      segId,
-      edge,
-      startClientX: e.clientX,
-      originalFromDay: seg.fromDay,
-      originalToDay: seg.toDay,
-    };
-  }
-
-  function handleHandlePointerMove(e: React.PointerEvent, segId: number) {
-    if (!dragStateRef.current || dragStateRef.current.segId !== segId) return;
-    const newRange = computeDragRange(e.clientX);
-    if (!newRange) return;
-    const prev = lastDragRangeRef.current[segId];
-    if (!prev || prev.fromDay !== newRange.fromDay || prev.toDay !== newRange.toDay) {
-      lastDragRangeRef.current[segId] = newRange;
-      setDragPreview((p) => ({ ...p, [segId]: newRange }));
-    }
-  }
-
-  async function handleHandlePointerUp(e: React.PointerEvent, segId: number) {
-    const ds = dragStateRef.current;
-    if (!ds || ds.segId !== segId) return;
-    const finalRange = computeDragRange(e.clientX);
-    dragStateRef.current = null;
-    delete lastDragRangeRef.current[segId];
-
-    if (!finalRange || (finalRange.fromDay === ds.originalFromDay && finalRange.toDay === ds.originalToDay)) {
-      setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
-      return;
-    }
-
-    const seg = schedule!.segments.find((s) => s.id === segId)!;
-    if (hasOverlapPreview(seg.machineId, segId, finalRange.fromDay, finalRange.toDay)) {
-      message.warning("Khoảng ngày bị chồng với segment khác trên cùng máy");
-      setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
-      return;
-    }
-
-    const res = await fetch(
-      `/api/kdsx/production-schedule/${scheduleId}/segments/${segId}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromDay: finalRange.fromDay, toDay: finalRange.toDay }),
-      },
-    );
-    setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
-    if (!res.ok) {
-      const data = await res.json();
-      message.error(data.error ?? "Lỗi cập nhật khoảng ngày");
-    } else {
-      message.success("Đã cập nhật khoảng ngày");
-      await refresh();
-    }
-  }
-
-  function handleDragCancel(segId: number) {
-    dragStateRef.current = null;
-    delete lastDragRangeRef.current[segId];
-    setDragPreview((p) => { const n = { ...p }; delete n[segId]; return n; });
-  }
 
   // ── Plan PnL fetch ─────────────────────────────────────────────────────────
   const fetchPlanPnl = useCallback(async () => {
@@ -1175,24 +1053,22 @@ export default function ProductionScheduleDetailClient({
                   {/* Ô ngày */}
                   {dayNumbers.map((day) => {
                     const isHoliday = holidayArr.includes(day);
-                    const seg = getEffectiveSeg(machine.id, day);
+                    const seg = machineSegs.find(
+                      (s) => day >= s.fromDay && day <= s.toDay,
+                    );
                     const dimmed =
                       highlightItemId !== null &&
                       seg &&
                       seg.itemId !== highlightItemId;
 
-                    // Effective boundaries (may differ during drag preview)
-                    const effFrom = seg ? (dragPreview[seg.id]?.fromDay ?? seg.fromDay) : seg;
-                    const effTo = seg ? (dragPreview[seg.id]?.toDay ?? seg.toDay) : seg;
-                    const isFromDay = seg && day === effFrom;
-                    const isToDay = seg && day === effTo;
+                    const isFromDay = seg && day === seg.fromDay;
+                    const isToDay = seg && day === seg.toDay;
 
                     return (
                       <td
                         key={day}
                         style={{
                           ...tdStyle,
-                          position: "relative",
                           background: isHoliday
                             ? "#ffebe8"
                             : seg
@@ -1220,42 +1096,10 @@ export default function ProductionScheduleDetailClient({
                         }}
                         title={
                           seg
-                            ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa | Kéo cạnh để co giãn)`
+                            ? `${seg.item.name}: ${seg.kgPerDay.toLocaleString()} kg/ngày (Click để sửa)`
                             : "Click để thêm segment"
                         }
                       >
-                        {/* Drag handle — cạnh trái (fromDay) */}
-                        {seg && isFromDay && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: 0, left: 0, bottom: 0, width: 8,
-                              cursor: "ew-resize",
-                              zIndex: 5,
-                              borderRadius: "2px 0 0 2px",
-                            }}
-                            onPointerDown={(e) => handleHandlePointerDown(e, seg.id, "left")}
-                            onPointerMove={(e) => handleHandlePointerMove(e, seg.id)}
-                            onPointerUp={(e) => handleHandlePointerUp(e, seg.id)}
-                            onPointerCancel={() => handleDragCancel(seg.id)}
-                          />
-                        )}
-                        {/* Drag handle — cạnh phải (toDay) */}
-                        {seg && isToDay && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: 0, right: 0, bottom: 0, width: 8,
-                              cursor: "ew-resize",
-                              zIndex: 5,
-                              borderRadius: "0 2px 2px 0",
-                            }}
-                            onPointerDown={(e) => handleHandlePointerDown(e, seg.id, "right")}
-                            onPointerMove={(e) => handleHandlePointerMove(e, seg.id)}
-                            onPointerUp={(e) => handleHandlePointerUp(e, seg.id)}
-                            onPointerCancel={() => handleDragCancel(seg.id)}
-                          />
-                        )}
                         {isHoliday ? (
                           <span style={{ color: "#aaa", fontSize: 11 }}>—</span>
                         ) : seg ? (

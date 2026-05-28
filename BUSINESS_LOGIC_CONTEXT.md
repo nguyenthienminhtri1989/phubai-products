@@ -3764,3 +3764,33 @@ src/app/api/kdsx/production-schedule/[id]/sync-to-plan/route.ts           — sy
 
 - No schema migration needed — no new tables or columns
 - DB tables for `MonthlyPlan`, `MonthlyActual` etc. remain intact and unmodified
+
+---
+
+## KDSX — Gỡ bỏ kéo-thả co giãn segment
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+Removed the drag-to-resize segment edge functionality that was added in SPEC C Phần 1. The feature was too difficult to use with a mouse. Segments now return to static display — click to open modal for edit/create.
+
+### Files created/modified
+
+```
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx  — removed all drag code
+```
+
+### Key business logic implemented
+
+- Removed: `dragStateRef`, `lastDragRangeRef`, `dragPreview` state
+- Removed: `computeDragRange`, `getEffectiveSeg`, `hasOverlapPreview`, `handleHandlePointerDown`, `handleHandlePointerMove`, `handleHandlePointerUp`, `handleDragCancel`
+- Removed: two drag handle `<div>` elements (left/right edges of segment cells)
+- Removed: `useRef` import (no longer used)
+- Removed: `_actionLoading` stub state (leftover from SPEC C)
+- Restored: day-cell segment lookup via `machineSegs.find(s => day >= s.fromDay && day <= s.toDay)` (direct, no drag preview)
+- The segment PUT route (`/api/kdsx/production-schedule/[id]/segments/[segmentId]`) was NOT deleted — modal edit still uses it
+
+### Known limitations
+
+- No drag resize. Users must click a segment cell to open the edit modal and change fromDay/toDay there.
