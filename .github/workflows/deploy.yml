@@ -10,25 +10,6 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: 0. Stop PHUBAI-ERP (Release File Locks)
-        continue-on-error: true
-        shell: powershell
-        run: |
-          # CHỈ dừng đích danh ứng dụng phubai-erp
-          $pm2 = "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd"
-          if (Test-Path $pm2) { & $pm2 stop phubai-erp }
-
-          # CHỈ tiêu diệt tiến trình đang chạy trên cổng 3001
-          $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
-          if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
-
-      - name: 0.5. Bật Maintenance Mode
-        shell: powershell
-        run: |
-          $flagPath = "$(Get-Location)\maintenance.flag"
-          New-Item -Path $flagPath -ItemType File -Force | Out-Null
-          Write-Host ">>> Maintenance mode đã BẬT: $flagPath"
-
       - name: 1. Checkout code
         uses: actions/checkout@v4
 
@@ -39,48 +20,128 @@ jobs:
         run: |
           [System.IO.File]::WriteAllText("$(Get-Location)\.env", $env:ENV_DATA)
 
-          # Khôi phục maintenance.flag vì checkout ở bước 1 có thể đã xóa nó
-          # (nếu maintenance.flag không có trong .gitignore)
-          $flagPath = "$(Get-Location)\maintenance.flag"
-          if (-not (Test-Path $flagPath)) {
-            New-Item -Path $flagPath -ItemType File -Force | Out-Null
-            Write-Host ">>> Khôi phục maintenance.flag sau checkout"
+      - name: 3. Stop PM2 + Start Maintenance Server trên port 3001
+        shell: powershell
+        run: |
+          $workdir = Get-Location
+
+          # 3.1 Bật flag (để app Next.js mới khi khởi động lại biết đang trong giai đoạn maintenance)
+          New-Item -Path "$workdir\maintenance.flag" -ItemType File -Force | Out-Null
+
+          # 3.2 Stop PM2 app phubai-erp để giải phóng port 3001 và file lock
+          $pm2 = "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd"
+          if (Test-Path $pm2) { & $pm2 stop phubai-erp 2>$null }
+
+          # 3.3 Giết bất kỳ tiến trình nào còn bám port 3001
+          $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
+          if ($conn) {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+          }
+          Start-Sleep -Seconds 2
+
+          # 3.4 Start maintenance server (background) chiếm port 3001
+          # → Cloudflare Tunnel vẫn route tới 3001 và user thấy trang maintenance,
+          #   không thấy lỗi 502/523 của Cloudflare.
+          $proc = Start-Process `
+            -FilePath "node" `
+            -ArgumentList "$workdir\scripts\maintenance-server.js" `
+            -WorkingDirectory "$workdir" `
+            -PassThru `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput "$workdir\maintenance-server.log" `
+            -RedirectStandardError "$workdir\maintenance-server.err.log"
+
+          $proc.Id | Out-File "$workdir\maintenance-server.pid" -Encoding ASCII
+          Write-Host ">>> Maintenance server started, PID = $($proc.Id)"
+          Start-Sleep -Seconds 3
+
+          # 3.5 Verify server đang chạy trên 3001
+          $check = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
+          if (-not $check) {
+            Write-Warning "Maintenance server có vẻ không listening trên 3001 — xem maintenance-server.err.log"
+            Get-Content "$workdir\maintenance-server.err.log" -ErrorAction SilentlyContinue
+          } else {
+            Write-Host ">>> Maintenance server đang phục vụ trên port 3001"
           }
 
-      - name: 3. Install dependencies
+      - name: 4. Install dependencies
         run: npm install
 
-      - name: 4. Apply Database Changes Safely
+      - name: 5. Apply Database Changes Safely
         run: npx prisma migrate deploy
 
-      - name: 5. Prisma Generate
+      - name: 6. Prisma Generate
         run: npx prisma generate
 
-      - name: 6. Build Next.js
+      - name: 7. Build Next.js
         run: npm run build
 
-      - name: 7. Restart PM2 with Ecosystem
+      - name: 8. Stop Maintenance Server + Restart PM2
+        shell: powershell
         run: |
-          # Thêm cờ --only phubai-erp để đảm bảo PM2 tuyệt đối không đụng đến app khác
+          $workdir = Get-Location
+
+          # 8.1 Tắt maintenance server để giải phóng port 3001
+          if (Test-Path "$workdir\maintenance-server.pid") {
+            $msPid = Get-Content "$workdir\maintenance-server.pid"
+            if ($msPid) {
+              Stop-Process -Id $msPid -Force -ErrorAction SilentlyContinue
+              Write-Host ">>> Đã tắt maintenance server (PID $msPid)"
+            }
+            Remove-Item "$workdir\maintenance-server.pid" -Force -ErrorAction SilentlyContinue
+          }
+
+          # 8.2 Đề phòng còn tiến trình node nào lì bám 3001
+          $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
+          if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 1
+
+          # 8.3 Khởi động lại PM2 (app Next.js thật)
           & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --only phubai-erp --update-env
 
-      - name: 8. Tắt Maintenance Mode
+          # 8.4 Đợi app sống lại
+          $maxWait = 30
+          for ($i = 0; $i -lt $maxWait; $i++) {
+            $up = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
+            if ($up) { Write-Host ">>> Next.js đã listening trên 3001"; break }
+            Start-Sleep -Seconds 1
+          }
+
+      - name: 9. Tắt Maintenance Mode (xoá flag)
         shell: powershell
         run: |
           $flagPath = "$(Get-Location)\maintenance.flag"
           if (Test-Path $flagPath) {
             Remove-Item -Path $flagPath -Force
-            Write-Host ">>> Maintenance mode đã TẮT. Người dùng có thể truy cập bình thường."
+            Write-Host ">>> Maintenance mode đã TẮT. User truy cập bình thường."
           }
 
-      # Bước này chỉ chạy khi có bước nào đó thất bại
-      # Đảm bảo không để user bị kẹt màn hình maintenance
-      - name: 9. (Fallback) Tắt Maintenance Mode nếu Deploy thất bại
+      # Fallback: nếu bất kỳ bước nào fail → đảm bảo không kẹt user ở trang maintenance
+      - name: 10. (Fallback) Cleanup nếu deploy thất bại
         if: failure()
         shell: powershell
         run: |
-          $flagPath = "$(Get-Location)\maintenance.flag"
+          $workdir = Get-Location
+          Write-Host "!!! DEPLOY FAILED — đang cleanup..."
+
+          # Tắt maintenance server nếu còn chạy
+          if (Test-Path "$workdir\maintenance-server.pid") {
+            $msPid = Get-Content "$workdir\maintenance-server.pid"
+            if ($msPid) { Stop-Process -Id $msPid -Force -ErrorAction SilentlyContinue }
+            Remove-Item "$workdir\maintenance-server.pid" -Force -ErrorAction SilentlyContinue
+          }
+
+          # Giải phóng port 3001
+          $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
+          if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 1
+
+          # Cố khởi động lại app cũ để user còn dùng được
+          & "C:\Users\Administrator\AppData\Roaming\npm\pm2.cmd" startOrReload ecosystem.config.js --only phubai-erp --update-env
+
+          # Xoá flag để khi app sống lại không bị stuck ở /maintenance
+          $flagPath = "$workdir\maintenance.flag"
           if (Test-Path $flagPath) {
             Remove-Item -Path $flagPath -Force
-            Write-Host ">>> DEPLOY THẤT BẠI - Đã tắt maintenance mode để người dùng không bị kẹt."
+            Write-Host ">>> Đã xoá maintenance.flag để user không bị kẹt"
           }

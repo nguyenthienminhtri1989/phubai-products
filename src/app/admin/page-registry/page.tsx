@@ -54,6 +54,7 @@ const PAGE_GROUPS = [
   "DANH MỤC",
   "HỆ THỐNG",
   "TỔNG QUAN",
+  "MOBILE",
 ];
 
 const GROUP_COLORS: Record<string, string> = {
@@ -65,6 +66,7 @@ const GROUP_COLORS: Record<string, string> = {
   "DANH MỤC": "#8c8c8c",
   "HỆ THỐNG": "#f5222d",
   "TỔNG QUAN": "#2f54eb",
+  "MOBILE": "#eb2f96",
 };
 
 // Helper: tự sinh pageKey từ path
@@ -148,7 +150,9 @@ export default function PageRegistryPage() {
       const data = await res.json();
 
       if (res.ok) {
-        message.success(editingPage ? "Cập nhật trang thành công!" : "Thêm trang thành công!");
+        message.success(
+          editingPage ? "Cập nhật trang thành công!" : "Thêm trang thành công!",
+        );
         setModalOpen(false);
         fetchPages();
       } else {
@@ -168,7 +172,9 @@ export default function PageRegistryPage() {
   // Delete
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`/api/page-registry?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/page-registry?id=${id}`, {
+        method: "DELETE",
+      });
       const data = await res.json();
       if (res.ok) {
         message.success("Đã xoá trang");
@@ -199,7 +205,9 @@ export default function PageRegistryPage() {
   if (!isAdmin) {
     return (
       <div style={{ padding: 40, textAlign: "center" }}>
-        <ExclamationCircleOutlined style={{ fontSize: 48, color: "#f5222d", marginBottom: 16 }} />
+        <ExclamationCircleOutlined
+          style={{ fontSize: 48, color: "#f5222d", marginBottom: 16 }}
+        />
         <br />
         <Text type="danger">Không có quyền truy cập trang này</Text>
       </div>
@@ -232,7 +240,10 @@ export default function PageRegistryPage() {
       key: "pageGroup",
       width: 140,
       render: (group: string) => (
-        <Tag color={GROUP_COLORS[group] || "default"} style={{ fontWeight: 600 }}>
+        <Tag
+          color={GROUP_COLORS[group] || "default"}
+          style={{ fontWeight: 600 }}
+        >
           {group}
         </Tag>
       ),
@@ -278,7 +289,8 @@ export default function PageRegistryPage() {
             title="Xoá trang này?"
             description={
               <Text type="warning">
-                Lưu ý: Xoá trang sẽ xoá toàn bộ phân quyền liên quan đến trang này.
+                Lưu ý: Xoá trang sẽ xoá toàn bộ phân quyền liên quan đến trang
+                này.
               </Text>
             }
             okText="Xoá"
@@ -307,7 +319,11 @@ export default function PageRegistryPage() {
         }
         extra={
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={fetchPages} loading={loading}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchPages}
+              loading={loading}
+            >
               Làm mới
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -335,15 +351,23 @@ export default function PageRegistryPage() {
               Về Page Registry
             </Text>
             <Text type="secondary" style={{ fontSize: 13 }}>
-              Đây là danh sách các trang được đăng ký vào hệ thống phân quyền. Mỗi khi bạn tạo
-              một trang mới, hãy thêm nó vào đây để Admin có thể cấp quyền truy cập cho từng người
-              dùng tại trang <strong>Phân quyền</strong>.
+              Đây là danh sách các trang được đăng ký vào hệ thống phân quyền.
+              Mỗi khi bạn tạo một trang mới, hãy thêm nó vào đây để Admin có thể
+              cấp quyền truy cập cho từng người dùng tại trang{" "}
+              <strong>Phân quyền</strong>.
             </Text>
           </div>
         </div>
 
         {/* Group filter */}
-        <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           <Tag
             style={{ cursor: "pointer", padding: "4px 12px", fontSize: 13 }}
             color={!filterGroup ? "blue" : "default"}
@@ -355,8 +379,14 @@ export default function PageRegistryPage() {
             <Tag
               key={group}
               style={{ cursor: "pointer", padding: "4px 12px", fontSize: 13 }}
-              color={filterGroup === group ? GROUP_COLORS[group] || "blue" : "default"}
-              onClick={() => setFilterGroup(filterGroup === group ? null : group)}
+              color={
+                filterGroup === group
+                  ? GROUP_COLORS[group] || "blue"
+                  : "default"
+              }
+              onClick={() =>
+                setFilterGroup(filterGroup === group ? null : group)
+              }
             >
               {group} ({count})
             </Tag>
@@ -440,7 +470,10 @@ export default function PageRegistryPage() {
             }
             rules={[{ required: true, message: "Chọn nhóm trang" }]}
           >
-            <Select placeholder="Chọn nhóm..." options={PAGE_GROUPS.map((g) => ({ value: g, label: g }))} />
+            <Select
+              placeholder="Chọn nhóm..."
+              options={PAGE_GROUPS.map((g) => ({ value: g, label: g }))}
+            />
           </Form.Item>
 
           {/* Page Key */}
@@ -478,7 +511,12 @@ export default function PageRegistryPage() {
             }
             extra="Số nhỏ hơn hiển thị trước trong cùng một nhóm"
           >
-            <InputNumber min={0} max={9999} style={{ width: "100%" }} placeholder="50" />
+            <InputNumber
+              min={0}
+              max={9999}
+              style={{ width: "100%" }}
+              placeholder="50"
+            />
           </Form.Item>
         </Form>
       </Modal>

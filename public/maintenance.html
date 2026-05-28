@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Đang cập nhật — Phú Bài ERP</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f0f4f8;
+      color: #1a1a2e;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #ffffff;
+      padding: 48px 36px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      max-width: 440px;
+      width: 100%;
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      display: inline-block;
+      animation: spin 3s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    h1 {
+      font-size: 22px;
+      color: #1a1a2e;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    p {
+      color: #555;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .status {
+      margin-top: 28px;
+      color: #1677ff;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #1677ff;
+      margin-right: 6px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="card" role="status" aria-live="polite">
+    <div class="icon" aria-hidden="true">⚙️</div>
+    <h1>Đang cập nhật tính năng mới</h1>
+    <p>
+      Hệ thống đang được nâng cấp. Vui lòng chờ giây lát,
+      trang sẽ tự động tiếp tục khi hoàn tất.
+    </p>
+    <div class="status">
+      <span class="dot"></span>Đang kiểm tra trạng thái...
+    </div>
+    <div class="footer">Phú Bài ERP</div>
+  </div>
+
+  <script>
+    // Tự động reload mỗi 10 giây để check xem deploy xong chưa.
+    // Khi backend sống lại, IIS sẽ proxy về Next.js → user thấy app bình thường.
+    setInterval(function () {
+      fetch("/api/maintenance", { cache: "no-store" })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (data && data.active === false) {
+            window.location.href = "/";
+          }
+        })
+        .catch(function () { /* backend chưa lên, thử lại sau */ });
+    }, 10000);
+  </script>
+</body>
+</html>
