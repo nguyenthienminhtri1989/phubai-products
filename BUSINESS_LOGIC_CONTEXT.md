@@ -3794,3 +3794,45 @@ src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx  — re
 ### Known limitations
 
 - No drag resize. Users must click a segment cell to open the edit modal and change fromDay/toDay there.
+
+---
+
+## KDSX — Liên kết Công đoạn vào Kế hoạch SX
+
+**Status:** ✅ Completed 2026-05-28
+
+### What was built
+
+Added `processId` linkage to production schedules: form tạo mới bắt buộc chọn công đoạn (lọc theo nhà máy), bảng danh sách có cột Công đoạn, trang chi tiết hiển thị tên công đoạn ở header và có Alert backfill nếu schedule cũ chưa có processId. Modal thêm segment chỉ hiện máy thuộc công đoạn của schedule.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/production-schedule/route.ts           — GET: include process; POST: require+save processId
+src/app/api/kdsx/production-schedule/[id]/route.ts      — GET: include process; PUT: accept processId
+src/app/kdsx/production-schedule/page.tsx               — Process state+fetch, Form.Item processId, column Công đoạn
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — Select import, process in header, backfill Alert, machine filter
+```
+
+### Key business logic implemented
+
+- Form factory selector → onValuesChange resets processId → processId Select shows only processes of selected factory (filter client-side by `factoryId`)
+- POST validates `processId` required (400 if missing)
+- PUT accepts `processId` via spread pattern `...(processId !== undefined && { processId })`
+- Detail page: `machines` prop to ScheduleSegmentModal filtered by `schedule.processId` when set
+- Backfill Alert: inline `<Select>` calls `PUT /api/kdsx/production-schedule/{id}` with `{ processId }` then calls `fetchSchedule()`
+- SQL backfill ran: `UPDATE production_schedules SET processId = (SELECT m.processId FROM schedule_segments JOIN machines ...)` — existing schedules now have processId
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/kdsx/production-schedule | Now includes `process: { id, name }` in each schedule |
+| POST   | /api/kdsx/production-schedule | Now requires `processId` in body |
+| GET    | /api/kdsx/production-schedule/[id] | Now includes `process: { id, name }` |
+| PUT    | /api/kdsx/production-schedule/[id] | Now accepts `processId` to update linkage |
+
+### Known limitations
+
+- No processId filter on the list page (only factory filter exists) — could be added later
+- If a schedule has segments from multiple processes (unusual), backfill picks the first segment's machine's processId

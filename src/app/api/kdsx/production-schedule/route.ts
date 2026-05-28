@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       factory: { select: { id: true, name: true } },
+      process: { select: { id: true, name: true } },
       _count: { select: { segments: true } },
     },
     orderBy: [{ yearMonth: "desc" }, { createdAt: "desc" }],
@@ -57,11 +58,18 @@ export async function GET(req: NextRequest) {
 // POST /api/kdsx/production-schedule
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { factoryId, yearMonth, name = "", note } = body;
+  const { factoryId, processId, yearMonth, name = "", note } = body;
 
   if (!factoryId || !yearMonth) {
     return NextResponse.json(
       { error: "Thiếu factoryId hoặc yearMonth" },
+      { status: 400 }
+    );
+  }
+
+  if (!processId) {
+    return NextResponse.json(
+      { error: "Thiếu công đoạn (processId)" },
       { status: 400 }
     );
   }
@@ -93,9 +101,10 @@ export async function POST(req: NextRequest) {
   const isPrimary = existingInMonth === 0;
 
   const schedule = await prisma.productionSchedule.create({
-    data: { factoryId, yearMonth, name, note: note || null, isPrimary },
+    data: { factoryId, processId, yearMonth, name, note: note || null, isPrimary },
     include: {
       factory: { select: { id: true, name: true } },
+      process: { select: { id: true, name: true } },
     },
   });
 

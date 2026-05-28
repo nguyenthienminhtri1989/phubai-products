@@ -39,10 +39,18 @@ interface Factory {
   name: string;
 }
 
+interface Process {
+  id: number;
+  name: string;
+  factoryId: number;
+}
+
 interface Schedule {
   id: number;
   factoryId: number;
+  processId?: number | null;
   factory: { id: number; name: string };
+  process?: { id: number; name: string } | null;
   yearMonth: string;
   name: string;
   isPrimary: boolean;
@@ -60,11 +68,13 @@ export default function ProductionSchedulePage() {
   const router = useRouter();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [factories, setFactories] = useState<Factory[]>([]);
+  const [processes, setProcesses] = useState<Process[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [form] = Form.useForm();
   const [filterFactory, setFilterFactory] = useState<number | undefined>(undefined);
+  const selectedFactoryId = Form.useWatch("factoryId", form);
 
   const fetchSchedules = useCallback(async () => {
     setLoading(true);
@@ -91,6 +101,13 @@ export default function ProductionSchedulePage() {
       .catch(() => { });
   }, []);
 
+  useEffect(() => {
+    fetch("/api/processes")
+      .then((r) => r.json())
+      .then((data) => setProcesses(Array.isArray(data) ? data : []))
+      .catch(() => { });
+  }, []);
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
@@ -101,6 +118,7 @@ export default function ProductionSchedulePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           factoryId: values.factoryId,
+          processId: values.processId,
           yearMonth,
           name: values.name,
           note: values.note,
@@ -166,6 +184,13 @@ export default function ProductionSchedulePage() {
           {name}
         </Text>
       ),
+    },
+    {
+      title: "Công đoạn",
+      dataIndex: ["process", "name"],
+      key: "process",
+      render: (name: string) =>
+        name ? <Tag color="blue">{name}</Tag> : <Tag color="red">Chưa liên kết</Tag>,
     },
     {
       title: "Tên kế hoạch",
@@ -379,7 +404,16 @@ export default function ProductionSchedulePage() {
         cancelText="Hủy"
         width={440}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+          onValuesChange={(changed) => {
+            if ("factoryId" in changed) {
+              form.setFieldValue("processId", undefined);
+            }
+          }}
+        >
           <Form.Item
             label="Nhà máy"
             name="factoryId"
@@ -388,6 +422,21 @@ export default function ProductionSchedulePage() {
             <Select
               placeholder="Chọn nhà máy..."
               options={factories.map((f) => ({ value: f.id, label: f.name }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="Công đoạn"
+            name="processId"
+            rules={[{ required: true, message: "Chọn công đoạn" }]}
+            tooltip="Mỗi kế hoạch gắn với 1 công đoạn (VD: Sợi ống, Sợi con TQ, Sợi con G37)"
+          >
+            <Select
+              placeholder={selectedFactoryId ? "Chọn công đoạn..." : "Chọn nhà máy trước"}
+              disabled={!selectedFactoryId}
+              options={processes
+                .filter((p) => !selectedFactoryId || p.factoryId === selectedFactoryId)
+                .map((p) => ({ value: p.id, label: p.name }))}
             />
           </Form.Item>
 

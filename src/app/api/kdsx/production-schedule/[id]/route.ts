@@ -22,6 +22,7 @@ export async function GET(
         orderBy: [{ machineId: "asc" }, { fromDay: "asc" }],
       },
       factory: { select: { id: true, name: true } },
+      process: { select: { id: true, name: true } },
     },
   });
 
@@ -43,7 +44,7 @@ export async function PUT(
   const { id: idStr } = await params;
   const id = parseInt(idStr);
   const body = await req.json();
-  const { note, holidays, itemColors, name, isPrimary } = body;
+  const { note, holidays, itemColors, name, isPrimary, processId } = body;
 
   const existing = await prisma.productionSchedule.findUnique({
     where: { id },
@@ -75,6 +76,7 @@ export async function PUT(
       ...(itemColors !== undefined && { itemColors }),
       ...(name !== undefined && { name }),
       ...(isPrimary !== undefined && { isPrimary }),
+      ...(processId !== undefined && { processId }),
     },
   });
 

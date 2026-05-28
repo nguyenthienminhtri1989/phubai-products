@@ -18,6 +18,7 @@ import {
   Statistic,
   Alert,
   Tag,
+  Select,
 } from "antd";
 import {
   ArrowLeftOutlined,
@@ -67,6 +68,7 @@ interface Schedule {
   factoryId: number;
   processId?: number | null;
   factory: { id: number; name: string };
+  process?: { id: number; name: string } | null;
   yearMonth: string;
   status: "DRAFT" | "SUBMITTED" | "APPROVED";
   note?: string | null;
@@ -1251,9 +1253,17 @@ export default function ProductionScheduleDetailClient({
             icon={<ArrowLeftOutlined />}
             onClick={() => router.push("/kdsx/production-schedule")}
           />
-          <Title level={4} style={{ margin: 0 }}>
-            KẾ HOẠCH SẢN XUẤT — {factory.name} — Tháng {schedMonth}/{schedYear}
-          </Title>
+          <div>
+            <Title level={4} style={{ margin: 0 }}>
+              KẾ HOẠCH SẢN XUẤT — {factory.name} — Tháng {schedMonth}/{schedYear}
+            </Title>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {schedule.process?.name
+                ? `Công đoạn: ${schedule.process.name}`
+                : <span style={{ color: "#faad14" }}>⚠ Chưa liên kết công đoạn</span>
+              }
+            </Text>
+          </div>
         </div>
 
         <Space wrap>
@@ -1914,6 +1924,42 @@ export default function ProductionScheduleDetailClient({
         );
       })()}
 
+      {/* Backfill: alert if schedule has no processId */}
+      {!schedule.processId && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Kế hoạch này chưa liên kết công đoạn"
+          description={
+            <Space>
+              <Text>Chọn công đoạn để tính DT-LN kế hoạch:</Text>
+              <Select
+                placeholder="Chọn công đoạn..."
+                style={{ width: 260 }}
+                options={factoryProcesses.map((p) => ({ value: p.id, label: p.name }))}
+                onChange={async (pid: number) => {
+                  const res = await fetch(
+                    `/api/kdsx/production-schedule/${scheduleId}`,
+                    {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ processId: pid }),
+                    },
+                  );
+                  if (res.ok) {
+                    message.success("Đã liên kết công đoạn");
+                    await fetchSchedule();
+                  } else {
+                    message.error("Lỗi cập nhật công đoạn");
+                  }
+                }}
+              />
+            </Space>
+          }
+        />
+      )}
+
       {/* Tabs: Kế hoạch / Thực hiện / So sánh / DT-LN */}
       <Tabs
         activeKey={activeTab}
@@ -2058,7 +2104,11 @@ export default function ProductionScheduleDetailClient({
         factoryId={factory.id}
         yearMonth={yearMonth}
         daysInMonth={totalDays}
-        machines={machines}
+        machines={
+          schedule.processId
+            ? machines.filter((m) => m.processId === schedule.processId)
+            : machines
+        }
         items={items}
         editSegment={editSegment}
         defaultMachineId={defaultMachineId}
