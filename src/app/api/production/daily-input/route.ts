@@ -114,20 +114,41 @@ export async function POST(request: Request) {
     });
     const lotId = bodyLotId ?? machine?.currentLotId ?? null;
 
-    // 4. SỬ DỤNG UPSERT: Tự động Cập nhật hoặc Tạo mới dựa trên khóa Unique
-    // Khóa này được Prisma tự sinh từ @@unique([machineId, recordDate, shift, itemId])
-    const savedLog = await prisma.productionLog.upsert({
-      where: {
-        machineId_recordDate_shift_itemId: {
+    // 4. Tìm log đã tồn tại với key 5 cột (bao gồm lotId).
+    //    Unique constraint cũ 4 cột đã được thay bằng 2 partial unique index
+    //    (prod_log_unique_with_lot / prod_log_unique_no_lot), nên không còn dùng upsert.
+    //    Phải tách 2 nhánh vì lotId nullable: lotId=NULL khác với lotId=<số>.
+    let existing;
+    if (lotId == null) {
+      existing = await prisma.productionLog.findFirst({
+        where: {
           machineId,
           recordDate: dateObj,
           shift,
           itemId,
+          lotId: null,
         },
-      },
-      update: { ...dataToSave, lotId },
-      create: { ...dataToSave, lotId },
-    });
+      });
+    } else {
+      existing = await prisma.productionLog.findFirst({
+        where: {
+          machineId,
+          recordDate: dateObj,
+          shift,
+          itemId,
+          lotId,
+        },
+      });
+    }
+
+    const savedLog = existing
+      ? await prisma.productionLog.update({
+          where: { id: existing.id },
+          data: { ...dataToSave, lotId },
+        })
+      : await prisma.productionLog.create({
+          data: { ...dataToSave, lotId },
+        });
 
     // 5. Cập nhật thông tin máy — chỉ khi nhập cho ngày hôm nay
     const today = new Date();
@@ -168,7 +189,7 @@ export async function POST(request: Request) {
         error: "Lỗi lưu dữ liệu",
         detail:
           error.code === "P2002"
-            ? "Xung đột dữ liệu ca làm việc"
+            ? "Bản ghi này (máy + ngày + ca + sợi + lô) đã tồn tại. Vui lòng chọn lô khác hoặc kiểm tra dữ liệu hiện có."
             : error.message,
       },
       { status: 500 },

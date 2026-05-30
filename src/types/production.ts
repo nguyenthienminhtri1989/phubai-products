@@ -41,8 +41,6 @@ export interface MachineAssignment {
   item: { id: number; name: string };
   lot?: { id: number; lotNumber: string } | null;
   lotId?: number | null;
-  fromSpindle?: number | null;
-  toSpindle?: number | null;
   sortOrder?: number;
   isActive?: boolean;
 }

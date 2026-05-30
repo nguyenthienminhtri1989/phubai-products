@@ -47,8 +47,6 @@ interface RowData {
   existingId?: number;
   // Multi-item
   isMultiItem?: boolean;
-  fromSpindle?: number | null;
-  toSpindle?: number | null;
 }
 
 interface Factory {
@@ -79,8 +77,6 @@ interface ItemOption {
 interface AssignmentData {
   id: number;
   itemId: number;
-  fromSpindle?: number | null;
-  toSpindle?: number | null;
   item: { id: number; name: string };
 }
 
@@ -215,8 +211,6 @@ export default function KdDailyInputPage() {
                 isDirty: false,
                 existingId: existing?.id,
                 isMultiItem: true,
-                fromSpindle: a.fromSpindle,
-                toSpindle: a.toSpindle,
               });
             }
           }
@@ -403,7 +397,7 @@ export default function KdDailyInputPage() {
             machineId: r.machineId,
             itemId: r.itemId,
             outputKg: r.outputKg,
-            note: r.note || (r.fromSpindle ? `Cọc ${r.fromSpindle}-${r.toSpindle}` : null),
+            note: r.note || null,
           })),
         }),
       });
@@ -461,17 +455,12 @@ export default function KdDailyInputPage() {
       dataIndex: "itemName",
       width: 260,
       render: (v: string, r: RowData, i: number) => {
-        // Máy multi-item: chỉ hiển thị tag + thông tin cọc, không cho đổi mặt hàng tại đây
+        // Máy multi-item: chỉ hiển thị tag, không cho đổi mặt hàng tại đây
         if (r.isMultiItem) {
           return (
-            <Space size={4} wrap={false}>
-              <Tag color={getItemColor(v)} style={{ fontSize: 13, fontWeight: 600 }}>{v}</Tag>
-              {r.fromSpindle != null && r.toSpindle != null && (
-                <Tag color="default" style={{ fontSize: 11 }}>
-                  Cọc {r.fromSpindle}–{r.toSpindle}
-                </Tag>
-              )}
-            </Space>
+            <Tag color={getItemColor(v)} style={{ fontSize: 13, fontWeight: 600 }}>
+              {v}
+            </Tag>
           );
         }
 

@@ -264,10 +264,11 @@ model ProductionLog {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Ràng buộc duy nhất: 1 Máy + 1 Ngày + 1 Ca + 1 Mặt hàng chỉ có 1 bản ghi
-  // (Cho phép nhiều mặt hàng trong cùng 1 ca khi đổi hàng giữa ca)
-  @@unique([machineId, recordDate, shift, itemId])
-  // THÊM ĐOẠN NÀY VÀO CUỐI MODEL:
+  // Unique constraint cũ [machineId, recordDate, shift, itemId] đã được thay bằng
+  // 2 partial unique index (xem migration shift_item_change_multi_lot):
+  //   - prod_log_unique_with_lot: (machineId, recordDate, shift, itemId, lotId) WHERE lotId IS NOT NULL
+  //   - prod_log_unique_no_lot:   (machineId, recordDate, shift, itemId)        WHERE lotId IS NULL
+  // Prisma chưa hỗ trợ partial unique index nên không khai báo @@unique ở đây.
   // 1. Index cho việc lọc theo khoảng thời gian (quan trọng nhất)
   @@index([recordDate])
   // 2. Index composite: Khi lọc kết hợp Ngày + Máy + Ca (Performance cực cao)
@@ -1477,15 +1478,17 @@ model MachineItemAssignment {
   lotId     Int?                                                          // Lô sợi đang chạy cho mặt hàng này
   lot       Lot?    @relation(fields: [lotId], references: [id])          // Quan hệ tới Lot
 
-  fromSpindle Int? // Cọc từ (cọc đầu chạy mặt hàng này)
-  toSpindle   Int? // Cọc đến (cọc cuối chạy mặt hàng này)
   isActive    Boolean @default(true)
   sortOrder   Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([machineId, itemId])
+  // Unique constraint cũ [machineId, itemId] đã được thay bằng 2 partial unique index
+  // (xem migration shift_item_change_multi_lot):
+  //   - machine_assignment_unique_with_lot: (machineId, itemId, lotId) WHERE lotId IS NOT NULL
+  //   - machine_assignment_unique_no_lot:   (machineId, itemId)        WHERE lotId IS NULL
+  // Cho phép 1 máy chạy cùng 1 mặt hàng từ 2 lô khác nhau.
   @@index([machineId])
   @@map("machine_item_assignments")
 }

@@ -28,6 +28,8 @@ Factory → Process → Machine / Substation
 - Smart Date: tự detect ca/ngày theo giờ hiện tại
 - Mobile input + QR Code
 - Đổi mặt hàng giữa ca (multi-item per shift)
+- Cùng mặt hàng khác lô trên 1 máy (NM1 chạy giùm NM2) — partial unique index thay unique 4 cột
+- Mobile-winding 3 thao tác giữa ca: ✏️ Sửa sai / 🔄 Đổi (bao gói nhập SL cũ) / ➕ Thêm song song
 
 ### Energy Management (Module 2) ✅
 

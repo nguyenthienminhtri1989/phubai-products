@@ -263,3 +263,28 @@ Claude Code KHÔNG bỏ qua bước cập nhật bộ nhớ dù task nhỏ hay l
 **Files đã fix (2026-05-26):**
 - `src/app/kdsx/monthly-quotas/page.tsx` — 2 InputNumber quota
 - `src/components/kdsx/ScheduleSegmentModal.tsx` — InputNumber kgPerDay
+
+### ⚠️ Shadow DB hỏng → KHÔNG dùng được `prisma migrate dev`
+
+**Lỗi:** `prisma migrate dev` báo P3006 — migration cũ `20260520000002_fix_fixed_cost_not_null`
+fail trên shadow database (`column fce.factoryId does not exist`). Shadow DB build lại
+TẤT CẢ migration từ đầu nên 1 migration cũ lỗi là chặn toàn bộ.
+
+**Cách xử lý (đã dùng 2026-05-30):**
+1. Sửa `schema.prisma` như bình thường.
+2. Tạo thủ công folder `prisma/migrations/<timestamp>_<name>/migration.sql` (timestamp > migration mới nhất).
+3. Viết SQL bằng tay (dùng `IF EXISTS`/`IF NOT EXISTS` cho an toàn).
+4. `npx prisma migrate deploy` (KHÔNG dùng shadow DB → chạy được) rồi `npx prisma generate`.
+
+**Lưu ý:** `npx prisma db execute --file x.sql` chỉ chạy lệnh, KHÔNG in kết quả SELECT.
+
+### ⚠️ Partial unique index — Prisma chưa hỗ trợ trong schema
+
+Khi cần unique có điều kiện (VD: unique theo lô CHỈ KHI lotId IS NOT NULL), KHÔNG khai báo
+`@@unique` trong schema (Prisma không có partial index). Thay vào đó:
+- Bỏ `@@unique` khỏi model (để comment giải thích).
+- Tạo `CREATE UNIQUE INDEX ... WHERE ...` thủ công trong migration.sql.
+- API KHÔNG dùng được `upsert` (composite key không còn) → đổi sang `findFirst` + `update/create`.
+
+ProductionLog & MachineItemAssignment đã chuyển sang pattern này (migration
+`20260530000001_shift_item_change_multi_lot`).

@@ -35,6 +35,7 @@ export async function GET(request: Request) {
           },
           include: {
             item: { select: { id: true, name: true } },
+            lot: { select: { id: true, lotNumber: true } },
           },
           orderBy: { id: "asc" },
         },

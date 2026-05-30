@@ -55,8 +55,6 @@ interface AssignmentData {
   id?: number;
   itemId: number;
   lotId?: number | null;
-  fromSpindle?: number | null;
-  toSpindle?: number | null;
   sortOrder?: number;
   item?: { id: number; name: string };
   lot?: { id: number; lotNumber: string } | null;
@@ -250,8 +248,6 @@ export default function MachinesPage() {
         assignments: data.map((a) => ({
           itemId: a.itemId,
           lotId: a.lotId ?? undefined,
-          fromSpindle: a.fromSpindle ?? undefined,
-          toSpindle: a.toSpindle ?? undefined,
         })),
       });
     } catch {
@@ -264,6 +260,46 @@ export default function MachinesPage() {
   // 6. Lưu assignments
   const handleSaveAssignments = async (values: any) => {
     if (!multiItemMachine) return;
+
+    const assignments = values.assignments ?? [];
+
+    // VALIDATE: trùng (itemId, lotId)
+    const seen = new Map<string, number>();
+    const itemCount = new Map<number, number>();
+
+    for (let i = 0; i < assignments.length; i++) {
+      const a = assignments[i];
+      if (!a.itemId) continue; // Bỏ qua dòng chưa chọn item
+
+      const key = `${a.itemId}:${a.lotId ?? "null"}`;
+      if (seen.has(key)) {
+        const itemName = items.find((it) => it.id === a.itemId)?.name ?? a.itemId;
+        message.error(
+          a.lotId == null
+            ? `Dòng ${i + 1}: Mặt hàng "${itemName}" bị trùng. Khi gán cùng mặt hàng cho 2 lô khác nhau, cả 2 dòng đều phải chọn lô cụ thể.`
+            : `Dòng ${i + 1}: Cặp mặt hàng "${itemName}" + lô đã có ở dòng ${seen.get(key)! + 1}. Mỗi cặp chỉ được 1 dòng.`,
+        );
+        return;
+      }
+      seen.set(key, i);
+      itemCount.set(a.itemId, (itemCount.get(a.itemId) ?? 0) + 1);
+    }
+
+    // VALIDATE: nếu có >1 dòng cùng item, tất cả dòng đó phải có lotId
+    for (const [itemId, count] of itemCount) {
+      if (count > 1) {
+        const sameItem = assignments.filter((a: any) => a.itemId === itemId);
+        const missingLot = sameItem.some((a: any) => a.lotId == null);
+        if (missingLot) {
+          const itemName = items.find((it) => it.id === itemId)?.name ?? itemId;
+          message.error(
+            `Mặt hàng "${itemName}" có ${count} dòng — tất cả các dòng cùng mặt hàng phải chọn lô cụ thể để phân biệt.`,
+          );
+          return;
+        }
+      }
+    }
+
     setMultiItemSaving(true);
     try {
       const res = await fetch(
@@ -271,7 +307,7 @@ export default function MachinesPage() {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assignments: values.assignments ?? [] }),
+          body: JSON.stringify({ assignments }),
         },
       );
       if (!res.ok) {

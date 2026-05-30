@@ -3836,3 +3836,90 @@ src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — Sel
 
 - No processId filter on the list page (only factory filter exists) — could be added later
 - If a schedule has segments from multiple processes (unusual), backfill picks the first segment's machine's processId
+
+---
+
+## SẢN XUẤT — Đổi/Thêm/Bỏ mặt hàng giữa ca + Cùng mặt hàng khác lô
+
+**Status:** ✅ Completed 2026-05-30
+
+### What was built
+
+Cho phép 1 máy đánh ống chạy cùng 1 mặt hàng từ 2 lô khác nhau (case NM1 chạy giùm NM2 — sợi cùng tên nhưng chi phí khác theo lô gốc). Sửa Bug 1 (trang mobile-winding giấu mặt hàng chưa nhập log) bằng cách merge logs ∪ assignments. Tách rõ 3 thao tác giữa ca: **Sửa sai** (✏️) / **Đổi** (🔄, bao gói nhập sản lượng MH cũ) / **Thêm song song** (➕). Chống lưu trùng (máy+ngày+ca+sợi+lô) ở cả 3 tầng DB/API/UI.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                              — bỏ @@unique của ProductionLog [machineId,recordDate,shift,itemId] và MachineItemAssignment [machineId,itemId]
+prisma/migrations/20260530000001_shift_item_change_multi_lot/migration.sql — DROP 2 unique cũ + tạo 4 partial unique index
+src/app/api/production/daily-input/route.ts       — POST: thay upsert bằng findFirst (key 5 cột có lotId) + update/create
+src/app/api/production/daily-status/route.ts       — productionLogs.include thêm lot { id, lotNumber }
+src/app/api/machines/[id]/assignments/route.ts    — PUT: validate trùng (item,lot) + "cùng item phải có lô"; XÓA handler PATCH
+src/app/machines/page.tsx                          — handleSaveAssignments validate client trùng (item,lot)
+src/app/production/mobile-winding/page.tsx         — buildMachineItems merge logs∪assignments; 3 modal thao tác; tag lô + dòng "đã dừng giữa ca"
+src/app/production/winding-input/page.tsx          — thay PATCH (đã bỏ) bằng PUT thay-thế-toàn-bộ khi đổi item
+```
+
+### Key business logic implemented
+
+- **Partial unique index thay unique 4 cột**: `prod_log_unique_with_lot` (machineId,recordDate,shift,itemId,lotId WHERE lotId IS NOT NULL) + `prod_log_unique_no_lot` (4 cột WHERE lotId IS NULL). Tương tự cho `machine_item_assignments` (`machine_assignment_unique_with_lot` / `machine_assignment_unique_no_lot`). Cho phép cùng item khác lô, vẫn chống dup khi lotId NULL.
+- **daily-input POST không còn dùng upsert** (composite key 4 cột đã bị xóa) → `findFirst` tách 2 nhánh lotId==null vs lotId=số, rồi update/create. P2002 trả message tiếng Việt rõ.
+- **buildMachineItems merge**: duyệt assignments theo sortOrder (match log theo (itemId,lotId) → ô đã nhập, không match → slot rỗng), rồi log còn lại không khớp assignment nào → dòng `isExtra` (MH đã đổi/dừng giữa ca). Fix Bug 1: máy 4 assignment + 2 log vẫn hiện đủ 4 ô.
+- **Modal 🔄 Đổi bao gói nhập sản lượng MH cũ**: LƯU sản lượng MH cũ (POST) TRƯỚC khi PUT assignment — vì công nhân chốt cuối ca nhìn sổ nhập đủ cả MH đã dừng. Có 2 option: "Đổi sang MH khác" (map assignment) / "Dừng hẳn" (filter bỏ dòng).
+- **Dòng isExtra**: vẫn sửa được outputKg (công nhân nhớ sai), khóa item/lot, không có ✏️/🔄, có 🗑️ xóa log, hiển thị mờ (opacity 0.75).
+- **Validation 3 tầng chống trùng (item,lot)**: DB partial index → P2002; API PUT assignments → 400; UI (machines + mobile-winding modal) → message.error chặn save. Quy tắc: nhiều dòng cùng item BẮT BUỘC mỗi dòng phải có lô cụ thể.
+- **PATCH /assignments đã bị xóa** (phụ thuộc composite unique cũ). mobile-winding và winding-input chuyển sang PUT thay-thế-toàn-bộ.
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | /api/production/daily-input | Upsert log theo key 5 cột (machineId,recordDate,shift,itemId,lotId) |
+| GET    | /api/production/daily-status | Trả machine kèm todayLogs (giờ có lot) + itemAssignments |
+| PUT    | /api/machines/[id]/assignments | Thay-thế-toàn-bộ; validate trùng (item,lot) + cùng item phải có lô |
+| ~~PATCH~~ | ~~/api/machines/[id]/assignments~~ | **Đã xóa** — dùng PUT thay thế |
+
+### Known limitations
+
+- Modal mobile-winding chưa hard-require lô theo process.code (NM1/NM2 ống); chỉ ép chọn lô khi phát hiện trùng item với dòng khác (validation conflict). Đủ để chống dup, nhưng máy ống vẫn có thể để trống lô nếu chỉ chạy 1 dòng/item.
+- winding-input (desktop) khi đổi item dùng PUT theo originalItemId — nếu máy có 2 dòng cùng item khác lô thì PUT match dòng đầu tiên (desktop chưa hỗ trợ phân biệt lô khi đổi item như mobile).
+- Shadow DB không build lại được (migration cũ 20260520000002 lỗi cột fce.factoryId) → migration mới tạo thủ công + `migrate deploy`, không qua `migrate dev`.
+
+
+---
+
+## SẢN XUẤT — Xóa chức năng "Cọc từ - Cọc đến" (fromSpindle / toSpindle)
+
+**Status:** ✅ Completed 2026-05-30
+
+### What was built
+
+Xóa hoàn toàn 2 field `fromSpindle` / `toSpindle` của `MachineItemAssignment` khỏi schema, API và UI (dữ liệu không cần thiết). **Giữ nguyên** `Machine.spindleCount` (field khác, dùng cho công thức tính sản lượng FormulaType=3).
+
+### Files created/modified
+
+```
+prisma/schema.prisma                              — xóa fromSpindle / toSpindle khỏi MachineItemAssignment
+prisma/migrations/20260530000002_remove_spindle_range_from_assignment/migration.sql — DROP COLUMN IF EXISTS x2
+src/app/api/machines/[id]/assignments/route.ts    — bỏ field khỏi type body + createMany data
+src/types/production.ts                            — MachineAssignment bỏ fromSpindle / toSpindle
+src/app/machines/page.tsx                          — AssignmentData interface + openMultiItemModal setFieldsValue
+src/app/production/winding-input/page.tsx          — bỏ field khi build PUT assignment
+src/app/production/mobile-winding/page.tsx         — interfaces, buildMachineItems, 3 modal, state vars, input "Cọc từ/đến"
+src/app/kd-daily-input/page.tsx                    — interfaces, mapping, bỏ note auto-gen "Cọc X-Y", bỏ tag hiển thị cọc
+```
+
+### Key business logic implemented
+
+- Migration `DROP COLUMN IF EXISTS "fromSpindle"/"toSpindle"` — an toàn với cả trường hợp cột đã không còn.
+- `daily-input` POST không còn auto-generate note "Cọc X-Y" (logic này nằm ở kd-daily-input, đã xóa).
+- Assignment PUT body type giờ chỉ còn `{ itemId, lotId?, sortOrder? }`.
+
+### Known limitations
+
+- Không có. `Machine.spindleCount` giữ nguyên, không ảnh hưởng công thức tính sản lượng.
+
+### Data notes
+
+- Cột `fromSpindle` / `toSpindle` trong `machine_item_assignments` đã bị DROP — dữ liệu cũ (nếu có) bị xóa vĩnh viễn, không backfill.
+

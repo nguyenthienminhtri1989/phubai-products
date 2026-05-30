@@ -38,8 +38,47 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const assignments: { itemId: number; lotId?: number | null; fromSpindle?: number; toSpindle?: number; sortOrder?: number }[] =
+    const assignments: { itemId: number; lotId?: number | null; sortOrder?: number }[] =
       body.assignments ?? [];
+
+    // VALIDATION: phát hiện trùng (itemId, lotId) trong cùng request
+    const seen = new Map<string, number>();
+    for (let i = 0; i < assignments.length; i++) {
+      const a = assignments[i];
+      const key = `${a.itemId}:${a.lotId ?? "null"}`;
+      if (seen.has(key)) {
+        return NextResponse.json(
+          {
+            error:
+              a.lotId == null
+                ? `Mặt hàng "${a.itemId}" được gán 2 lần cho máy này. Nếu chạy 2 lô khác nhau cùng mặt hàng, vui lòng chọn lô cụ thể cho từng dòng.`
+                : `Mặt hàng "${a.itemId}" + lô "${a.lotId}" được gán 2 lần. Mỗi cặp mặt hàng + lô chỉ được 1 dòng.`,
+          },
+          { status: 400 },
+        );
+      }
+      seen.set(key, i);
+    }
+
+    // CẢNH BÁO: nếu có >1 dòng cùng itemId thì tất cả dòng đó phải có lotId
+    const itemCount = new Map<number, number>();
+    for (const a of assignments) {
+      itemCount.set(a.itemId, (itemCount.get(a.itemId) ?? 0) + 1);
+    }
+    for (const [itemId, count] of itemCount) {
+      if (count > 1) {
+        const sameItem = assignments.filter((a) => a.itemId === itemId);
+        const missingLot = sameItem.some((a) => a.lotId == null);
+        if (missingLot) {
+          return NextResponse.json(
+            {
+              error: `Có ${count} dòng cùng mặt hàng "${itemId}" — tất cả các dòng này phải chọn lô cụ thể để phân biệt.`,
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
 
     // Replace all: xóa cũ, tạo mới
     await prisma.machineItemAssignment.deleteMany({ where: { machineId } });
@@ -50,8 +89,6 @@ export async function PUT(
           machineId,
           itemId: a.itemId,
           lotId: a.lotId ?? null,
-          fromSpindle: a.fromSpindle ?? null,
-          toSpindle: a.toSpindle ?? null,
           sortOrder: a.sortOrder ?? i,
           isActive: true,
         })),
@@ -78,61 +115,6 @@ export async function PUT(
   }
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { id } = await params;
-  const machineId = parseInt(id);
-  if (isNaN(machineId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-
-  try {
-    const body = await req.json();
-    const { oldItemId, newItemId } = body;
-
-    if (!oldItemId || !newItemId) {
-      return NextResponse.json(
-        { error: "Thiếu oldItemId hoặc newItemId" },
-        { status: 400 }
-      );
-    }
-
-    const existing = await prisma.machineItemAssignment.findUnique({
-      where: { machineId_itemId: { machineId, itemId: oldItemId } },
-    });
-
-    if (!existing) {
-      return NextResponse.json(
-        { error: "Không tìm thấy assignment cần cập nhật" },
-        { status: 404 }
-      );
-    }
-
-    const conflict = await prisma.machineItemAssignment.findUnique({
-      where: { machineId_itemId: { machineId, itemId: newItemId } },
-    });
-    if (conflict) {
-      return NextResponse.json(
-        { error: "Mặt hàng mới đã được gán cho máy này rồi" },
-        { status: 400 }
-      );
-    }
-
-    const updated = await prisma.machineItemAssignment.update({
-      where: { id: existing.id },
-      data: { itemId: newItemId },
-      include: { item: { select: { id: true, name: true } } },
-    });
-
-    return NextResponse.json(updated);
-  } catch (e: any) {
-    console.error("Assignment PATCH error:", e);
-    return NextResponse.json(
-      { error: e.message || "Lỗi cập nhật" },
-      { status: 500 }
-    );
-  }
-}
+// PATCH endpoint đã bị xóa (spec shift_item_change_multi_lot).
+// Composite unique [machineId, itemId] không còn tồn tại sau khi chuyển sang
+// partial unique index → frontend dùng PUT thay-thế-toàn-bộ thay vì PATCH.

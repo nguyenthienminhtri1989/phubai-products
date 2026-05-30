@@ -45,7 +45,14 @@
       "Bash(xargs head -150)",
       "Bash(xargs wc -l)",
       "Bash(git rm *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "PowerShell(npx prisma migrate status)",
+      "PowerShell(npx prisma migrate dev --name shift_item_change_multi_lot --create-only)",
+      "PowerShell(npx prisma db execute --file _tmp_check.sql --schema prisma/schema.prisma)",
+      "PowerShell(npx prisma migrate deploy)",
+      "PowerShell(npx prisma generate)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(npx prisma migrate status 2>&1)"
     ]
   }
 }

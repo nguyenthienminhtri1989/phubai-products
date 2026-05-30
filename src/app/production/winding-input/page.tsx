@@ -348,20 +348,30 @@ export default function WindingInputPage() {
           savedCount++;
 
           // Bước 3: Nếu item thay đổi → cập nhật MachineItemAssignment
+          // PATCH endpoint đã bị bỏ (composite unique [machineId,itemId] không còn).
+          // Dùng PUT thay-thế-toàn-bộ: map assignment cũ (theo originalItemId) sang item mới.
           if (itemChanged) {
-            const patchRes = await fetch(
+            const machine = machinesRaw.find((m) => m.id === r.machineId);
+            const current = (machine?.itemAssignments || []).map((a, i) => ({
+              itemId: a.itemId,
+              lotId: a.lotId ?? null,
+              sortOrder: a.sortOrder ?? i,
+            }));
+            const newAssignments = current.map((a) =>
+              a.itemId === r.originalItemId
+                ? { ...a, itemId: r.itemId, lotId: r.lotId ?? null }
+                : a,
+            );
+            const putRes = await fetch(
               `/api/machines/${r.machineId}/assignments`,
               {
-                method: "PATCH",
+                method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  oldItemId: r.originalItemId,
-                  newItemId: r.itemId,
-                }),
+                body: JSON.stringify({ assignments: newAssignments }),
               },
             );
-            if (!patchRes.ok) {
-              const errData = await patchRes.json().catch(() => ({}));
+            if (!putRes.ok) {
+              const errData = await putRes.json().catch(() => ({}));
               console.warn(
                 `Assignment update failed (machineId=${r.machineId}):`,
                 errData,
