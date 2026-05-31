@@ -159,6 +159,9 @@ model Item {
   // Lot management
   lots Lot[]
 
+  // Cơ cấu NVL theo tháng
+  monthlyMaterials ItemMonthlyMaterial[]
+
   @@map("items")
 }
 
@@ -1440,10 +1443,41 @@ model MaterialType {
 
   prices MaterialPrice[]
 
+  // Cơ cấu NVL theo tháng — 1 MaterialType được tham chiếu 2 lần (cotton + pe)
+  itemMonthlyCotton ItemMonthlyMaterial[] @relation("ItemMonthlyCotton")
+  itemMonthlyPe     ItemMonthlyMaterial[] @relation("ItemMonthlyPe")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("material_types")
+}
+
+/// Cơ cấu NVL của mặt hàng theo tháng.
+/// Mỗi đầu tháng kế toán chọn: mặt hàng X tháng này dùng loại bông nào, xơ nào.
+/// Calculator query đúng MaterialPrice theo lựa chọn này.
+model ItemMonthlyMaterial {
+  id        Int    @id @default(autoincrement())
+  itemId    Int
+  yearMonth String @db.VarChar(7) // "2026-05"
+
+  /// Loại bông dùng (Cotton AUS, US-PVC, Brazil...). NULL nếu không dùng cotton (hiếm).
+  cottonMaterialTypeId Int?
+  /// Loại xơ nhân tạo (PE Benma, Modal Liva Eco...). NULL nếu sợi thuần cotton.
+  peMaterialTypeId Int?
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item               Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  cottonMaterialType MaterialType? @relation("ItemMonthlyCotton", fields: [cottonMaterialTypeId], references: [id])
+  peMaterialType     MaterialType? @relation("ItemMonthlyPe", fields: [peMaterialTypeId], references: [id])
+
+  @@unique([itemId, yearMonth])
+  @@index([yearMonth])
+  @@map("item_monthly_materials")
 }
 
 // Giá nguyên vật liệu theo tháng

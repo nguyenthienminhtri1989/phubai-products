@@ -58,6 +58,7 @@ MonthlySummarySnapshot (cache KH/TH)
 OrderAllocation (phân bổ sản lượng vào HĐ, source: KD/PRODUCTION)
 KdDailyInput (sản lượng ngày phòng KD nhập, unique: machineId+itemId+recordDate)
 MonthlyQuota (quota tháng per dòng HĐ; isRemainder=true → nhận phần dư; unique: salesOrderItemId+yearMonth)
+ItemMonthlyMaterial (cơ cấu NVL của mặt hàng theo tháng — chọn 1 loại bông + 1 loại xơ; unique: itemId+yearMonth)
 ```
 
 ### Công thức KD-SX

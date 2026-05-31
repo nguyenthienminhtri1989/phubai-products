@@ -361,7 +361,7 @@ const ALL_PAGES: PageDef[] = [
     pageKey: "kdsx.raw-material-rates",
     pageGroup: "DANH MỤC",
     path: "/kdsx/raw-material-rates",
-    label: "Mức tiêu hao NVL",
+    label: "Tiêu hao NVL",
     icon: <ExperimentOutlined />,
   },
   {
@@ -377,6 +377,13 @@ const ALL_PAGES: PageDef[] = [
     path: "/kdsx/material-prices",
     label: "Giá Bông Xơ",
     icon: <DollarOutlined />,
+  },
+  {
+    pageKey: "kdsx.item-monthly-materials",
+    pageGroup: "DANH MỤC",
+    path: "/kdsx/item-monthly-materials",
+    label: "Cơ cấu NVL theo tháng",
+    icon: <DatabaseOutlined />,
   },
   // DANH MỤC ĐIỆN NĂNG
   {
@@ -535,6 +542,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       "kdsx.raw-material-rates",
       "kdsx.material-types",
       "kdsx.material-prices",
+      "kdsx.item-monthly-materials",
       "catalog.energy-type",
       "catalog.meter-group",
       "catalog.meters",

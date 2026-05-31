@@ -84,10 +84,18 @@ interface PnLSummary {
   totalProfitVnd: number;
 }
 
+interface MaterialWarning {
+  itemId: number;
+  itemName: string;
+  configYearMonth: string | null;
+  hasConfig: boolean;
+}
+
 interface PnLResult {
   summary: PnLSummary;
   byContract: ContractPnL[];
   fixedCosts: FixedCostLine[];
+  materialWarnings?: MaterialWarning[];
   meta: { exchangeRate: number; wasteAdjustmentFactor: number; mode: string };
 }
 
@@ -720,6 +728,38 @@ export default function RevenueDashboard() {
       label: "Dashboard",
       children: (
         <Spin spinning={loading}>
+          {/* Cảnh báo cấu hình NVL dùng tháng cũ / chưa cấu hình */}
+          {dashData &&
+            (dashData.projected.materialWarnings?.length ?? 0) > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Một số mặt hàng chưa có cấu hình NVL tháng này (đang dùng cấu hình tháng cũ hoặc giá mặc định)"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {dashData.projected.materialWarnings!.map((w) => (
+                      <li key={w.itemId}>
+                        {w.itemName}:{" "}
+                        {w.hasConfig
+                          ? `dùng cấu hình tháng ${w.configYearMonth}`
+                          : "chưa cấu hình — dùng giá NVL gần nhất"}
+                      </li>
+                    ))}
+                  </ul>
+                }
+                action={
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      (window.location.href = "/kdsx/item-monthly-materials")
+                    }
+                  >
+                    Cập nhật ngay
+                  </Button>
+                }
+              />
+            )}
           {/* Hôm nay */}
           {dashData && (
             <SummaryCards

@@ -3923,3 +3923,54 @@ src/app/kd-daily-input/page.tsx                    — interfaces, mapping, bỏ
 
 - Cột `fromSpindle` / `toSpindle` trong `machine_item_assignments` đã bị DROP — dữ liệu cũ (nếu có) bị xóa vĩnh viễn, không backfill.
 
+
+---
+
+## KD-SX — Cơ cấu NVL theo mặt hàng theo tháng (ItemMonthlyMaterial)
+
+**Status:** ✅ Completed 2026-06-01
+
+### What was built
+
+Cho phép kế toán chọn đúng 1 loại bông + 1 loại xơ cho từng mặt hàng theo từng tháng. Calculator query đúng `MaterialPrice` theo lựa chọn này thay vì lấy `cottonPrices[0]`/`pePrices[0]` mặc định. Trang quản lý có các tiện ích thao tác hàng loạt (bulk apply, đặt tất cả, copy tháng trước, highlight ô khác đa số).
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                                  — thêm model ItemMonthlyMaterial + 2 relation ngược trên MaterialType, 1 relation trên Item
+prisma/migrations/20260601000001_add_item_monthly_material/           — tạo bảng item_monthly_materials (idempotent SQL, 3 FK)
+src/app/api/kdsx/item-monthly-materials/route.ts                      — GET list theo tháng + POST upsert nhiều dòng
+src/app/api/kdsx/item-monthly-materials/copy-from-previous/route.ts   — POST copy cấu hình tháng trước (giữ nguyên dòng đã có)
+src/app/kdsx/item-monthly-materials/page.tsx                          — UI bảng cấu hình NVL theo tháng
+src/lib/kdsx/calculator-v2.ts                                         — query giá NVL theo cơ cấu từng mặt hàng + materialWarnings
+src/components/AdminLayout.tsx                                        — thêm link sidebar "Cơ cấu NVL theo tháng"
+prisma/seed-page-registry.js                                         — đăng ký page kdsx.item-monthly-materials (sortOrder 179)
+src/app/kdsx/revenue/page.tsx                                        — banner cảnh báo mặt hàng chưa cấu hình NVL tháng
+```
+
+### Key business logic implemented
+
+- Mỗi mặt hàng/tháng dùng ĐÚNG 1 loại bông + 1 loại xơ (không trộn). Unique `(itemId, yearMonth)`.
+- Calculator: với mỗi itemId, query `ItemMonthlyMaterial` (fallback tháng gần nhất `yearMonth <= current`), rồi query `MaterialPrice` đúng `materialTypeId` đã chọn. Nếu mặt hàng chưa cấu hình → fallback giá bông/xơ gần nhất bất kỳ (backward compat, không break).
+- Công thức GIỮ NGUYÊN: CP Cotton = qty × cottonRate × (cottonPrice + warehouseFee) × cottonRatio × ER; CP PE = qty × peRate × pePrice × (1 - cottonRatio) × ER. Chỉ đổi NGUỒN giá.
+- `RawMaterialRate` KHÔNG bị sửa — vẫn là nguồn cottonRatio/cottonRate/peRate.
+- Mặt hàng `cottonRatio >= 1.0` (sợi thuần) → cột Loại xơ bị vô hiệu, bulk PE bỏ qua.
+- Calculator trả `materialWarnings[]` khi mặt hàng chưa cấu hình hoặc đang fallback cấu hình tháng cũ → dashboard revenue hiện banner.
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/kdsx/item-monthly-materials?yearMonth=YYYY-MM | List tất cả mặt hàng + định mức hiệu lực + cấu hình NVL tháng |
+| POST   | /api/kdsx/item-monthly-materials | Upsert nhiều dòng { yearMonth, items[] } |
+| POST   | /api/kdsx/item-monthly-materials/copy-from-previous | Copy cấu hình tháng trước (chỉ điền ô trống) |
+
+### Known limitations
+
+- Category NVL chỉ có "COTTON" và "PE" (Modal/PE gộp chung dropdown "Loại xơ" qua category PE). Nếu sau này tách category "MODAL" cần sửa logic lọc dropdown.
+- Migration tạo thủ công (idempotent) do shadow DB project từng lỗi — không dùng `prisma migrate dev`.
+
+### Data notes
+
+- Bảng `item_monthly_materials` mới, chưa có seed data — kế toán nhập đầu mỗi tháng hoặc dùng "Copy tháng trước".
+- FK cotton/pe `ON DELETE SET NULL`; FK item `ON DELETE CASCADE`.

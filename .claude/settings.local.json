@@ -52,7 +52,9 @@
       "PowerShell(npx prisma migrate deploy)",
       "PowerShell(npx prisma generate)",
       "PowerShell(npm run build 2>&1)",
-      "PowerShell(npx prisma migrate status 2>&1)"
+      "PowerShell(npx prisma migrate status 2>&1)",
+      "Bash(ls src/app/api/kdsx/material-types/)",
+      "Bash(ls src/app/kdsx/material-prices/)"
     ]
   }
 }

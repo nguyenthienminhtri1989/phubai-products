@@ -38,6 +38,20 @@ export interface ContractPnL {
   wasteRecoveryVnd: number;
   variableCostVnd: number;
   profitContributionVnd: number; // DT - CP biến đổi (chưa trừ CP cố định)
+  // Metadata nguồn giá NVL — phục vụ cảnh báo trên dashboard
+  _materialMeta?: {
+    hasConfig: boolean;
+    configYearMonth: string | null;
+    cottonFromMonth: string | null;
+    peFromMonth: string | null;
+  };
+}
+
+export interface MaterialWarning {
+  itemId: number;
+  itemName: string;
+  configYearMonth: string | null;
+  hasConfig: boolean;
 }
 
 export interface FixedCostLine {
@@ -50,6 +64,7 @@ export interface PnLResult {
   summary: PnLSummary;
   byContract: ContractPnL[];
   fixedCosts: FixedCostLine[];
+  materialWarnings?: MaterialWarning[];
   meta: {
     exchangeRate: number;
     wasteAdjustmentFactor: number;
@@ -113,28 +128,24 @@ export async function calculateRevenuePnL(
   const warehouseFee = inputParam.warehouseFee ?? 0.02;
   const wasteAdjustmentFactor = inputParam.wasteAdjustmentFactor ?? 0.95;
 
-  // ===== BƯỚC 2: Lấy giá NVL (fallback tháng gần nhất) =====
-  const cottonPrices = await prisma.materialPrice.findMany({
+  // ===== BƯỚC 2: Lấy giá NVL theo cơ cấu của TỪNG mặt hàng (ItemMonthlyMaterial) =====
+  // Fallback toàn cục: giá bông/xơ gần nhất bất kỳ — dùng khi mặt hàng chưa cấu hình cơ cấu NVL
+  const fallbackCotton = await prisma.materialPrice.findFirst({
     where: {
       yearMonth: { lte: yearMonth },
       materialType: { category: "COTTON" },
     },
-    include: { materialType: true },
     orderBy: { yearMonth: "desc" },
   });
-
-  const pePrices = await prisma.materialPrice.findMany({
+  const fallbackPe = await prisma.materialPrice.findFirst({
     where: {
       yearMonth: { lte: yearMonth },
       materialType: { category: "PE" },
     },
-    include: { materialType: true },
     orderBy: { yearMonth: "desc" },
   });
-
-  // Lấy giá gần nhất cho mỗi loại NVL
-  const latestCottonPrice = cottonPrices.length > 0 ? cottonPrices[0].priceUsd : 0;
-  const latestPePrice = pePrices.length > 0 ? pePrices[0].priceUsd : 0;
+  const fallbackCottonPrice = fallbackCotton?.priceUsd ?? 0;
+  const fallbackPePrice = fallbackPe?.priceUsd ?? 0;
 
   // ===== BƯỚC 3: Lấy định mức tiêu hao (cache per itemId) =====
   const [yearNum, monthNum] = yearMonth.split("-").map(Number);
@@ -154,6 +165,19 @@ export async function calculateRevenuePnL(
     }
   >();
 
+  // Map giá NVL theo từng mặt hàng — query đúng MaterialPrice theo cơ cấu (ItemMonthlyMaterial)
+  const priceMap = new Map<
+    number,
+    {
+      cottonPrice: number;
+      pePrice: number;
+      hasConfig: boolean;
+      configYearMonth: string | null;
+      cottonFromMonth: string | null;
+      peFromMonth: string | null;
+    }
+  >();
+
   for (const itemId of itemIds) {
     const rate = await prisma.rawMaterialRate.findFirst({
       where: {
@@ -168,6 +192,50 @@ export async function calculateRevenuePnL(
       cottonRate: rate?.cottonRate ?? 0,
       peRate: rate?.peRate ?? 0,
       cottonRatio: rate?.cottonRatio ?? 1.0,
+    });
+
+    // Cấu hình NVL của mặt hàng — fallback cấu hình tháng gần nhất (yearMonth <= tháng hiện tại)
+    const config = await prisma.itemMonthlyMaterial.findFirst({
+      where: { itemId, yearMonth: { lte: yearMonth } },
+      orderBy: { yearMonth: "desc" },
+    });
+
+    let cottonPrice = fallbackCottonPrice;
+    let pePrice = fallbackPePrice;
+    let cottonFromMonth: string | null = null;
+    let peFromMonth: string | null = null;
+
+    if (config?.cottonMaterialTypeId) {
+      const cp = await prisma.materialPrice.findFirst({
+        where: {
+          materialTypeId: config.cottonMaterialTypeId,
+          yearMonth: { lte: yearMonth },
+        },
+        orderBy: { yearMonth: "desc" },
+      });
+      cottonPrice = cp?.priceUsd ?? 0;
+      cottonFromMonth = cp?.yearMonth ?? null;
+    }
+
+    if (config?.peMaterialTypeId) {
+      const pp = await prisma.materialPrice.findFirst({
+        where: {
+          materialTypeId: config.peMaterialTypeId,
+          yearMonth: { lte: yearMonth },
+        },
+        orderBy: { yearMonth: "desc" },
+      });
+      pePrice = pp?.priceUsd ?? 0;
+      peFromMonth = pp?.yearMonth ?? null;
+    }
+
+    priceMap.set(itemId, {
+      cottonPrice,
+      pePrice,
+      hasConfig: !!config,
+      configYearMonth: config?.yearMonth ?? null,
+      cottonFromMonth,
+      peFromMonth,
     });
   }
 
@@ -184,8 +252,18 @@ export async function calculateRevenuePnL(
     const qty = line.allocatedQty;
     const unitPrice = line.unitPriceUsd;
 
+    // Giá NVL theo cơ cấu của mặt hàng (fallback giá gần nhất nếu chưa cấu hình)
+    const itemPrice = priceMap.get(line.itemId) ?? {
+      cottonPrice: fallbackCottonPrice,
+      pePrice: fallbackPePrice,
+      hasConfig: false,
+      configYearMonth: null,
+      cottonFromMonth: null,
+      peFromMonth: null,
+    };
+
     // Giá bông bình quân = giá cotton + phí kho
-    const avgCottonPrice = latestCottonPrice + warehouseFee;
+    const avgCottonPrice = itemPrice.cottonPrice + warehouseFee;
 
     // CP Cotton = qty × cottonRate × avgCottonPrice × cottonRatio × exchangeRate
     const cottonCostVnd =
@@ -193,7 +271,7 @@ export async function calculateRevenuePnL(
 
     // CP PE = qty × peRate × pePrice × (1 - cottonRatio) × exchangeRate
     const peCostVnd =
-      qty * rate.peRate * latestPePrice * (1 - rate.cottonRatio) * exchangeRate;
+      qty * rate.peRate * itemPrice.pePrice * (1 - rate.cottonRatio) * exchangeRate;
 
     // CP Bán hàng = qty × sellingCostRate × unitPrice × exchangeRate
     const sellingCostRate = line.sellingCostRate ?? 0;
@@ -236,7 +314,37 @@ export async function calculateRevenuePnL(
       wasteRecoveryVnd,
       variableCostVnd,
       profitContributionVnd: revenueVnd - variableCostVnd,
+      _materialMeta: {
+        hasConfig: itemPrice.hasConfig,
+        configYearMonth: itemPrice.configYearMonth,
+        cottonFromMonth: itemPrice.cottonFromMonth,
+        peFromMonth: itemPrice.peFromMonth,
+      },
     });
+  }
+
+  // ===== Cảnh báo cấu hình NVL dùng tháng cũ / chưa cấu hình =====
+  const seenWarn = new Set<number>();
+  const materialWarnings: {
+    itemId: number;
+    itemName: string;
+    configYearMonth: string | null;
+    hasConfig: boolean;
+  }[] = [];
+  for (const c of byContract) {
+    if (seenWarn.has(c.itemId)) continue;
+    const meta = c._materialMeta;
+    if (!meta) continue;
+    // Cảnh báo khi: chưa cấu hình, hoặc đang fallback cấu hình tháng cũ
+    if (!meta.hasConfig || meta.configYearMonth !== yearMonth) {
+      seenWarn.add(c.itemId);
+      materialWarnings.push({
+        itemId: c.itemId,
+        itemName: c.itemName,
+        configYearMonth: meta.configYearMonth,
+        hasConfig: meta.hasConfig,
+      });
+    }
   }
 
   // ===== BƯỚC 5: Chi phí cố định =====
@@ -322,6 +430,7 @@ export async function calculateRevenuePnL(
     },
     byContract,
     fixedCosts,
+    materialWarnings,
     meta: {
       exchangeRate,
       wasteAdjustmentFactor,

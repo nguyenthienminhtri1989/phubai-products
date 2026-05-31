@@ -70,6 +70,7 @@ const PAGES = [
   { pageKey: "kdsx.raw-material-rates", pageName: "Mức tiêu hao NVL", pageGroup: "DANH MỤC", path: "/kdsx/raw-material-rates", sortOrder: 176 },
   { pageKey: "kdsx.material-types", pageName: "Danh mục Bông Xơ", pageGroup: "DANH MỤC", path: "/kdsx/material-types", sortOrder: 177 },
   { pageKey: "kdsx.material-prices", pageName: "Giá Bông Xơ", pageGroup: "DANH MỤC", path: "/kdsx/material-prices", sortOrder: 178 },
+  { pageKey: "kdsx.item-monthly-materials", pageName: "Cơ cấu NVL theo tháng", pageGroup: "DANH MỤC", path: "/kdsx/item-monthly-materials", sortOrder: 179 },
   { pageKey: "catalog.energy-type", pageName: "Loại điện năng", pageGroup: "DANH MỤC", path: "/categories/energy-type", sortOrder: 179 },
   { pageKey: "catalog.meter-group", pageName: "Nhóm đồng hồ điện", pageGroup: "DANH MỤC", path: "/categories/meter-group", sortOrder: 180 },
   { pageKey: "catalog.meters", pageName: "Trạm & Đồng hồ", pageGroup: "DANH MỤC", path: "/categories/meters", sortOrder: 181 },

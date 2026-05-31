@@ -337,9 +337,9 @@ export default function ItemsManagementPage() {
       align: "center" as const,
       render: (yarnType: string) =>
         yarnType === "BLENDED" ? (
-          <Tag color="orange">Sợi pha (PE)</Tag>
+          <Tag color="orange">Sợi pha</Tag>
         ) : (
-          <Tag color="blue">Một thành phần</Tag>
+          <Tag color="blue">100% cotton</Tag>
         ),
     },
     {
