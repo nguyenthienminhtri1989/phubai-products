@@ -4014,3 +4014,26 @@ scripts/seed-material-types.ts                          — VISCOSE seed về ca
 
 - Sợi 2 thành phần = cotton + xơ (PE **hoặc** Viscose), pha theo `cottonRatio` (VD 70/30, 65/35). Yêu cầu: pha với loại nào nhận đúng giá loại đó.
 - Fix branch fallback "không có kế hoạch" trong `monthly-actuals/[id]/sync/route.ts`: trước đây lấy giá xơ đầu tiên theo category (có thể nhầm PE↔Viscose). Nay đọc `ItemMonthlyMaterial.peMaterialTypeId` của mặt hàng để lấy ĐÚNG giá loại xơ đã gán; chỉ fallback category-default khi mặt hàng chưa cấu hình NVL. Khớp với logic calculator-v2 (dashboard) và branch "có kế hoạch" (dùng `planItem.pePriceUsd`).
+
+---
+
+## KDSX — Phân bổ quota tháng: hiện cả HĐ đã hoàn thành
+
+**Status:** ✅ Completed 2026-06-01
+
+### What was built
+Thêm checkbox "Hiển thị cả HĐ đã hoàn thành" trên trang phân bổ quota tháng. Mặc định KHÔNG tick (giữ hành vi cũ: ẩn HĐ `remainingTotal <= 0` vào mục read-only). Khi tick → các HĐ đã "đóng" (rót đầy theo cam kết tổng) hiện inline trong card mặt hàng và cho phép nhập lại quota tháng.
+
+### Files created/modified
+```
+src/app/kdsx/monthly-quotas/page.tsx — thêm state showCompleted + checkbox; useMemo bucketing dựa theo showCompleted; đánh dấu tag "Đã hoàn thành" + text xám cho HĐ remainingTotal<=0; nới max InputNumber cho HĐ đã hoàn thành
+```
+
+### Key business logic implemented
+- Trạng thái "COMPLETED" của HĐ là tính on-the-fly (`remainingTotal <= 0`), KHÔNG lưu DB. Filter ẩn/hiện nằm hoàn toàn ở frontend (`useMemo` bucketing), API `/api/kdsx/monthly-quotas` vẫn trả về đầy đủ HĐ của order `ACTIVE`.
+- Khi `showCompleted=true`: HĐ hoàn thành được coi là "visible" → đưa vào card multi/single để nhập quota; không đẩy vào mục read-only "đã hoàn thành" (tránh trùng).
+- Nới `max` của InputNumber FIXED: HĐ có `remainingTotal<=0` (max=0) trước đây không nhập được → đổi thành `remainingTotal > 0 ? remainingTotal : undefined`.
+- KHÔNG động đến allocation-engine-v2 hay calculator. Sau khi lưu quota mới, Dashboard `/kdsx/revenue` tính lại on-the-fly → HĐ quay về ACTIVE và chỉ được rót đúng quota, phần dư chảy sang HĐ ưu tiên kế tiếp.
+
+### Known limitations
+- Validate "mỗi mặt hàng phải có đúng 1 HĐ Cuối (REMAINDER)" vẫn áp dụng cho group multi (kể cả khi có HĐ hoàn thành) — giữ nguyên thiết kế engine.

@@ -19,6 +19,7 @@ import {
   Tooltip,
   Alert,
   Segmented,
+  Checkbox,
 } from "antd";
 import {
   SaveOutlined,
@@ -172,8 +173,19 @@ function ItemGroupCard({
     {
       title: "Số HĐ",
       key: "orderNo",
-      width: 110,
-      render: (_, r) => <Text strong>{r.orderNo}</Text>,
+      width: 130,
+      render: (_, r) => (
+        <Space direction="vertical" size={0}>
+          <Text strong type={r.remainingTotal <= 0 ? "secondary" : undefined}>
+            {r.orderNo}
+          </Text>
+          {r.remainingTotal <= 0 && (
+            <Tag color="default" style={{ fontSize: 11, marginInlineEnd: 0 }}>
+              Đã hoàn thành
+            </Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: "Khách hàng",
@@ -270,7 +282,7 @@ function ItemGroupCard({
           <InputNumber
             value={q.quotaQty ?? undefined}
             min={0}
-            max={r.remainingTotal}
+            max={r.remainingTotal > 0 ? r.remainingTotal : undefined}
             step={1000}
             onChange={(v) =>
               onQuotaChange(r.salesOrderItemId, { quotaQty: v ?? null })
@@ -433,6 +445,10 @@ export default function MonthlyQuotasPage() {
 
   const [localQuotas, setLocalQuotas] = useState<Record<number, QuotaState>>({});
 
+  // Hiển thị cả HĐ đã hoàn thành (remainingTotal <= 0) để nhập quota cho HĐ
+  // đa tháng đã "đóng" do rót đầy theo cam kết tổng
+  const [showCompleted, setShowCompleted] = useState(false);
+
   // ── Processes filtered by factoryId ────────────────────────────────────────
   const processes = useMemo(
     () => allProcesses.filter((p) => p.factoryId === factoryId),
@@ -518,21 +534,26 @@ export default function MonthlyQuotasPage() {
     const done: ContractRow[] = [];
 
     for (const g of groups) {
-      const activeContracts = g.contracts.filter((c) => c.remainingTotal > 0);
-      const doneFromGroup = g.contracts.filter((c) => c.remainingTotal <= 0);
-      done.push(...doneFromGroup);
+      // Khi bật showCompleted → coi cả HĐ đã hoàn thành là "visible" để nhập quota
+      const visibleContracts = g.contracts.filter(
+        (c) => showCompleted || c.remainingTotal > 0
+      );
+      // Chỉ đẩy HĐ hoàn thành vào mục "đã hoàn thành" (read-only) khi KHÔNG hiện inline
+      if (!showCompleted) {
+        done.push(...g.contracts.filter((c) => c.remainingTotal <= 0));
+      }
 
-      if (activeContracts.length === 0) continue;
-      if (activeContracts.length >= 2) {
-        multi.push({ ...g, contracts: activeContracts });
+      if (visibleContracts.length === 0) continue;
+      if (visibleContracts.length >= 2) {
+        multi.push({ ...g, contracts: visibleContracts });
       } else {
-        single.push(...activeContracts);
+        single.push(...visibleContracts);
       }
     }
 
     multi.sort((a, b) => a.itemName.localeCompare(b.itemName, "vi"));
     return { itemGroups: multi, singleContractItems: single, doneContracts: done };
-  }, [groups]);
+  }, [groups, showCompleted]);
 
   // ── Quota change handler ───────────────────────────────────────────────────
   const handleQuotaChange = useCallback(
@@ -780,6 +801,19 @@ export default function MonthlyQuotasPage() {
         style={{ marginBottom: 16 }}
         closable
       />
+
+      {/* Toggle hiện HĐ đã hoàn thành */}
+      <div style={{ marginBottom: 12 }}>
+        <Checkbox
+          checked={showCompleted}
+          onChange={(e) => setShowCompleted(e.target.checked)}
+        >
+          Hiển thị cả HĐ đã hoàn thành
+        </Checkbox>
+        <Tooltip title="Hiện cả những HĐ đã 'đóng' do rót đầy theo cam kết tổng, để có thể nhập lại quota tháng cho HĐ đa tháng.">
+          <InfoCircleOutlined style={{ color: "#999", marginLeft: 4 }} />
+        </Tooltip>
+      </div>
 
       {/* Loading */}
       {loading ? (
