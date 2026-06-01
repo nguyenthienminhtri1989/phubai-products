@@ -17,11 +17,20 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Tính khoảng ngày của tháng đang xem
+  const [yr, mo] = yearMonth.split("-").map(Number);
+  const monthStart = new Date(yr, mo - 1, 1); // VD: 1/5/2026
+  const monthEnd = new Date(yr, mo, 0); // VD: 31/5/2026
+
   const items = await prisma.item.findMany({
+    where: { isActive: true },
     include: {
-      // Định mức hiệu lực — RawMaterialRate đang chạy (effectiveTo IS NULL)
+      // Định mức hiệu lực TẠI tháng đang xem (không phải chỉ bản ghi đang hiệu lực hôm nay)
       rawMaterialRates: {
-        where: { effectiveTo: null },
+        where: {
+          effectiveFrom: { lte: monthEnd },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
+        },
         take: 1,
         orderBy: { effectiveFrom: "desc" },
       },
