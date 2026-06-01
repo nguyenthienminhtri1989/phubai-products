@@ -61,8 +61,8 @@ const ROW_COLORS_DARK = [
 function fmtKg(kg: number) {
   return new Intl.NumberFormat("vi-VN").format(Math.round(kg)) + " kg";
 }
-function fmtTy(vnd: number) {
-  return (vnd / 1e9).toFixed(3) + " tỷ";
+function fmtVnd(vnd: number) {
+  return new Intl.NumberFormat("vi-VN").format(Math.round(vnd)) + " ₫";
 }
 function fmtUsd(usd: number) {
   return usd.toFixed(2) + " $";
@@ -179,14 +179,14 @@ function SummaryCards({
         <Col span={6}>
           <Statistic
             title="Doanh thu"
-            value={fmtTy(summary.totalRevenueVnd)}
+            value={fmtVnd(summary.totalRevenueVnd)}
             valueStyle={{ fontSize: 16, color: "#1677ff" }}
           />
         </Col>
         <Col span={6}>
           <Statistic
             title="Chi phí"
-            value={fmtTy(
+            value={fmtVnd(
               summary.totalVariableCostVnd + summary.totalFixedCostVnd,
             )}
             valueStyle={{ fontSize: 16, color: "#cf1322" }}
@@ -195,7 +195,7 @@ function SummaryCards({
         <Col span={6}>
           <Statistic
             title="Lợi nhuận"
-            value={fmtTy(summary.totalProfitVnd)}
+            value={fmtVnd(summary.totalProfitVnd)}
             valueStyle={{
               fontSize: 16,
               color: summary.totalProfitVnd >= 0 ? "#52c41a" : "#cf1322",

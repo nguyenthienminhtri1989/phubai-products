@@ -122,7 +122,7 @@ interface PlanPnLResult {
 
 // ── PlanPnLTab component ───────────────────────────────────────────────────
 function fmtTy(vnd: number) {
-  return (vnd / 1e9).toFixed(3) + " tỷ";
+  return new Intl.NumberFormat("vi-VN").format(Math.round(vnd)) + " VNĐ";
 }
 function fmtKg(kg: number) {
   return new Intl.NumberFormat("vi-VN").format(Math.round(kg)) + " kg";
@@ -136,7 +136,12 @@ interface PlanPnLTabProps {
   error: string | null;
 }
 
-function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabProps) {
+function PlanPnLTab({
+  hasProcessId,
+  planPnlData,
+  loading,
+  error,
+}: PlanPnLTabProps) {
   if (!hasProcessId) {
     return (
       <Alert
@@ -180,7 +185,13 @@ function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabPro
   const { summary, byContract, fixedCosts, meta } = planPnlData;
 
   const contractColumns = [
-    { title: "Số HĐ", dataIndex: "orderNo", key: "orderNo", render: (v: string | null) => v ?? <Tag color="orange">Surplus</Tag>, width: 110 },
+    {
+      title: "Số HĐ",
+      dataIndex: "orderNo",
+      key: "orderNo",
+      render: (v: string | null) => v ?? <Tag color="orange">Surplus</Tag>,
+      width: 110,
+    },
     { title: "Mặt hàng", dataIndex: "itemName", key: "itemName", width: 120 },
     {
       title: "SL KH (kg)",
@@ -191,15 +202,17 @@ function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabPro
       width: 110,
     },
     {
-      title: "DT (tỷ VNĐ)",
+      title: "DT (VNĐ)",
       dataIndex: "revenueVnd",
       key: "revenueVnd",
       align: "right" as const,
-      render: (v: number) => <span style={{ color: "#1677ff", fontWeight: 600 }}>{fmtTy(v)}</span>,
+      render: (v: number) => (
+        <span style={{ color: "#1677ff", fontWeight: 600 }}>{fmtTy(v)}</span>
+      ),
       width: 110,
     },
     {
-      title: "CP biến đổi (tỷ)",
+      title: "CP biến đổi (VNĐ)",
       dataIndex: "variableCostVnd",
       key: "variableCostVnd",
       align: "right" as const,
@@ -207,13 +220,16 @@ function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabPro
       width: 130,
     },
     {
-      title: "Đóng góp LN (tỷ)",
+      title: "Đóng góp LN (VNĐ)",
       dataIndex: "profitContributionVnd",
       key: "profitContributionVnd",
       align: "right" as const,
       render: (v: number) => (
-        <span style={{ color: v >= 0 ? "#52c41a" : "#ff4d4f", fontWeight: 700 }}>
-          {v >= 0 ? "+" : ""}{fmtTy(v)}
+        <span
+          style={{ color: v >= 0 ? "#52c41a" : "#ff4d4f", fontWeight: 700 }}
+        >
+          {v >= 0 ? "+" : ""}
+          {fmtTy(v)}
         </span>
       ),
       width: 140,
@@ -271,22 +287,42 @@ function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabPro
       {/* Contract detail table */}
       <div>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
-          📋 Chi tiết theo hợp đồng (Tỷ giá: {meta.exchangeRate.toLocaleString()} VNĐ/USD)
+          📋 Chi tiết theo hợp đồng (Tỷ giá:{" "}
+          {meta.exchangeRate.toLocaleString()} VNĐ/USD)
         </div>
         <Table
-          dataSource={byContract.map((r, i) => ({ ...r, key: r.orderItemId ?? `surplus-${i}` }))}
+          dataSource={byContract.map((r, i) => ({
+            ...r,
+            key: r.orderItemId ?? `surplus-${i}`,
+          }))}
           columns={contractColumns}
           pagination={false}
           size="small"
           scroll={{ x: 700 }}
           summary={() => (
-            <Table.Summary.Row style={{ fontWeight: 700, background: "#f0f5ff" }}>
-              <Table.Summary.Cell index={0} colSpan={2}>TỔNG</Table.Summary.Cell>
-              <Table.Summary.Cell index={2} align="right">{fmtKg(summary.totalQtyKg)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={3} align="right"><span style={{ color: "#1677ff" }}>{fmtTy(summary.totalRevenueVnd)}</span></Table.Summary.Cell>
-              <Table.Summary.Cell index={4} align="right">{fmtTy(summary.totalVariableCostVnd)}</Table.Summary.Cell>
+            <Table.Summary.Row
+              style={{ fontWeight: 700, background: "#f0f5ff" }}
+            >
+              <Table.Summary.Cell index={0} colSpan={2}>
+                TỔNG
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={2} align="right">
+                {fmtKg(summary.totalQtyKg)}
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={3} align="right">
+                <span style={{ color: "#1677ff" }}>
+                  {fmtTy(summary.totalRevenueVnd)}
+                </span>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={4} align="right">
+                {fmtTy(summary.totalVariableCostVnd)}
+              </Table.Summary.Cell>
               <Table.Summary.Cell index={5} align="right">
-                <span style={{ color: summary.totalProfitVnd >= 0 ? "#52c41a" : "#ff4d4f" }}>
+                <span
+                  style={{
+                    color: summary.totalProfitVnd >= 0 ? "#52c41a" : "#ff4d4f",
+                  }}
+                >
                   {fmtTy(summary.totalProfitVnd)}
                 </span>
               </Table.Summary.Cell>
@@ -298,13 +334,15 @@ function PlanPnLTab({ hasProcessId, planPnlData, loading, error }: PlanPnLTabPro
       {/* Fixed costs */}
       {fixedCosts.length > 0 && (
         <div>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>📌 Chi phí cố định tháng</div>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+            📌 Chi phí cố định tháng
+          </div>
           <Table
             dataSource={fixedCosts.map((r, i) => ({ ...r, key: i }))}
             columns={[
               { title: "Loại", dataIndex: "label", key: "label" },
               {
-                title: "Số tiền (tỷ VNĐ)",
+                title: "Số tiền (VNĐ)",
                 dataIndex: "amountVnd",
                 key: "amountVnd",
                 align: "right" as const,
@@ -634,7 +672,9 @@ export default function ProductionScheduleDetailClient({
     setPlanPnlLoading(true);
     setPlanPnlError(null);
     try {
-      const res = await fetch(`/api/kdsx/production-schedule/${scheduleId}/plan-pnl`);
+      const res = await fetch(
+        `/api/kdsx/production-schedule/${scheduleId}/plan-pnl`,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Lỗi tải DT-LN kế hoạch");
       setPlanPnlData(data);
@@ -1255,13 +1295,17 @@ export default function ProductionScheduleDetailClient({
           />
           <div>
             <Title level={4} style={{ margin: 0 }}>
-              KẾ HOẠCH SẢN XUẤT — {factory.name} — Tháng {schedMonth}/{schedYear}
+              KẾ HOẠCH SẢN XUẤT — {factory.name} — Tháng {schedMonth}/
+              {schedYear}
             </Title>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {schedule.process?.name
-                ? `Công đoạn: ${schedule.process.name}`
-                : <span style={{ color: "#faad14" }}>⚠ Chưa liên kết công đoạn</span>
-              }
+              {schedule.process?.name ? (
+                `Công đoạn: ${schedule.process.name}`
+              ) : (
+                <span style={{ color: "#faad14" }}>
+                  ⚠ Chưa liên kết công đoạn
+                </span>
+              )}
             </Text>
           </div>
         </div>
@@ -1547,9 +1591,6 @@ export default function ProductionScheduleDetailClient({
                               color: "#003a8c",
                             }}
                           >
-                            {plan.totalTons.toFixed(1)} tấn
-                          </div>
-                          <div style={{ fontSize: 10, color: "#555" }}>
                             {plan.totalKg.toLocaleString()} kg
                           </div>
                         </>
@@ -1570,9 +1611,6 @@ export default function ProductionScheduleDetailClient({
                   <div
                     style={{ fontSize: 15, fontWeight: 800, color: "#52c41a" }}
                   >
-                    {(grandPlanKg / 1000).toFixed(1)} tấn
-                  </div>
-                  <div style={{ fontSize: 10, color: "#aaa" }}>
                     {grandPlanKg.toLocaleString()} kg
                   </div>
                 </div>
@@ -1619,9 +1657,6 @@ export default function ProductionScheduleDetailClient({
                               color: "#237804",
                             }}
                           >
-                            {act.totalActualTons.toFixed(2)} tấn
-                          </div>
-                          <div style={{ fontSize: 10, color: "#555" }}>
                             {act.totalActualKg.toLocaleString()} kg
                           </div>
                         </>
@@ -1648,9 +1683,6 @@ export default function ProductionScheduleDetailClient({
                           color: "#95de64",
                         }}
                       >
-                        {(grandActualKg / 1000).toFixed(2)} tấn
-                      </div>
-                      <div style={{ fontSize: 10, color: "#b7eb8f" }}>
                         {grandActualKg.toLocaleString()} kg
                       </div>
                     </>
@@ -1707,9 +1739,6 @@ export default function ProductionScheduleDetailClient({
                               fontStyle: "italic",
                             }}
                           >
-                            {act.totalProjectedTons.toFixed(2)} tấn
-                          </div>
-                          <div style={{ fontSize: 10, color: "#888" }}>
                             {act.totalProjectedKg.toLocaleString()} kg
                           </div>
                         </>
@@ -1736,9 +1765,6 @@ export default function ProductionScheduleDetailClient({
                           fontStyle: "italic",
                         }}
                       >
-                        {(grandProjectedTotal / 1000).toFixed(2)} tấn
-                      </div>
-                      <div style={{ fontSize: 10, color: "#aaa" }}>
                         {grandProjectedTotal.toLocaleString()} kg
                       </div>
                     </>
@@ -1937,7 +1963,10 @@ export default function ProductionScheduleDetailClient({
               <Select
                 placeholder="Chọn công đoạn..."
                 style={{ width: 260 }}
-                options={factoryProcesses.map((p) => ({ value: p.id, label: p.name }))}
+                options={factoryProcesses.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
                 onChange={async (pid: number) => {
                   const res = await fetch(
                     `/api/kdsx/production-schedule/${scheduleId}`,
@@ -2080,13 +2109,15 @@ export default function ProductionScheduleDetailClient({
           {
             key: "plan-pnl",
             label: "💰 DT-LN kế hoạch",
-            children: <PlanPnLTab
-              scheduleId={scheduleId}
-              hasProcessId={!!schedule.processId}
-              planPnlData={planPnlData}
-              loading={planPnlLoading}
-              error={planPnlError}
-            />,
+            children: (
+              <PlanPnLTab
+                scheduleId={scheduleId}
+                hasProcessId={!!schedule.processId}
+                planPnlData={planPnlData}
+                loading={planPnlLoading}
+                error={planPnlError}
+              />
+            ),
           },
         ]}
       />
