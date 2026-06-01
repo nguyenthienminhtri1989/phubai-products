@@ -47,9 +47,9 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if (!["COTTON", "PE"].includes(category)) {
+  if (!["COTTON", "PE", "VISCOSE"].includes(category)) {
     return NextResponse.json(
-      { error: "category phải là COTTON hoặc PE" },
+      { error: "category phải là COTTON, PE hoặc VISCOSE" },
       { status: 400 },
     );
   }

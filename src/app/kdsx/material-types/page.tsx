@@ -32,7 +32,7 @@ interface MaterialType {
   id: number;
   code: string;
   name: string;
-  category: "COTTON" | "PE";
+  category: "COTTON" | "PE" | "VISCOSE";
   isActive: boolean;
   note: string | null;
   createdAt: string;
@@ -41,6 +41,7 @@ interface MaterialType {
 const CATEGORY_COLOR: Record<string, string> = {
   COTTON: "gold",
   PE: "blue",
+  VISCOSE: "green",
 };
 
 export default function MaterialTypesPage() {
@@ -68,6 +69,7 @@ export default function MaterialTypesPage() {
 
   const cottonCount = types.filter((t) => t.category === "COTTON").length;
   const peCount = types.filter((t) => t.category === "PE").length;
+  const viscoseCount = types.filter((t) => t.category === "VISCOSE").length;
   const activeCount = types.filter((t) => t.isActive).length;
 
   function openCreate() {
@@ -236,17 +238,22 @@ export default function MaterialTypesPage() {
 
       {/* Stats */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={8}>
+        <Col xs={6}>
           <Card size="small">
             <Statistic title="Loại bông (COTTON)" value={cottonCount} valueStyle={{ color: "#d4a017" }} />
           </Card>
         </Col>
-        <Col xs={8}>
+        <Col xs={6}>
           <Card size="small">
             <Statistic title="Loại PE / Xơ (PE)" value={peCount} valueStyle={{ color: "#1677ff" }} />
           </Card>
         </Col>
-        <Col xs={8}>
+        <Col xs={6}>
+          <Card size="small">
+            <Statistic title="Loại Viscose (VISCOSE)" value={viscoseCount} valueStyle={{ color: "#389e0d" }} />
+          </Card>
+        </Col>
+        <Col xs={6}>
           <Card size="small">
             <Statistic title="Đang kích hoạt" value={activeCount} suffix={`/ ${types.length}`} />
           </Card>
@@ -302,7 +309,7 @@ export default function MaterialTypesPage() {
                   options={[
                     { label: "🌾 COTTON — Bông các loại", value: "COTTON" },
                     { label: "🔵 PE — Polyester, Xơ tổng hợp", value: "PE" },
-                    { label: "🔵 Viscose, Xơ tổng hợp", value: "VISCOSE" },
+                    { label: "🟢 VISCOSE — Xơ Viscose", value: "VISCOSE" },
                   ]}
                 />
               </Form.Item>
