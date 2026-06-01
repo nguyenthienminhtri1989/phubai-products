@@ -3974,3 +3974,43 @@ src/app/kdsx/revenue/page.tsx                                        — banner 
 
 - Bảng `item_monthly_materials` mới, chưa có seed data — kế toán nhập đầu mỗi tháng hoặc dùng "Copy tháng trước".
 - FK cotton/pe `ON DELETE SET NULL`; FK item `ON DELETE CASCADE`.
+
+---
+
+## NVL & DASHBOARD — Bổ sung category VISCOSE + hiển thị doanh thu theo VNĐ
+
+**Status:** ✅ Completed 2026-06-01
+
+### What was built
+
+Thêm loại NVL thứ 3 là **VISCOSE** vào danh mục/giá NVL (trước chỉ COTTON & PE). VISCOSE là xơ nhân tạo, dùng CHUNG slot "xơ" (peMaterialTypeId) trong công thức tính chi phí — KHÔNG thêm thành phần thứ 3, không đổi công thức. Đồng thời đổi dashboard doanh thu hiển thị doanh thu/chi phí/lợi nhuận theo VNĐ đầy đủ thay vì rút gọn "tỷ".
+
+### Files created/modified
+
+```
+src/app/kdsx/revenue/page.tsx                          — thêm fmtVnd(), bỏ fmtTy(); DT/CP/LN hiển thị VNĐ đầy đủ
+src/app/kdsx/material-types/page.tsx                    — thêm category VISCOSE (tag xanh lá, thẻ thống kê, dropdown)
+src/app/kdsx/material-prices/page.tsx                   — thêm VISCOSE (tag, thống kê, nhóm dropdown chọn loại NVL)
+src/app/api/kdsx/material-types/route.ts                — validation category chấp nhận COTTON|PE|VISCOSE
+src/app/kdsx/item-monthly-materials/page.tsx           — slot "xơ" gộp PE + VISCOSE
+src/lib/kdsx/calculator-v2.ts                           — fallback giá xơ: category in [PE, VISCOSE]
+src/app/api/kdsx/monthly-actuals/[id]/sync/route.ts    — fallback giá xơ: category in [PE, VISCOSE]
+scripts/seed-material-types.ts                          — VISCOSE seed về category "VISCOSE"
+```
+
+### Key business logic implemented
+
+- **VISCOSE dùng chung slot xơ với PE** — công thức chi phí NVL vẫn là blend 2 thành phần (cottonRatio + (1−cottonRatio)); mặt hàng dùng Viscose gán vào `peMaterialTypeId`. Không có viscoseRatio riêng.
+- Mọi chỗ fallback "giá xơ gần nhất" đổi từ `category="PE"` sang `category in ["PE","VISCOSE"]`.
+- `material-prices/by-month`: VISCOSE tự rơi vào nhánh `else` → nhóm `pe` (xơ), không cần sửa.
+- `category` là field String (không phải enum Prisma) → KHÔNG cần migration.
+
+### Known limitations / Data notes
+
+- Row "Xơ Viscose" cũ trong DB đang có `category="PE"` (từ seed cũ). Category KHÔNG sửa được qua UI (chỉ set khi tạo mới). Nếu muốn nó hiện đúng nhóm VISCOSE, cần update trực tiếp DB hoặc tạo lại bản ghi.
+- Dashboard "Chi phí PE" thực chất là "chi phí xơ" (gồm cả Viscose) — tên field `totalPeCostVnd` giữ nguyên (strictly additive).
+
+### Bổ sung 2026-06-01 (fix giá xơ theo đúng loại pha)
+
+- Sợi 2 thành phần = cotton + xơ (PE **hoặc** Viscose), pha theo `cottonRatio` (VD 70/30, 65/35). Yêu cầu: pha với loại nào nhận đúng giá loại đó.
+- Fix branch fallback "không có kế hoạch" trong `monthly-actuals/[id]/sync/route.ts`: trước đây lấy giá xơ đầu tiên theo category (có thể nhầm PE↔Viscose). Nay đọc `ItemMonthlyMaterial.peMaterialTypeId` của mặt hàng để lấy ĐÚNG giá loại xơ đã gán; chỉ fallback category-default khi mặt hàng chưa cấu hình NVL. Khớp với logic calculator-v2 (dashboard) và branch "có kế hoạch" (dùng `planItem.pePriceUsd`).

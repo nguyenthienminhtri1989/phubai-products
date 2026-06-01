@@ -251,19 +251,53 @@ export async function POST(
         let pePriceUsd = 0;
         const cottonRatioValue = rate?.cottonRatio ?? 1.0;
 
-        // Fallback: lấy giá NVL đầu tiên từ MaterialPrice
-        const defaultCotton = await prisma.materialPrice.findFirst({
-          where: { yearMonth, materialType: { category: "COTTON", isActive: true } },
-          orderBy: { id: "asc" },
+        // Ưu tiên giá theo đúng loại NVL cấu hình cho mặt hàng (ItemMonthlyMaterial):
+        // pha với Viscose → giá Viscose, pha với PE → giá PE. Fallback giá đầu tiên
+        // theo category chỉ khi mặt hàng chưa cấu hình cơ cấu NVL.
+        const matConfig = await prisma.itemMonthlyMaterial.findFirst({
+          where: { itemId, yearMonth: { lte: yearMonth } },
+          orderBy: { yearMonth: "desc" },
         });
-        cottonPriceUsd = defaultCotton?.priceUsd ?? 0;
 
-        if (cottonRatioValue < 1.0) {
-          const defaultPe = await prisma.materialPrice.findFirst({
-            where: { yearMonth, materialType: { category: "PE", isActive: true } },
+        if (matConfig?.cottonMaterialTypeId) {
+          const cp = await prisma.materialPrice.findFirst({
+            where: {
+              materialTypeId: matConfig.cottonMaterialTypeId,
+              yearMonth: { lte: yearMonth },
+            },
+            orderBy: { yearMonth: "desc" },
+          });
+          cottonPriceUsd = cp?.priceUsd ?? 0;
+        } else {
+          const defaultCotton = await prisma.materialPrice.findFirst({
+            where: { yearMonth, materialType: { category: "COTTON", isActive: true } },
             orderBy: { id: "asc" },
           });
-          pePriceUsd = defaultPe?.priceUsd ?? 0;
+          cottonPriceUsd = defaultCotton?.priceUsd ?? 0;
+        }
+
+        if (cottonRatioValue < 1.0) {
+          if (matConfig?.peMaterialTypeId) {
+            // Lấy đúng giá loại xơ đã gán cho mặt hàng (PE hoặc Viscose)
+            const pp = await prisma.materialPrice.findFirst({
+              where: {
+                materialTypeId: matConfig.peMaterialTypeId,
+                yearMonth: { lte: yearMonth },
+              },
+              orderBy: { yearMonth: "desc" },
+            });
+            pePriceUsd = pp?.priceUsd ?? 0;
+          } else {
+            const defaultPe = await prisma.materialPrice.findFirst({
+              where: {
+                yearMonth,
+                // Xơ nhân tạo: gộp PE và VISCOSE
+                materialType: { category: { in: ["PE", "VISCOSE"] }, isActive: true },
+              },
+              orderBy: { id: "asc" },
+            });
+            pePriceUsd = defaultPe?.priceUsd ?? 0;
+          }
         }
 
         calcResult = calculateLineItem({

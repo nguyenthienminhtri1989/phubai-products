@@ -140,7 +140,8 @@ export async function calculateRevenuePnL(
   const fallbackPe = await prisma.materialPrice.findFirst({
     where: {
       yearMonth: { lte: yearMonth },
-      materialType: { category: "PE" },
+      // Xơ nhân tạo: gộp PE và VISCOSE (dùng chung slot xơ trong công thức)
+      materialType: { category: { in: ["PE", "VISCOSE"] } },
     },
     orderBy: { yearMonth: "desc" },
   });

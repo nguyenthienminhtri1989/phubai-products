@@ -75,7 +75,12 @@ export default function ItemMonthlyMaterialPage() {
     setRows(rowsRes.rows ?? []);
     const types = typesRes.materialTypes ?? typesRes ?? [];
     setCottonTypes(types.filter((t: MaterialType) => t.category === "COTTON"));
-    setPeTypes(types.filter((t: MaterialType) => t.category === "PE"));
+    // Slot "xơ" gộp cả PE và VISCOSE (đều là xơ nhân tạo, dùng chung công thức)
+    setPeTypes(
+      types.filter((t: MaterialType) =>
+        ["PE", "VISCOSE"].includes(t.category),
+      ),
+    );
     setLoading(false);
     setEdited(false);
     setSelectedIds([]);

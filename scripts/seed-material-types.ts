@@ -13,7 +13,7 @@ async function main() {
     { code: "CMIA", name: "Bông CMIA", category: "COTTON" },
     { code: "PE_BENMA", name: "PE Benma (Indo)", category: "PE" },
     { code: "PE_THAI", name: "PE Thái Lan", category: "PE" },
-    { code: "VISCOSE", name: "Xơ Viscose", category: "PE" },
+    { code: "VISCOSE", name: "Xơ Viscose", category: "VISCOSE" },
   ];
 
   for (const mt of materialTypes) {

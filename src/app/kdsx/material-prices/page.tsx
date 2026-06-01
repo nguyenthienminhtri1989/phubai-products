@@ -33,7 +33,7 @@ interface MaterialType {
   id: number;
   code: string;
   name: string;
-  category: "COTTON" | "PE";
+  category: "COTTON" | "PE" | "VISCOSE";
 }
 
 interface MaterialPrice {
@@ -48,6 +48,7 @@ interface MaterialPrice {
 const CATEGORY_COLOR: Record<string, string> = {
   COTTON: "gold",
   PE: "blue",
+  VISCOSE: "green",
 };
 
 export default function MaterialPricesPage() {
@@ -84,6 +85,7 @@ export default function MaterialPricesPage() {
   // Stats
   const cottonWithPrice = prices.filter((p) => p.materialType.category === "COTTON").length;
   const peWithPrice = prices.filter((p) => p.materialType.category === "PE").length;
+  const viscoseWithPrice = prices.filter((p) => p.materialType.category === "VISCOSE").length;
 
   function openAdd() {
     form.resetFields();
@@ -181,6 +183,7 @@ export default function MaterialPricesPage() {
 
   const cottonTypes = types.filter((t) => t.category === "COTTON");
   const peTypesList = types.filter((t) => t.category === "PE");
+  const viscoseTypesList = types.filter((t) => t.category === "VISCOSE");
 
   return (
     <div>
@@ -208,22 +211,28 @@ export default function MaterialPricesPage() {
 
       {/* Stats */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={8}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <div style={{ fontWeight: 600, color: "#595959", marginBottom: 4 }}>Tháng hiển thị</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#1677ff" }}>{filterYearMonth}</div>
           </Card>
         </Col>
-        <Col xs={12} sm={8}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <div style={{ fontWeight: 600, color: "#d4a017", marginBottom: 4 }}>Bông đã nhập giá</div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{cottonWithPrice} <Text type="secondary" style={{ fontSize: 13 }}>loại</Text></div>
           </Card>
         </Col>
-        <Col xs={12} sm={8}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <div style={{ fontWeight: 600, color: "#1677ff", marginBottom: 4 }}>PE/Xơ đã nhập giá</div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{peWithPrice} <Text type="secondary" style={{ fontSize: 13 }}>loại</Text></div>
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small">
+            <div style={{ fontWeight: 600, color: "#389e0d", marginBottom: 4 }}>Viscose đã nhập giá</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{viscoseWithPrice} <Text type="secondary" style={{ fontSize: 13 }}>loại</Text></div>
           </Card>
         </Col>
       </Row>
@@ -269,6 +278,10 @@ export default function MaterialPricesPage() {
                 {
                   label: "🔵 PE / Xơ",
                   options: peTypesList.map((t) => ({ label: `${t.name} (${t.code})`, value: t.id })),
+                },
+                {
+                  label: "🟢 VISCOSE",
+                  options: viscoseTypesList.map((t) => ({ label: `${t.name} (${t.code})`, value: t.id })),
                 },
               ]}
             />
