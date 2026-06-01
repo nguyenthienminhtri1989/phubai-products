@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
   const monthEnd = new Date(yr, mo, 0); // VD: 31/5/2026
 
   const items = await prisma.item.findMany({
-    where: { isActive: true },
     include: {
       // Định mức hiệu lực TẠI tháng đang xem (không phải chỉ bản ghi đang hiệu lực hôm nay)
       rawMaterialRates: {
