@@ -23,7 +23,8 @@ import {
   Alert,
   Form,
 } from "antd";
-import { ReloadOutlined, CopyOutlined, SaveOutlined } from "@ant-design/icons";
+import { ReloadOutlined, CopyOutlined, SaveOutlined, TrophyOutlined } from "@ant-design/icons";
+import Modal from "antd/es/modal/Modal";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 
@@ -136,7 +137,8 @@ interface ContractProgress {
   deferToMonth: string | null;
   quotaThisMonth: number | null;
   isRemainder: boolean;
-  status: "ACTIVE" | "COMPLETED" | "DEFERRED";
+  status: "ACTIVE" | "NEAR_COMPLETE" | "COMPLETED" | "DEFERRED";
+  completedThisMonth: boolean;
 }
 
 interface MatrixData {
@@ -223,6 +225,8 @@ export default function RevenueDashboard() {
   const [factories, setFactories] = useState<{ id: number; name: string }[]>(
     [],
   );
+
+  const [completedModalOpen, setCompletedModalOpen] = useState(false);
 
   // Fixed costs state
   const [fixedCosts, setFixedCosts] = useState<FixedCostLine[]>([]);
@@ -544,12 +548,24 @@ export default function RevenueDashboard() {
       title: "Trạng thái",
       dataIndex: "status",
       key: "status",
-      width: 100,
-      render: (v) => {
+      width: 120,
+      filters: [
+        { text: "Đang chạy", value: "ACTIVE" },
+        { text: "Gần xong", value: "NEAR_COMPLETE" },
+        { text: "Hoàn thành", value: "COMPLETED" },
+        { text: "Hoãn", value: "DEFERRED" },
+      ],
+      onFilter: (value, record) => record.status === value,
+      render: (v, r) => {
+        if (v === "DEFERRED" && r.deferToMonth) {
+          const monthNum = parseInt(r.deferToMonth.split("-")[1], 10);
+          return <Tag color="orange">Hoãn đến T{monthNum}</Tag>;
+        }
         const map: Record<string, { color: string; label: string }> = {
-          ACTIVE: { color: "processing", label: "Active" },
-          COMPLETED: { color: "success", label: "Hoàn thành" },
-          DEFERRED: { color: "warning", label: "Hoãn" },
+          ACTIVE: { color: "default", label: "Đang chạy" },
+          NEAR_COMPLETE: { color: "gold", label: "Gần xong" },
+          COMPLETED: { color: "success", label: "✓ Hoàn thành" },
+          DEFERRED: { color: "orange", label: "Hoãn" },
         };
         const cfg = map[v] ?? { color: "default", label: v };
         return <Tag color={cfg.color}>{cfg.label}</Tag>;
@@ -784,6 +800,70 @@ export default function RevenueDashboard() {
               color="#722ed1"
             />
           )}
+
+          {/* Widget: HĐ hoàn thành tháng này */}
+          {(() => {
+            const completedNow = contracts.filter((c) => c.completedThisMonth);
+            return (
+              <>
+                <Card
+                  size="small"
+                  style={{ marginBottom: 12, cursor: completedNow.length > 0 ? "pointer" : "default" }}
+                  onClick={() => completedNow.length > 0 && setCompletedModalOpen(true)}
+                  hoverable={completedNow.length > 0}
+                >
+                  <Statistic
+                    title={
+                      <Space>
+                        <TrophyOutlined style={{ color: "#faad14" }} />
+                        <span>HĐ hoàn thành tháng này</span>
+                        {completedNow.length > 0 && (
+                          <Text type="secondary" style={{ fontSize: 12 }}>(bấm để xem danh sách)</Text>
+                        )}
+                      </Space>
+                    }
+                    value={completedNow.length}
+                    suffix="hợp đồng"
+                    valueStyle={{ color: completedNow.length > 0 ? "#52c41a" : "#bfbfbf" }}
+                  />
+                </Card>
+                <Modal
+                  title={<Space><TrophyOutlined style={{ color: "#faad14" }} /><span>HĐ hoàn thành trong tháng {yearMonth}</span></Space>}
+                  open={completedModalOpen}
+                  onCancel={() => setCompletedModalOpen(false)}
+                  footer={null}
+                  width={700}
+                >
+                  <Table
+                    dataSource={completedNow}
+                    rowKey="salesOrderItemId"
+                    size="small"
+                    pagination={false}
+                    columns={[
+                      { title: "Số HĐ", dataIndex: "orderNo", key: "orderNo", width: 130 },
+                      { title: "Khách hàng", dataIndex: "customerName", key: "customerName", width: 150, ellipsis: true },
+                      { title: "Mặt hàng", dataIndex: "itemName", key: "itemName", width: 160, ellipsis: true },
+                      {
+                        title: "Tổng HĐ (kg)",
+                        dataIndex: "totalQty",
+                        key: "totalQty",
+                        align: "right" as const,
+                        width: 110,
+                        render: (v: number) => new Intl.NumberFormat("vi-VN").format(v),
+                      },
+                      {
+                        title: "Deadline",
+                        dataIndex: "deadline",
+                        key: "deadline",
+                        width: 100,
+                        render: (v: string | null) => v ?? "-",
+                      },
+                    ]}
+                  />
+                </Modal>
+              </>
+            );
+          })()}
 
           {/* Contract progress table */}
           <Card

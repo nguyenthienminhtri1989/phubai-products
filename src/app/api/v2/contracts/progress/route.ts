@@ -94,14 +94,23 @@ export async function GET(req: NextRequest) {
           ? Math.min(100, (totalAllocated / soi.plannedQty) * 100)
           : 0;
 
-      let status: "ACTIVE" | "COMPLETED" | "DEFERRED";
+      let status: "ACTIVE" | "NEAR_COMPLETE" | "COMPLETED" | "DEFERRED";
       if (soi.deferToMonth && soi.deferToMonth > yearMonth) {
         status = "DEFERRED";
       } else if (remainingQty <= 0) {
         status = "COMPLETED";
+      } else if (progressPct >= 80) {
+        status = "NEAR_COMPLETE";
       } else {
         status = "ACTIVE";
       }
+
+      // completedThisMonth: đạt 100% trong tháng này (tháng trước chưa đạt)
+      const progressBeforeThisMonth =
+        soi.plannedQty > 0
+          ? Math.min(100, ((soi.deliveredQty + allocatedPreviousMonths) / soi.plannedQty) * 100)
+          : 0;
+      const completedThisMonth = progressBeforeThisMonth < 100 && progressPct >= 100;
 
       const deadline = soi.deliveryDate ?? soi.order.deliveryDate;
 
@@ -129,12 +138,13 @@ export async function GET(req: NextRequest) {
         quotaThisMonth: quota?.quotaQty ?? null,
         isRemainder: quota?.isRemainder ?? false,
         status,
+        completedThisMonth,
       };
     });
 
-    // Sort: ACTIVE trước, COMPLETED sau, DEFERRED cuối; trong mỗi nhóm sort theo deadline
+    // Sort: ACTIVE/NEAR_COMPLETE trước, COMPLETED sau, DEFERRED cuối; trong mỗi nhóm sort theo deadline
     contracts.sort((a, b) => {
-      const statusOrder = { ACTIVE: 0, COMPLETED: 1, DEFERRED: 2 };
+      const statusOrder = { ACTIVE: 0, NEAR_COMPLETE: 1, COMPLETED: 2, DEFERRED: 3 };
       const sDiff = statusOrder[a.status] - statusOrder[b.status];
       if (sDiff !== 0) return sDiff;
       if (a.deadline && b.deadline) {

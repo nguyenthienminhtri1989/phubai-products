@@ -48,18 +48,18 @@ export async function runAllocation(factoryId: number, date: Date) {
         ),
       ])
 
-      // Reset DONE orders về ACTIVE (có thể không còn đủ sau khi undo)
-      const affectedOrders = await prisma.salesOrderItem.findMany({
-        where: { id: { in: Array.from(decrements.keys()) } },
-        select: { orderId: true },
-      })
-      const orderIds = [...new Set(affectedOrders.map((i) => i.orderId))]
-      if (orderIds.length > 0) {
-        await prisma.salesOrder.updateMany({
-          where: { id: { in: orderIds }, status: 'DONE' },
-          data: { status: 'ACTIVE', completedDate: null },
-        })
-      }
+      // DISABLED: V2 quản lý completion on-the-fly qua engine v2 + MonthlyQuota, không tự đóng HĐ trong DB
+      // const affectedOrders = await prisma.salesOrderItem.findMany({
+      //   where: { id: { in: Array.from(decrements.keys()) } },
+      //   select: { orderId: true },
+      // })
+      // const orderIds = [...new Set(affectedOrders.map((i) => i.orderId))]
+      // if (orderIds.length > 0) {
+      //   await prisma.salesOrder.updateMany({
+      //     where: { id: { in: orderIds }, status: 'DONE' },
+      //     data: { status: 'ACTIVE', completedDate: null },
+      //   })
+      // }
     }
 
     // 3. HĐ cần mặt hàng này, chưa xong, ưu tiên deadline sớm nhất
@@ -106,19 +106,19 @@ export async function runAllocation(factoryId: number, date: Date) {
         }),
       ])
 
-      // Kiểm tra HĐ đã hoàn thành chưa
-      const updatedItem = await prisma.salesOrderItem.findUnique({
-        where: { id: orderItem.id },
-      })
-      if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
-        const allDone = await checkAllItemsDone(orderItem.orderId)
-        if (allDone) {
-          await prisma.salesOrder.update({
-            where: { id: orderItem.orderId },
-            data: { status: 'DONE', completedDate: new Date() },
-          })
-        }
-      }
+      // DISABLED: V2 quản lý completion on-the-fly qua engine v2 + MonthlyQuota, không tự đóng HĐ trong DB
+      // const updatedItem = await prisma.salesOrderItem.findUnique({
+      //   where: { id: orderItem.id },
+      // })
+      // if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
+      //   const allDone = await checkAllItemsDone(orderItem.orderId)
+      //   if (allDone) {
+      //     await prisma.salesOrder.update({
+      //       where: { id: orderItem.orderId },
+      //       data: { status: 'DONE', completedDate: new Date() },
+      //     })
+      //   }
+      // }
 
       remaining -= toAllocate
     }
@@ -191,18 +191,18 @@ export async function runAllocationKD(factoryId: number, date: Date) {
         ),
       ])
 
-      // Reset DONE orders về ACTIVE
-      const affectedOrders = await prisma.salesOrderItem.findMany({
-        where: { id: { in: Array.from(decrements.keys()) } },
-        select: { orderId: true },
-      })
-      const orderIds = [...new Set(affectedOrders.map((i) => i.orderId))]
-      if (orderIds.length > 0) {
-        await prisma.salesOrder.updateMany({
-          where: { id: { in: orderIds }, status: 'DONE' },
-          data: { status: 'ACTIVE', completedDate: null },
-        })
-      }
+      // DISABLED: V2 quản lý completion on-the-fly qua engine v2 + MonthlyQuota, không tự đóng HĐ trong DB
+      // const affectedOrders = await prisma.salesOrderItem.findMany({
+      //   where: { id: { in: Array.from(decrements.keys()) } },
+      //   select: { orderId: true },
+      // })
+      // const orderIds = [...new Set(affectedOrders.map((i) => i.orderId))]
+      // if (orderIds.length > 0) {
+      //   await prisma.salesOrder.updateMany({
+      //     where: { id: { in: orderIds }, status: 'DONE' },
+      //     data: { status: 'ACTIVE', completedDate: null },
+      //   })
+      // }
     }
 
     // 3. HĐ cần mặt hàng này, chưa xong, ưu tiên deadline sớm nhất
@@ -249,19 +249,19 @@ export async function runAllocationKD(factoryId: number, date: Date) {
         }),
       ])
 
-      // Kiểm tra HĐ đã hoàn thành chưa
-      const updatedItem = await prisma.salesOrderItem.findUnique({
-        where: { id: orderItem.id },
-      })
-      if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
-        const allDone = await checkAllItemsDone(orderItem.orderId)
-        if (allDone) {
-          await prisma.salesOrder.update({
-            where: { id: orderItem.orderId },
-            data: { status: 'DONE', completedDate: new Date() },
-          })
-        }
-      }
+      // DISABLED: V2 quản lý completion on-the-fly qua engine v2 + MonthlyQuota, không tự đóng HĐ trong DB
+      // const updatedItem = await prisma.salesOrderItem.findUnique({
+      //   where: { id: orderItem.id },
+      // })
+      // if (updatedItem && (updatedItem.allocatedQty + (updatedItem.deliveredQty ?? 0)) >= orderItem.plannedQty) {
+      //   const allDone = await checkAllItemsDone(orderItem.orderId)
+      //   if (allDone) {
+      //     await prisma.salesOrder.update({
+      //       where: { id: orderItem.orderId },
+      //       data: { status: 'DONE', completedDate: new Date() },
+      //     })
+      //   }
+      // }
 
       remaining -= toAllocate
     }
@@ -329,9 +329,14 @@ export async function recalculateAllocation(
   }
 
   // 4. Reset status DONE/OVERDUE → ACTIVE (trừ CANCELLED)
+  // DISABLED: V2 quản lý completion on-the-fly qua engine v2 + MonthlyQuota, không tự đóng HĐ trong DB
+  // await prisma.salesOrder.updateMany({
+  //   where: { factoryId, status: { in: ['DONE', 'OVERDUE'] } },
+  //   data: { status: 'ACTIVE', completedDate: null },
+  // })
   await prisma.salesOrder.updateMany({
     where: { factoryId, status: { in: ['DONE', 'OVERDUE'] } },
-    data: { status: 'ACTIVE', completedDate: null },
+    data: { status: 'ACTIVE' },
   })
 
   // 5. Chạy lại từng ngày theo thứ tự
