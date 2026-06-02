@@ -267,6 +267,7 @@ export default function RawMaterialRatesPage() {
     setEditMode("new-version");
     setEditingRate(r);
     setSelectedItem(r.item);
+    // Pre-fill từ phiên bản gần nhất (kể cả đã đóng), user chỉ sửa chỗ thay đổi
     form.setFieldsValue({
       itemId: r.itemId,
       cottonRate: r.cottonRate,
@@ -307,8 +308,8 @@ export default function RawMaterialRatesPage() {
         url = `/api/kdsx/raw-material-rates/${editingRate!.id}`;
         method = "PUT";
       } else {
-        // new-version
-        payload.currentId = editingRate!.id;
+        // new-version — gửi itemId, server tự tìm active version
+        payload.itemId = editingRate!.itemId;
         url = "/api/kdsx/raw-material-rates/new-version";
         method = "POST";
       }
@@ -457,20 +458,23 @@ export default function RawMaterialRatesPage() {
       key: "action",
       width: 160,
       fixed: "right" as const,
-      render: (_: unknown, r: RawMaterialRate) => (
+      render: (_: unknown, r: RawMaterialRate) => {
+        const hasActiveForItem = activeRateIdByItem.has(r.itemId);
+        const tooltipNewVersion = hasActiveForItem
+          ? "Tạo phiên bản định mức mới — phiên bản đang active sẽ tự động đóng lại"
+          : "Tạo phiên bản định mức mới (mặt hàng này chưa có phiên bản active)";
+        return (
         <Space size={4}>
-          {isActiveRate(r) && (
-            <Tooltip title="Tạo phiên bản định mức mới từ một ngày — phiên bản cũ sẽ được đóng lại">
-              <Button
-                size="small"
-                type="primary"
-                icon={<HistoryOutlined />}
-                onClick={() => openNewVersion(r)}
-              >
-                Phiên bản mới
-              </Button>
-            </Tooltip>
-          )}
+          <Tooltip title={tooltipNewVersion}>
+            <Button
+              size="small"
+              type="primary"
+              icon={<HistoryOutlined />}
+              onClick={() => openNewVersion(r)}
+            >
+              Phiên bản mới
+            </Button>
+          </Tooltip>
           <Tooltip title="Sửa lỗi nhập liệu — chỉ dùng khi chưa có sản xuất nào áp dụng định mức này">
             <Button
               size="small"
@@ -487,7 +491,8 @@ export default function RawMaterialRatesPage() {
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
-      ),
+        );
+      },
     },
   ];
 
@@ -791,26 +796,35 @@ export default function RawMaterialRatesPage() {
 
             {/* Effective From */}
             <Col span={12}>
-              <Form.Item
-                name="effectiveFrom"
-                label={
-                  editMode === "new-version"
-                    ? "Ngày áp dụng định mức mới (phiên bản cũ sẽ hết hiệu lực ngày hôm trước)"
-                    : "Hiệu lực từ ngày"
-                }
-                rules={[{ required: true, message: "Chọn ngày hiệu lực" }]}
-              >
-                <DatePicker
-                  style={{ width: "100%" }}
-                  format="DD/MM/YYYY"
-                  placeholder="dd/mm/yyyy"
-                  disabledDate={
-                    editMode === "new-version" && editingRate
-                      ? (d) => d.isBefore(dayjs(editingRate.effectiveFrom).add(1, "day"))
-                      : undefined
-                  }
-                />
-              </Form.Item>
+              {(() => {
+                // Tìm active version của item đang được tạo phiên bản mới
+                const activeId = editingRate ? activeRateIdByItem.get(editingRate.itemId) : undefined;
+                const activeVersion = activeId ? rates.find((x) => x.id === activeId) : undefined;
+                const hasActive = !!activeVersion;
+
+                const labelNewVersion = hasActive
+                  ? `Ngày áp dụng mới (định mức active từ ${dayjs(activeVersion!.effectiveFrom).format("DD/MM/YYYY")} sẽ tự động đóng vào ngày hôm trước)`
+                  : "Ngày bắt đầu áp dụng định mức";
+
+                return (
+                  <Form.Item
+                    name="effectiveFrom"
+                    label={editMode === "new-version" ? labelNewVersion : "Hiệu lực từ ngày"}
+                    rules={[{ required: true, message: "Chọn ngày hiệu lực" }]}
+                  >
+                    <DatePicker
+                      style={{ width: "100%" }}
+                      format="DD/MM/YYYY"
+                      placeholder="dd/mm/yyyy"
+                      disabledDate={
+                        editMode === "new-version" && activeVersion
+                          ? (d) => d.isBefore(dayjs(activeVersion.effectiveFrom).add(1, "day"))
+                          : undefined
+                      }
+                    />
+                  </Form.Item>
+                );
+              })()}
             </Col>
 
             {/* Effective To — chỉ hiện cho fix/create, không cho new-version */}
