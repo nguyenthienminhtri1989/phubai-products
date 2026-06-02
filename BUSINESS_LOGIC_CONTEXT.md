@@ -4037,3 +4037,45 @@ src/app/kdsx/monthly-quotas/page.tsx — thêm state showCompleted + checkbox; u
 
 ### Known limitations
 - Validate "mỗi mặt hàng phải có đúng 1 HĐ Cuối (REMAINDER)" vẫn áp dụng cho group multi (kể cả khi có HĐ hoàn thành) — giữ nguyên thiết kế engine.
+
+---
+
+## KDSX — Định mức Tiêu hao NVL — Versioning (không UPDATE record cũ)
+
+**Status:** ✅ Completed 2026-06-02
+
+### What was built
+
+Chuyển trang Định mức Tiêu hao NVL từ cơ chế UPDATE-trực-tiếp sang VERSIONING: khi định mức thực tế thay đổi, phiên bản cũ được đóng lại (effectiveTo = ngày mới - 1) và phiên bản mới được tạo, đảm bảo số liệu DT/LN các tháng đã qua không bị lệch.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/raw-material-rates/[id]/route.ts     — PUT thêm check: nếu đã có ProductionLog dùng → từ chối 409
+src/app/api/kdsx/raw-material-rates/new-version/route.ts — POST mới: transaction đóng cũ + tạo phiên bản mới
+src/app/kdsx/raw-material-rates/page.tsx              — UI: 2 nút (Phiên bản mới / Sửa lỗi), bảng hiển thị lịch sử per item, rowSpan gộp tên mặt hàng
+```
+
+### Key business logic implemented
+
+- PUT /[id]: kiểm tra `productionLog.count` với itemId + range effectiveFrom/effectiveTo của rate đó. Nếu usedCount > 0 → 409, bắt user dùng new-version
+- POST /new-version: transaction `$transaction([update cũ effectiveTo = newDate-1, create mới effectiveTo=null])`
+- UI phân biệt 2 thao tác: "Phiên bản mới" (active records) vs "Sửa lỗi nhập liệu" (mọi record)
+- Cột "Trạng thái": isActive = record có id trùng với activeRateIdByItem[itemId] (effectiveTo=null + effectiveFrom lớn nhất)
+- rowSpan gộp cột Mặt hàng / Nhóm sợi cho các versions cùng item
+- Historical rows tô màu mờ qua `.rate-history-row` CSS class
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /api/kdsx/raw-material-rates | Lấy tất cả rates |
+| POST   | /api/kdsx/raw-material-rates | Tạo rate đầu tiên cho item mới |
+| PUT    | /api/kdsx/raw-material-rates/[id] | Sửa lỗi nhập liệu (từ chối nếu đã có ProductionLog) |
+| DELETE | /api/kdsx/raw-material-rates/[id] | Xóa (ADMIN only) |
+| POST   | /api/kdsx/raw-material-rates/new-version | Tạo phiên bản mới, đóng phiên bản cũ |
+
+### Known limitations
+
+- Check "đã được áp dụng" chỉ dựa trên ProductionLog — nếu dùng SalesOrderLineItemActual mà không có ProductionLog thì có thể bypass
+- `effectiveTo` của new-version luôn = null (không hạn chế ngày kết thúc); user muốn đặt ngày kết thúc phải dùng Sửa lỗi sau đó

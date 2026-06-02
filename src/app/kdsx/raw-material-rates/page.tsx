@@ -29,6 +29,7 @@ import {
   ExperimentOutlined,
   WarningOutlined,
   InfoCircleOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 
@@ -44,7 +45,7 @@ interface ItemInfo {
   ne: number | null;
   material: string | null;
   composition: string | null;
-  yarnType?: string; // "SINGLE" | "BLENDED"
+  yarnType?: string;
 }
 
 interface RawMaterialRate {
@@ -53,7 +54,7 @@ interface RawMaterialRate {
   item: ItemInfo;
   cottonRate: number | null;
   peRate: number | null;
-  cottonRatio: number; // Tỷ lệ cotton (0-1), default 1.0
+  cottonRatio: number;
   wasteRate: number | null;
   doubleTwistGcRate: number | null;
   effectiveFrom: string;
@@ -61,8 +62,10 @@ interface RawMaterialRate {
   note: string | null;
 }
 
+type EditMode = "create" | "fix" | "new-version";
+
 // =============================================
-// HELPERS — phát hiện nhóm sợi từ tên
+// HELPERS
 // =============================================
 type YarnGroup = "COCD" | "COCM" | "CVCM" | "CRC" | "KHÁC";
 
@@ -70,18 +73,16 @@ function detectYarnGroup(name: string): YarnGroup {
   const upper = name.toUpperCase();
   if (upper.includes("CVCM")) return "CVCM";
   if (upper.includes("CRC")) return "CRC";
-  if (upper.includes("COCM") || upper.includes("COCM")) return "COCM";
+  if (upper.includes("COCM")) return "COCM";
   if (upper.includes("COCD") || upper.includes("CD")) return "COCD";
   if (upper.includes("CM")) return "COCM";
   return "KHÁC";
 }
 
-// Sợi xe đôi: tên chứa "/2" hoặc "XE ĐÔI"
 function isDoubleTwist(name: string): boolean {
   return name.includes("/2") || name.toUpperCase().includes("XE ĐÔI");
 }
 
-// Chỉ BLENDED mới có PE (dùng yarnType thay vì detect từ tên)
 function hasPE(item: ItemInfo): boolean {
   return item.yarnType === "BLENDED";
 }
@@ -101,16 +102,6 @@ function fmt3(v: number | null | undefined) {
   return v.toFixed(3);
 }
 
-function fmtPct(v: number | null | undefined) {
-  if (v == null) return "—";
-  return `${(v * 100).toFixed(0)}%`;
-}
-
-function fmt2(v: number | null | undefined) {
-  if (v == null) return "—";
-  return v.toFixed(2);
-}
-
 // =============================================
 // COMPONENT
 // =============================================
@@ -119,15 +110,13 @@ export default function RawMaterialRatesPage() {
   const [allItems, setAllItems] = useState<ItemInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<RawMaterialRate | null>(null);
+  const [editMode, setEditMode] = useState<EditMode>("create");
+  const [editingRate, setEditingRate] = useState<RawMaterialRate | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
-  // Filter state
   const [searchText, setSearchText] = useState("");
   const [filterGroup, setFilterGroup] = useState<YarnGroup | "ALL">("ALL");
-
-  // Dynamic form state
   const [selectedItem, setSelectedItem] = useState<ItemInfo | null>(null);
 
   const fetchRates = useCallback(async () => {
@@ -151,17 +140,40 @@ export default function RawMaterialRatesPage() {
     fetchItems();
   }, [fetchRates, fetchItems]);
 
-  // Items đã có định mức (có ít nhất 1 bản ghi)
   const itemIdsWithRate = useMemo(() => new Set(rates.map((r) => r.itemId)), [rates]);
 
-  // Items chưa có định mức — dùng cho form tạo mới
   const itemsWithoutRate = useMemo(
     () => allItems.filter((i) => !itemIdsWithRate.has(i.id)),
     [allItems, itemIdsWithRate]
   );
 
   // =============================================
-  // STATS — 4 cards
+  // ACTIVE RATE — mỗi item chỉ có 1 active (effectiveTo = null, effectiveFrom lớn nhất)
+  // =============================================
+  const activeRateIdByItem = useMemo(() => {
+    const map = new Map<number, number>(); // itemId -> rateId
+    rates.forEach((r) => {
+      if (!r.effectiveTo) {
+        const existingId = map.get(r.itemId);
+        if (!existingId) {
+          map.set(r.itemId, r.id);
+        } else {
+          const existing = rates.find((x) => x.id === existingId)!;
+          if (dayjs(r.effectiveFrom).isAfter(dayjs(existing.effectiveFrom))) {
+            map.set(r.itemId, r.id);
+          }
+        }
+      }
+    });
+    return map;
+  }, [rates]);
+
+  function isActiveRate(r: RawMaterialRate) {
+    return activeRateIdByItem.get(r.itemId) === r.id;
+  }
+
+  // =============================================
+  // STATS
   // =============================================
   const stats = useMemo(() => {
     return GROUP_ORDER.map((group) => {
@@ -171,14 +183,13 @@ export default function RawMaterialRatesPage() {
     }).filter((s) => s.total > 0);
   }, [allItems, itemIdsWithRate]);
 
-  // Items chưa có định mức (cảnh báo)
   const unconfiguredItems = useMemo(
     () => allItems.filter((i) => !itemIdsWithRate.has(i.id)),
     [allItems, itemIdsWithRate]
   );
 
   // =============================================
-  // FILTER TABLE
+  // FILTER + SORT
   // =============================================
   const filteredRates = useMemo(() => {
     let data = [...rates];
@@ -189,29 +200,56 @@ export default function RawMaterialRatesPage() {
     if (filterGroup !== "ALL") {
       data = data.filter((r) => detectYarnGroup(r.item.name) === filterGroup);
     }
-    // Sort: nhóm sợi → tên item
     data.sort((a, b) => {
       const ga = GROUP_ORDER.indexOf(detectYarnGroup(a.item.name));
       const gb = GROUP_ORDER.indexOf(detectYarnGroup(b.item.name));
       if (ga !== gb) return ga - gb;
-      return a.item.name.localeCompare(b.item.name, "vi");
+      const nameCompare = a.item.name.localeCompare(b.item.name, "vi");
+      if (nameCompare !== 0) return nameCompare;
+      // Cùng item: active trước, rồi sắp xếp effectiveFrom giảm dần
+      const aActive = isActiveRate(a) ? 0 : 1;
+      const bActive = isActiveRate(b) ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return dayjs(b.effectiveFrom).diff(dayjs(a.effectiveFrom));
     });
     return data;
-  }, [rates, searchText, filterGroup]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rates, searchText, filterGroup, activeRateIdByItem]);
 
   // =============================================
-  // MODAL OPEN
+  // ROW SPAN — gộp cột "Mặt hàng" cho các rows cùng item
+  // =============================================
+  const rowSpanMap = useMemo(() => {
+    const countMap = new Map<number, number>();
+    filteredRates.forEach((r) => countMap.set(r.itemId, (countMap.get(r.itemId) || 0) + 1));
+    const result = new Map<number, number>(); // rateId -> rowSpan
+    const seen = new Set<number>();
+    filteredRates.forEach((r) => {
+      if (!seen.has(r.itemId)) {
+        result.set(r.id, countMap.get(r.itemId)!);
+        seen.add(r.itemId);
+      } else {
+        result.set(r.id, 0);
+      }
+    });
+    return result;
+  }, [filteredRates]);
+
+  // =============================================
+  // MODAL OPEN HELPERS
   // =============================================
   function openCreate() {
-    setEditing(null);
+    setEditMode("create");
+    setEditingRate(null);
     setSelectedItem(null);
     form.resetFields();
     form.setFieldsValue({ effectiveFrom: dayjs(), cottonRatio: 100 });
     setModalOpen(true);
   }
 
-  function openEdit(r: RawMaterialRate) {
-    setEditing(r);
+  function openFixTypo(r: RawMaterialRate) {
+    setEditMode("fix");
+    setEditingRate(r);
     setSelectedItem(r.item);
     form.setFieldsValue({
       itemId: r.itemId,
@@ -225,6 +263,22 @@ export default function RawMaterialRatesPage() {
     setModalOpen(true);
   }
 
+  function openNewVersion(r: RawMaterialRate) {
+    setEditMode("new-version");
+    setEditingRate(r);
+    setSelectedItem(r.item);
+    form.setFieldsValue({
+      itemId: r.itemId,
+      cottonRate: r.cottonRate,
+      cottonRatio: Math.round(r.cottonRatio * 100),
+      peRate: r.peRate,
+      effectiveFrom: dayjs(), // mặc định hôm nay, user điều chỉnh
+      effectiveTo: null,
+      note: r.note,
+    });
+    setModalOpen(true);
+  }
+
   // =============================================
   // SAVE
   // =============================================
@@ -233,24 +287,31 @@ export default function RawMaterialRatesPage() {
       const values = await form.validateFields();
       setSaving(true);
 
-      const payload = {
-        itemId: values.itemId,
+      const payload: Record<string, unknown> = {
         cottonRate: values.cottonRate ?? null,
         cottonRatio: values.cottonRatio != null ? values.cottonRatio / 100 : 1.0,
         peRate: values.peRate ?? null,
-        effectiveFrom: values.effectiveFrom
-          ? values.effectiveFrom.format("YYYY-MM-DD")
-          : null,
-        effectiveTo: values.effectiveTo
-          ? values.effectiveTo.format("YYYY-MM-DD")
-          : null,
+        effectiveFrom: values.effectiveFrom ? values.effectiveFrom.format("YYYY-MM-DD") : null,
+        effectiveTo: values.effectiveTo ? values.effectiveTo.format("YYYY-MM-DD") : null,
         note: values.note || null,
       };
 
-      const url = editing
-        ? `/api/kdsx/raw-material-rates/${editing.id}`
-        : "/api/kdsx/raw-material-rates";
-      const method = editing ? "PUT" : "POST";
+      let url: string;
+      let method: string;
+
+      if (editMode === "create") {
+        payload.itemId = values.itemId;
+        url = "/api/kdsx/raw-material-rates";
+        method = "POST";
+      } else if (editMode === "fix") {
+        url = `/api/kdsx/raw-material-rates/${editingRate!.id}`;
+        method = "PUT";
+      } else {
+        // new-version
+        payload.currentId = editingRate!.id;
+        url = "/api/kdsx/raw-material-rates/new-version";
+        method = "POST";
+      }
 
       const res = await fetch(url, {
         method,
@@ -264,20 +325,25 @@ export default function RawMaterialRatesPage() {
         return;
       }
 
-      message.success(editing ? "Đã cập nhật định mức" : "Đã tạo định mức mới");
+      const successMsg =
+        editMode === "create"
+          ? "Đã tạo định mức mới"
+          : editMode === "fix"
+          ? "Đã sửa lỗi nhập liệu"
+          : "Đã tạo phiên bản định mức mới — phiên bản cũ đã được đóng lại";
+
+      message.success(successMsg);
       setModalOpen(false);
       fetchRates();
     } catch {
-      // validation error — antd shows inline
+      // antd validation errors are shown inline
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: number) {
-    const res = await fetch(`/api/kdsx/raw-material-rates/${id}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(`/api/kdsx/raw-material-rates/${id}`, { method: "DELETE" });
     if (res.ok) {
       message.success("Đã xóa");
       fetchRates();
@@ -295,6 +361,7 @@ export default function RawMaterialRatesPage() {
       title: "Mặt hàng",
       key: "item",
       width: 160,
+      onCell: (r: RawMaterialRate) => ({ rowSpan: rowSpanMap.get(r.id) ?? 1 }),
       render: (_: unknown, r: RawMaterialRate) => (
         <Text strong>{r.item.name}</Text>
       ),
@@ -302,11 +369,23 @@ export default function RawMaterialRatesPage() {
     {
       title: "Nhóm sợi",
       key: "group",
-      width: 90,
+      width: 80,
+      onCell: (r: RawMaterialRate) => ({ rowSpan: rowSpanMap.get(r.id) ?? 1 }),
       render: (_: unknown, r: RawMaterialRate) => {
         const g = detectYarnGroup(r.item.name);
         return <Tag color={GROUP_COLORS[g]}>{g}</Tag>;
       },
+    },
+    {
+      title: "Trạng thái",
+      key: "status",
+      width: 120,
+      render: (_: unknown, r: RawMaterialRate) =>
+        isActiveRate(r) ? (
+          <Tag color="green">Đang áp dụng</Tag>
+        ) : (
+          <Tag color="default">Lịch sử</Tag>
+        ),
     },
     {
       title: (
@@ -334,7 +413,7 @@ export default function RawMaterialRatesPage() {
         if (cr >= 1.0) return <Tag color="green">100% cotton</Tag>;
         return (
           <Tag color="orange">
-            {Math.round(cr * 100)}% cotton / {Math.round((1 - cr) * 100)}% PE
+            {Math.round(cr * 100)}% / {Math.round((1 - cr) * 100)}% PE
           </Tag>
         );
       },
@@ -360,9 +439,7 @@ export default function RawMaterialRatesPage() {
       key: "effectiveFrom",
       width: 110,
       render: (_: unknown, r: RawMaterialRate) =>
-        r.effectiveFrom
-          ? dayjs(r.effectiveFrom).format("DD/MM/YYYY")
-          : "—",
+        r.effectiveFrom ? dayjs(r.effectiveFrom).format("DD/MM/YYYY") : "—",
     },
     {
       title: "Đến",
@@ -378,15 +455,29 @@ export default function RawMaterialRatesPage() {
     {
       title: "Thao tác",
       key: "action",
-      width: 90,
+      width: 160,
       fixed: "right" as const,
       render: (_: unknown, r: RawMaterialRate) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openEdit(r)}
-          />
+        <Space size={4}>
+          {isActiveRate(r) && (
+            <Tooltip title="Tạo phiên bản định mức mới từ một ngày — phiên bản cũ sẽ được đóng lại">
+              <Button
+                size="small"
+                type="primary"
+                icon={<HistoryOutlined />}
+                onClick={() => openNewVersion(r)}
+              >
+                Phiên bản mới
+              </Button>
+            </Tooltip>
+          )}
+          <Tooltip title="Sửa lỗi nhập liệu — chỉ dùng khi chưa có sản xuất nào áp dụng định mức này">
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => openFixTypo(r)}
+            />
+          </Tooltip>
           <Popconfirm
             title="Xóa định mức này?"
             onConfirm={() => handleDelete(r.id)}
@@ -401,8 +492,15 @@ export default function RawMaterialRatesPage() {
   ];
 
   // =============================================
-  // RENDER
+  // MODAL TITLE & DESCRIPTION
   // =============================================
+  const modalTitle = useMemo(() => {
+    if (editMode === "create") return "Thêm định mức tiêu hao NVL";
+    if (editMode === "fix")
+      return `Sửa lỗi nhập liệu: ${editingRate?.item.name}`;
+    return `Tạo phiên bản định mức mới: ${editingRate?.item.name}`;
+  }, [editMode, editingRate]);
+
   const showPE = selectedItem ? hasPE(selectedItem) : false;
 
   return (
@@ -433,8 +531,19 @@ export default function RawMaterialRatesPage() {
       <Row gutter={12} style={{ marginBottom: 16 }}>
         {stats.map((s) => (
           <Col key={s.group} xs={12} sm={6}>
-            <Card size="small" style={{ borderLeft: `4px solid var(--ant-${GROUP_COLORS[s.group]}-6, #1677ff)` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Card
+              size="small"
+              style={{
+                borderLeft: `4px solid var(--ant-${GROUP_COLORS[s.group]}-6, #1677ff)`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Text strong>
                   <Tag color={GROUP_COLORS[s.group]} style={{ marginRight: 4 }}>
                     {s.group}
@@ -471,11 +580,21 @@ export default function RawMaterialRatesPage() {
                 .slice(0, 8)
                 .map((i) => i.name)
                 .join(", ")}
-              {unconfiguredItems.length > 8 ? ` và ${unconfiguredItems.length - 8} mặt hàng khác...` : ""}
+              {unconfiguredItems.length > 8
+                ? ` và ${unconfiguredItems.length - 8} mặt hàng khác...`
+                : ""}
             </span>
           }
         />
       )}
+
+      {/* Info về versioning */}
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message='Để thay đổi định mức từ một ngày nào đó, dùng nút "Phiên bản mới" — phiên bản cũ sẽ được đóng lại tự động và số liệu các tháng đã qua không bị ảnh hưởng.'
+      />
 
       {/* Filters */}
       <Space style={{ marginBottom: 12 }} wrap>
@@ -504,27 +623,51 @@ export default function RawMaterialRatesPage() {
         loading={loading}
         bordered
         size="middle"
-        scroll={{ x: 1000 }}
-        pagination={{ pageSize: 20, showSizeChanger: true }}
+        scroll={{ x: 1100 }}
+        pagination={{ pageSize: 30, showSizeChanger: true }}
+        rowClassName={(r) => (isActiveRate(r) ? "" : "rate-history-row")}
       />
+
+      <style>{`
+        .rate-history-row td {
+          background: #fafafa !important;
+          color: #aaa;
+        }
+        .rate-history-row td .ant-tag {
+          opacity: 0.6;
+        }
+      `}</style>
 
       {/* Modal */}
       <Modal
-        title={
-          editing
-            ? `Sửa định mức: ${editing.item.name}`
-            : "Thêm định mức tiêu hao NVL"
-        }
+        title={modalTitle}
         open={modalOpen}
         onOk={handleSave}
         onCancel={() => setModalOpen(false)}
         confirmLoading={saving}
-        okText="Lưu"
+        okText={editMode === "new-version" ? "Tạo phiên bản mới" : "Lưu"}
         cancelText="Hủy"
-        width={660}
+        width={680}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+        {editMode === "new-version" && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Phiên bản cũ sẽ được đóng lại (effectiveTo = ngày áp dụng mới - 1). Số liệu các tháng đã qua sẽ không thay đổi."
+          />
+        )}
+        {editMode === "fix" && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Sửa lỗi nhập liệu — chỉ dùng khi định mức này chưa được áp dụng vào bất kỳ bản ghi sản xuất nào. Nếu đã có sản xuất, server sẽ từ chối."
+          />
+        )}
+
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
           {/* Mặt hàng */}
           <Form.Item
             name="itemId"
@@ -533,24 +676,19 @@ export default function RawMaterialRatesPage() {
           >
             <Select
               showSearch
-              disabled={!!editing}
+              disabled={editMode !== "create"}
               placeholder={
-                editing
-                  ? editing.item.name
+                editMode !== "create"
+                  ? editingRate?.item.name
                   : "Chọn mặt hàng chưa có định mức..."
               }
               optionFilterProp="label"
               onChange={(val) => {
                 const item = allItems.find((i) => i.id === val) || null;
                 setSelectedItem(item);
-                // Clear conditional fields
-                if (item) {
-                  if (!hasPE(item)) form.setFieldValue("peRate", null);
-                  if (!isDoubleTwist(item.name))
-                    form.setFieldValue("doubleTwistGcRate", null);
-                }
+                if (item && !hasPE(item)) form.setFieldValue("peRate", null);
               }}
-              options={(editing ? allItems : itemsWithoutRate).map((i) => ({
+              options={(editMode === "create" ? itemsWithoutRate : allItems).map((i) => ({
                 value: i.id,
                 label: i.name,
               }))}
@@ -573,12 +711,8 @@ export default function RawMaterialRatesPage() {
               <Tag color={GROUP_COLORS[detectYarnGroup(selectedItem.name)]}>
                 {detectYarnGroup(selectedItem.name)}
               </Tag>
-              {isDoubleTwist(selectedItem.name) && (
-                <Tag color="volcano">Sợi xe đôi</Tag>
-              )}
-              {hasPE(selectedItem) && (
-                <Tag color="orange">Có PE/Benma</Tag>
-              )}
+              {isDoubleTwist(selectedItem.name) && <Tag color="volcano">Sợi xe đôi</Tag>}
+              {hasPE(selectedItem) && <Tag color="orange">Có PE/Benma</Tag>}
             </div>
           )}
 
@@ -621,7 +755,9 @@ export default function RawMaterialRatesPage() {
                   precision={3}
                   min={0}
                   disabled={!showPE}
-                  placeholder={showPE ? "VD: 1.02 (giá trị gốc, KHÔNG nhân tỷ lệ)" : "—"}
+                  placeholder={
+                    showPE ? "VD: 1.02 (giá trị gốc, KHÔNG nhân tỷ lệ)" : "—"
+                  }
                 />
               </Form.Item>
             </Col>
@@ -643,7 +779,7 @@ export default function RawMaterialRatesPage() {
                   precision={0}
                   min={1}
                   max={100}
-                  formatter={(v) => v != null ? `${v}%` : ""}
+                  formatter={(v) => (v != null ? `${v}%` : "")}
                   parser={(v) => {
                     if (!v) return 100 as unknown as 100;
                     return parseFloat(v.replace("%", "")) as unknown as 100;
@@ -657,30 +793,41 @@ export default function RawMaterialRatesPage() {
             <Col span={12}>
               <Form.Item
                 name="effectiveFrom"
-                label="Hiệu lực từ ngày"
+                label={
+                  editMode === "new-version"
+                    ? "Ngày áp dụng định mức mới (phiên bản cũ sẽ hết hiệu lực ngày hôm trước)"
+                    : "Hiệu lực từ ngày"
+                }
                 rules={[{ required: true, message: "Chọn ngày hiệu lực" }]}
               >
                 <DatePicker
                   style={{ width: "100%" }}
                   format="DD/MM/YYYY"
                   placeholder="dd/mm/yyyy"
+                  disabledDate={
+                    editMode === "new-version" && editingRate
+                      ? (d) => d.isBefore(dayjs(editingRate.effectiveFrom).add(1, "day"))
+                      : undefined
+                  }
                 />
               </Form.Item>
             </Col>
 
-            {/* Effective To */}
-            <Col span={12}>
-              <Form.Item
-                name="effectiveTo"
-                label='Hiệu lực đến (để trống = "Không thời hạn")'
-              >
-                <DatePicker
-                  style={{ width: "100%" }}
-                  format="DD/MM/YYYY"
-                  placeholder="Không thời hạn"
-                />
-              </Form.Item>
-            </Col>
+            {/* Effective To — chỉ hiện cho fix/create, không cho new-version */}
+            {editMode !== "new-version" && (
+              <Col span={12}>
+                <Form.Item
+                  name="effectiveTo"
+                  label='Hiệu lực đến (để trống = "Không thời hạn")'
+                >
+                  <DatePicker
+                    style={{ width: "100%" }}
+                    format="DD/MM/YYYY"
+                    placeholder="Không thời hạn"
+                  />
+                </Form.Item>
+              </Col>
+            )}
 
             {/* Note */}
             <Col span={24}>
