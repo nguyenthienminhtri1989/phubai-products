@@ -14,7 +14,6 @@ import {
   Popconfirm,
   message,
   Tag,
-  Collapse,
   InputNumber,
   Switch,
   Tooltip,
@@ -22,6 +21,7 @@ import {
 import { PlusOutlined, DeleteOutlined, EyeOutlined, LineChartOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 
 const { Title } = Typography;
 
@@ -58,6 +58,31 @@ interface SalesOrder {
   items: SalesOrderItem[];
 }
 
+interface SalesOrderFormItem {
+  itemId?: number;
+  plannedQty?: number;
+  unitPrice?: number;
+  sellingCostRate?: number | null;
+  deliveredQty?: number | null;
+  note?: string | null;
+  priorityOverride?: number | null;
+  deferToMonth?: Dayjs | null;
+  wasteRecoveryRate?: number | null;
+  doubleTwistGcRate?: number | null;
+}
+
+interface SalesOrderFormValues {
+  orderNo: string;
+  customerId?: number | null;
+  factoryId: number;
+  signedDate?: Dayjs | null;
+  deliveryDate?: Dayjs | null;
+  startDate?: Dayjs | null;
+  note?: string | null;
+  isActive?: boolean;
+  items?: SalesOrderFormItem[];
+}
+
 const STATUS_TAG: Record<string, { color: string; label: string }> = {
   ACTIVE: { color: "green", label: "Đang SX" },
   DONE: { color: "blue", label: "Hoàn thành" },
@@ -76,6 +101,8 @@ export default function SalesOrdersPage() {
   const [editing, setEditing] = useState<SalesOrder | null>(null);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [filterOrderNo, setFilterOrderNo] = useState("");
+  const [filterItemName, setFilterItemName] = useState("");
 
   // Theo dõi items trong form để phát hiện trùng mặt hàng
   const watchedItems = Form.useWatch("items", form) as Array<{ itemId?: number }> | undefined;
@@ -95,8 +122,14 @@ export default function SalesOrdersPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (filterFactory) params.set("factoryId", String(filterFactory));
+      if (filterOrderNo.trim()) params.set("orderNo", filterOrderNo.trim());
+      if (filterItemName.trim()) params.set("itemName", filterItemName.trim());
+      const query = params.toString();
+
       const [ordersRes, factoriesRes, customersRes, itemsRes] = await Promise.all([
-        fetch(`/api/kdsx/sales-orders${filterFactory ? `?factoryId=${filterFactory}` : ""}`),
+        fetch(`/api/kdsx/sales-orders${query ? `?${query}` : ""}`),
         fetch("/api/factories"),
         fetch("/api/kdsx/customers"),
         fetch("/api/items"),
@@ -108,7 +141,7 @@ export default function SalesOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterFactory]);
+  }, [filterFactory, filterOrderNo, filterItemName]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -148,9 +181,9 @@ export default function SalesOrdersPage() {
 
   async function handleSave() {
     // Tách validateFields ra riêng để bắt lỗi validation đúng cách
-    let values: any;
+    let values: SalesOrderFormValues;
     try {
-      values = await form.validateFields();
+      values = (await form.validateFields()) as SalesOrderFormValues;
     } catch {
       // Ant Design tự hiển thị lỗi inline trên từng field — không cần làm gì thêm
       return;
@@ -163,7 +196,7 @@ export default function SalesOrdersPage() {
         signedDate: values.signedDate ? values.signedDate.format("YYYY-MM-DD") : null,
         deliveryDate: values.deliveryDate ? values.deliveryDate.format("YYYY-MM-DD") : null,
         startDate: values.startDate ? values.startDate.format("YYYY-MM-DD") : null,
-        items: values.items?.map((item: any) => ({
+        items: values.items?.map((item) => ({
           ...item,
           sellingCostRate: item.sellingCostRate != null ? item.sellingCostRate / 100 : null,
           deferToMonth: item.deferToMonth ? item.deferToMonth.format("YYYY-MM") : null,
@@ -187,8 +220,9 @@ export default function SalesOrdersPage() {
       message.success(editing ? "Đã cập nhật" : "Đã tạo hợp đồng");
       setModalOpen(false);
       fetchAll();
-    } catch (e: any) {
-      message.error("Lỗi không xác định: " + (e?.message || e));
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      message.error("Lỗi không xác định: " + errorMessage);
     } finally {
       setSaving(false);
     }
@@ -288,7 +322,21 @@ export default function SalesOrdersPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, alignItems: "center" }}>
         <Title level={3} style={{ margin: 0 }}>Hợp đồng bán hàng</Title>
-        <Space>
+        <Space wrap>
+          <Input
+            placeholder="Loc theo so HD"
+            allowClear
+            value={filterOrderNo}
+            onChange={(e) => setFilterOrderNo(e.target.value)}
+            style={{ width: 180 }}
+          />
+          <Input
+            placeholder="Loc theo ten mat hang"
+            allowClear
+            value={filterItemName}
+            onChange={(e) => setFilterItemName(e.target.value)}
+            style={{ width: 220 }}
+          />
           <Select
             placeholder="Lọc nhà máy"
             allowClear

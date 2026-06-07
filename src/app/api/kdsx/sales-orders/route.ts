@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { OrderStatus, Prisma } from "@prisma/client";
+
+interface SalesOrderPayloadItem {
+  itemId: number | string;
+  plannedQty: number | string;
+  unitPrice: number | string;
+  sellingCostRate?: number | null;
+  deliveredQty?: number | null;
+  priorityOverride?: number | null;
+  deferToMonth?: string | null;
+  wasteRecoveryRate?: number | null;
+  doubleTwistGcRate?: number | null;
+  note?: string | null;
+}
+
+interface SalesOrderPayload {
+  orderNo?: string;
+  customerId?: number | string | null;
+  factoryId?: number | string | null;
+  signedDate?: string | null;
+  deliveryDate?: string | null;
+  startDate?: string | null;
+  note?: string | null;
+  items?: SalesOrderPayloadItem[];
+}
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -10,10 +35,12 @@ export async function GET(req: NextRequest) {
   const factoryId = searchParams.get("factoryId");
   const customerId = searchParams.get("customerId");
   const isActive = searchParams.get("isActive");
+  const orderNo = searchParams.get("orderNo")?.trim();
+  const itemName = searchParams.get("itemName")?.trim();
   const statusParam = searchParams.get("status"); // comma-separated e.g. "ACTIVE,OVERDUE"
 
   const statusList = statusParam
-    ? statusParam.split(",").map((s) => s.trim())
+    ? (statusParam.split(",").map((s) => s.trim()) as OrderStatus[])
     : null;
 
   const orders = await prisma.salesOrder.findMany({
@@ -21,7 +48,21 @@ export async function GET(req: NextRequest) {
       ...(factoryId ? { factoryId: Number(factoryId) } : {}),
       ...(customerId ? { customerId: Number(customerId) } : {}),
       ...(isActive !== null ? { isActive: isActive === "true" } : {}),
-      ...(statusList ? { status: { in: statusList as any[] } } : {}),
+      ...(orderNo
+        ? { orderNo: { contains: orderNo, mode: "insensitive" as const } }
+        : {}),
+      ...(itemName
+        ? {
+            items: {
+              some: {
+                item: {
+                  name: { contains: itemName, mode: "insensitive" as const },
+                },
+              },
+            },
+          }
+        : {}),
+      ...(statusList ? { status: { in: statusList } } : {}),
     },
     include: {
       customer: true,
@@ -59,13 +100,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userRole = (session.user as any)?.userRole as string | undefined;
+  const userRole = (session.user as { userRole?: string } | undefined)?.userRole;
   const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
   if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = (await req.json()) as SalesOrderPayload;
   const { orderNo, customerId, factoryId, signedDate, deliveryDate, startDate, note, items } = body;
   if (!orderNo || !factoryId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc (orderNo, factoryId)" }, { status: 400 });
@@ -82,7 +123,7 @@ export async function POST(req: NextRequest) {
         startDate: startDate ? new Date(startDate) : null,
         note: note || null,
         items: {
-          create: (items || []).map((it: any) => ({
+          create: (items || []).map((it) => ({
             itemId: Number(it.itemId),
             plannedQty: Number(it.plannedQty),
             unitPrice: Number(it.unitPrice),
@@ -103,11 +144,12 @@ export async function POST(req: NextRequest) {
       },
     });
     return NextResponse.json(order, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SalesOrder POST error:", error);
-    if (error.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ error: "Số hợp đồng đã tồn tại, vui lòng dùng số khác" }, { status: 400 });
     }
-    return NextResponse.json({ error: "Lỗi tạo hợp đồng: " + error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Lỗi tạo hợp đồng: " + message }, { status: 500 });
   }
 }

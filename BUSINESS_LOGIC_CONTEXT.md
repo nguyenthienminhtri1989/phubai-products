@@ -4115,3 +4115,44 @@ src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — đ�
 ### Data notes
 
 - Không có seed data, migration hay format dữ liệu mới.
+
+---
+
+## KDSX — Sales Orders: lọc hợp đồng theo số HĐ và tên mặt hàng
+
+**Status:** ✅ Completed 2026-06-07
+
+### What was built
+
+Bổ sung bộ lọc trên trang `/kdsx/sales-orders` để lọc danh sách hợp đồng theo `orderNo` và theo tên mặt hàng thuộc các dòng `sales_order_items`. API danh sách hợp đồng nhận thêm query `orderNo` và `itemName`, trả về các `sales_orders` có số hợp đồng khớp hoặc có ít nhất một dòng hàng liên kết tới `items.name` khớp từ khóa.
+
+### Files created/modified
+
+```
+src/app/api/kdsx/sales-orders/route.ts        — GET nhận query orderNo/itemName và filter bằng Prisma where + relation items.some.item.name
+src/app/kdsx/sales-orders/page.tsx            — thêm 2 ô lọc số HĐ và tên mặt hàng, ghép query bằng URLSearchParams cùng filter nhà máy
+tests/test-kdsx-sales-orders-filters.sh       — curl test cho GET /api/kdsx/sales-orders với orderNo/itemName/factoryId
+```
+
+### Key business logic implemented
+
+- `orderNo` dùng `contains` không phân biệt hoa/thường để lọc trực tiếp bảng `sales_orders`.
+- `itemName` dùng `items.some.item.name contains` để chỉ lấy hợp đồng có ít nhất một dòng `sales_order_items` liên kết mặt hàng khớp tên.
+- Các filter mới có thể kết hợp với filter nhà máy hiện có (`factoryId`) và các query cũ của API.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/kdsx/sales-orders?orderNo=... | Lọc hợp đồng theo số hợp đồng |
+| GET | /api/kdsx/sales-orders?itemName=... | Lọc hợp đồng theo tên mặt hàng trong sales_order_items |
+| GET | /api/kdsx/sales-orders?factoryId=...&orderNo=...&itemName=... | Kết hợp lọc nhà máy, số HĐ và tên mặt hàng |
+
+### Known limitations / not yet implemented
+
+- Hai ô text filter gọi lại API khi giá trị thay đổi; chưa thêm debounce riêng.
+- Placeholder mới dùng tiếng Việt không dấu để tránh lệch encoding trong file hiện tại.
+
+### Data notes
+
+- Không có schema, migration hay seed data mới.
