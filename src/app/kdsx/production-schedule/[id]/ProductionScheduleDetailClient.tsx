@@ -707,7 +707,7 @@ export default function ProductionScheduleDetailClient({
     return getItemColor(itemId, itemColors);
   }
   function getBg(itemId: number): string {
-    return getColor(itemId) + "33";
+    return getColor(itemId) + "66";
   }
   function getBorder(itemId: number): string {
     return getColor(itemId) + "AA";
@@ -1076,7 +1076,7 @@ export default function ProductionScheduleDetailClient({
                           />
                           <span
                             style={{
-                              color: getColor(s.itemId),
+                              color: "#000",
                               fontWeight: 600,
                               fontSize: 11,
                             }}
@@ -1147,7 +1147,7 @@ export default function ProductionScheduleDetailClient({
                         ) : seg ? (
                           <span
                             style={{
-                              color: getColor(seg.itemId),
+                              color: "#000",
                               fontSize: 11,
                               fontWeight: 800,
                             }}
@@ -1505,7 +1505,7 @@ export default function ProductionScheduleDetailClient({
                         textAlign: "center",
                         fontWeight: 800,
                         fontSize: 13,
-                        color: getColor(itemId),
+                        color: "#000",
                         cursor: "pointer",
                         padding: "4px 6px",
                         borderRadius: 6,

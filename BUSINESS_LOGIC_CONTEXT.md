@@ -1763,7 +1763,7 @@ model ProductionSchedule {
 **UI** `ProductionScheduleDetailClient.tsx`:
 
 - Hàm `getItemColor(itemId, itemColors)`: tra `itemColors[String(itemId)]`, fallback palette 16 màu theo `itemId % 16`
-- Helpers: `getColor()`, `getBg()` (`+33` = alpha 20%), `getBorder()` (`+AA` = alpha 67%)
+- Helpers: `getColor()`, `getBg()` (`+66` = alpha 40%), `getBorder()` (`+AA` = alpha 67%)
 - Color picker `<input type="color" />` (14×14px) hiển thị cạnh tên mặt hàng trong cột sticky — **chỉ khi DRAFT**
 - `handleChangeItemColor`: optimistic update local state ngay, gọi PUT API non-blocking
 
@@ -1845,7 +1845,7 @@ function getItemColor(itemId, itemColors): string {
   return DEFAULT_COLORS[itemId % 16]; // fallback
 }
 // Alpha variants:
-getBg(itemId)     → getColor(itemId) + "33"  // 20% opacity
+getBg(itemId)     → getColor(itemId) + "66"  // 40% opacity
 getBorder(itemId) → getColor(itemId) + "AA"  // 67% opacity
 ```
 
@@ -4079,3 +4079,39 @@ src/app/kdsx/raw-material-rates/page.tsx              — UI: 2 nút (Phiên b�
 
 - Check "đã được áp dụng" chỉ dựa trên ProductionLog — nếu dùng SalesOrderLineItemActual mà không có ProductionLog thì có thể bypass
 - `effectiveTo` của new-version luôn = null (không hạn chế ngày kết thúc); user muốn đặt ngày kết thúc phải dùng Sửa lỗi sau đó
+
+---
+
+## KDSX — Production Schedule: hiển thị màu nền mặt hàng trong ma trận sản lượng
+
+**Status:** ✅ Completed 2026-06-07
+
+### What was built
+
+Điều chỉnh UI ma trận sản lượng trên trang chi tiết kế hoạch sản xuất: màu mặt hàng chỉ dùng để tô nền ô, còn chữ trong các ô/tên mặt hàng luôn hiển thị màu đen. Nền theo màu mặt hàng được tăng độ đậm để dễ nhận diện hơn so với bản cũ.
+
+### Files created/modified
+
+```
+src/app/kdsx/production-schedule/[id]/ProductionScheduleDetailClient.tsx — đổi getBg() đậm hơn; chữ tên mặt hàng, số kg và header item trong ma trận/so sánh dùng màu đen
+```
+
+### Key business logic implemented
+
+- Không thay đổi nghiệp vụ, API, schema hay dữ liệu lưu màu `itemColors`.
+- Color picker vẫn cập nhật `itemColors` như cũ, nhưng màu được dùng làm nền ô thay vì đổi màu chữ.
+- Ô sản lượng có nền theo mặt hàng rõ hơn (`alpha 66`) và chữ đen để tăng độ đọc.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| N/A | N/A | Không có endpoint mới hoặc thay đổi API |
+
+### Known limitations / not yet implemented
+
+- Chưa thay đổi style ở các component con nhận `itemColors` như `ActualProductionGrid` hoặc `ScheduleComparisonDashboard`.
+
+### Data notes
+
+- Không có seed data, migration hay format dữ liệu mới.
