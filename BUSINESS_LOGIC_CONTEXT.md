@@ -4156,3 +4156,48 @@ tests/test-kdsx-sales-orders-filters.sh       — curl test cho GET /api/kdsx/sa
 ### Data notes
 
 - Không có schema, migration hay seed data mới.
+
+---
+
+## KDSX — Số dư đầu kỳ hợp đồng cho phân bổ quota tháng
+
+**Status:** ✅ Completed 2026-06-08
+
+### What was built
+
+Bổ sung cơ chế số dư đầu kỳ cho từng dòng hợp đồng để tách dữ liệu quá khứ chuyển đổi khỏi logic phân bổ MonthlyQuota từ tháng bắt đầu áp dụng phần mềm. Trang `/kdsx/monthly-quotas` có thêm cột nhập “Đã tính trước kỳ”, giúp mở lại các HĐ từng bị allocation cũ rót đầy và cho tháng 6/2026 nhập quota giống Excel.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                              — thêm model ContractOpeningBalance và relations tới SalesOrderItem/Factory/Process
+prisma/migrations/20260608000001_add_contract_opening_balance/    — tạo bảng contract_opening_balances + unique/index
+src/lib/kdsx/contract-opening-balance.ts                          — helper tính remainingTotal theo số dư đầu kỳ nếu có
+src/lib/allocation-engine-v2.ts                                   — dùng ContractOpeningBalance làm điểm cắt khi tính remainingQty trong waterfall/quota
+src/app/api/kdsx/monthly-quotas/route.ts                          — GET trả openingBalance; POST upsert openingBalances cùng quota
+src/app/kdsx/monthly-quotas/page.tsx                              — thêm cột “Đã tính trước Txx” và lưu số dư đầu kỳ
+tests/test-kdsx-monthly-quotas-opening-balance.sh                 — curl test cho quota + opening balance
+```
+
+### Key business logic implemented
+
+- Nếu có `ContractOpeningBalance` cho `salesOrderItemId + factoryId + processId + openingYearMonth <= yearMonth`, hệ thống tính lũy kế trước tháng hiện tại bằng `producedBeforeKg + OrderAllocation từ kỳ mở sổ đến trước tháng hiện tại`.
+- Nếu chưa có số dư đầu kỳ, logic cũ giữ nguyên: `remainingTotal = plannedQty - deliveredQty - OrderAllocation trước tháng hiện tại`.
+- MonthlyQuota tháng 6 có thể nhập lại theo Excel: FIXED cho HĐ có số cụ thể, REMAINDER cho HĐ cuối nhận phần dư, không cần xóa SalesOrder/SalesOrderItem cũ.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/kdsx/monthly-quotas | Trả danh sách HĐ theo item, gồm openingBalance và remainingTotal đã tính theo điểm cắt nếu có |
+| POST | /api/kdsx/monthly-quotas | Upsert MonthlyQuota và ContractOpeningBalance trong cùng request |
+
+### Known limitations / not yet implemented
+
+- Chưa có import tự động từ file Excel `KD-SX NM3.xlsx`; số dư đầu kỳ vẫn nhập thủ công trên UI.
+- Dashboard `/api/v2/dashboard/revenue` chưa truyền `processId`, nên số dư đầu kỳ phát huy đầy đủ trên luồng phân bổ quota theo công đoạn trước; dashboard tổng factory cần mở rộng process scope nếu muốn dùng cùng điểm cắt.
+
+### Data notes
+
+- Bảng mới `contract_opening_balances` lưu `openingYearMonth` dạng `"YYYY-MM"` và `producedBeforeKg` kg.
+- Migration chỉ tạo bảng/index mới, không xóa hoặc sửa dữ liệu hợp đồng/production/allocation cũ.

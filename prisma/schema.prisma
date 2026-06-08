@@ -58,6 +58,7 @@ model Factory {
   monthlyPlans       MonthlyPlan[]
   monthlyActuals     MonthlyActual[]
   summarySnapshots   MonthlySummarySnapshot[]
+  contractOpeningBalances ContractOpeningBalance[]
 
   // Định mức năng suất
   benchmarkVersions BenchmarkVersion[]
@@ -105,6 +106,7 @@ model Process {
 
   // Monthly quota
   monthlyQuotas MonthlyQuota[]
+  contractOpeningBalances ContractOpeningBalance[]
 
   @@map("processes")
 }
@@ -905,6 +907,7 @@ model SalesOrderItem {
   actualLineItems ActualLineItem[]
   allocations     OrderAllocation[]
   quotas          MonthlyQuota[]
+  openingBalances ContractOpeningBalance[]
 
   // Lot management
   lots Lot[]
@@ -943,6 +946,31 @@ model MonthlyQuota {
   @@unique([salesOrderItemId, factoryId, processId, yearMonth])
   @@index([factoryId, processId, yearMonth])
   @@map("monthly_quotas")
+}
+
+/// Số dư đầu kỳ cho từng dòng HĐ khi bắt đầu áp dụng phân bổ quota theo tháng.
+/// Dùng để tách quá khứ chuyển đổi khỏi logic rót ProductionLog/MonthlyQuota từ kỳ mới.
+model ContractOpeningBalance {
+  id               Int    @id @default(autoincrement())
+  salesOrderItemId Int
+  factoryId        Int
+  processId        Int
+  openingYearMonth String @db.VarChar(7) // "2026-06"
+
+  /// Sản lượng đã SX/giao/tính trước kỳ mở sổ phần mềm (kg).
+  producedBeforeKg Float @default(0)
+  note             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrderItem SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+  factory        Factory        @relation(fields: [factoryId], references: [id])
+  process        Process        @relation(fields: [processId], references: [id])
+
+  @@unique([salesOrderItemId, factoryId, processId, openingYearMonth], map: "opening_balance_soi_factory_process_month")
+  @@index([factoryId, processId, openingYearMonth])
+  @@map("contract_opening_balances")
 }
 
 // --- Nhóm Thông số tháng ---

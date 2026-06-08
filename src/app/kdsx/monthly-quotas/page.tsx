@@ -50,6 +50,10 @@ interface QuotaState {
   sortOrder: number;
 }
 
+interface OpeningBalanceState {
+  producedBeforeKg: number | null;
+}
+
 interface ContractRow {
   salesOrderItemId: number;
   itemId: number;
@@ -63,6 +67,12 @@ interface ContractRow {
   cumProducedPrevMonths: number;
   remainingTotal: number;
   producedThisMonth: number;
+  openingBalance: {
+    id: number;
+    openingYearMonth: string;
+    producedBeforeKg: number;
+    note: string | null;
+  } | null;
   quota: {
     id?: number;
     quotaQty: number | null;
@@ -93,17 +103,33 @@ function getPrevYearMonth(ym: string): string {
 interface ItemGroupCardProps {
   group: ItemGroup;
   localQuotas: Record<number, QuotaState>;
+  localOpeningBalances: Record<number, OpeningBalanceState>;
   onQuotaChange: (salesOrderItemId: number, patch: Partial<QuotaState>) => void;
+  onOpeningBalanceChange: (
+    salesOrderItemId: number,
+    patch: Partial<OpeningBalanceState>
+  ) => void;
   monthLabel: string;
 }
 
 function ItemGroupCard({
   group,
   localQuotas,
+  localOpeningBalances,
   onQuotaChange,
+  onOpeningBalanceChange,
   monthLabel,
 }: ItemGroupCardProps) {
   const { contracts, totalProductionKg } = group;
+
+  const getProducedBefore = (r: ContractRow) => {
+    const local = localOpeningBalances[r.salesOrderItemId];
+    if (local) return local.producedBeforeKg ?? 0;
+    return r.cumProducedPrevMonths;
+  };
+
+  const getRemaining = (r: ContractRow) =>
+    Math.max(0, r.plannedQty - r.deliveredQty - getProducedBefore(r));
 
   // Tổng FIXED quota
   const totalFixedQuota = contracts.reduce((s, c) => {
@@ -176,10 +202,10 @@ function ItemGroupCard({
       width: 130,
       render: (_, r) => (
         <Space direction="vertical" size={0}>
-          <Text strong type={r.remainingTotal <= 0 ? "secondary" : undefined}>
+          <Text strong type={getRemaining(r) <= 0 ? "secondary" : undefined}>
             {r.orderNo}
           </Text>
-          {r.remainingTotal <= 0 && (
+          {getRemaining(r) <= 0 && (
             <Tag color="default" style={{ fontSize: 11, marginInlineEnd: 0 }}>
               Đã hoàn thành
             </Tag>
@@ -226,12 +252,45 @@ function ItemGroupCard({
       ),
     },
     {
+      title: `Đã tính trước ${monthLabel}`,
+      key: "openingBalance",
+      width: 150,
+      align: "right",
+      render: (_, r) => {
+        const local = localOpeningBalances[r.salesOrderItemId];
+        const value =
+          local?.producedBeforeKg ??
+          r.openingBalance?.producedBeforeKg ??
+          undefined;
+        return (
+          <Tooltip title="Sản lượng đã SX/giao/tính trước kỳ mở sổ này. Nhập số từ Excel để tách quá khứ khỏi allocation cũ.">
+            <InputNumber
+              value={value}
+              placeholder={fmtN(r.cumProducedPrevMonths)}
+              min={0}
+              max={Math.max(0, r.plannedQty - r.deliveredQty)}
+              step={1000}
+              onChange={(v) =>
+                onOpeningBalanceChange(r.salesOrderItemId, {
+                  producedBeforeKg: v ?? null,
+                })
+              }
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => Number(v?.replace(/,/g, "") || 0) as any}
+              style={{ width: "100%" }}
+              size="small"
+            />
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: "Còn lại",
       key: "remaining",
       width: 100,
       align: "right",
       render: (_, r) => {
-        const val = r.remainingTotal;
+        const val = getRemaining(r);
         return (
           <Text type={val <= 0 ? "success" : undefined} strong={val <= 0}>
             {val <= 0 ? "✓ Xong" : fmtN(val)}
@@ -282,7 +341,7 @@ function ItemGroupCard({
           <InputNumber
             value={q.quotaQty ?? undefined}
             min={0}
-            max={r.remainingTotal > 0 ? r.remainingTotal : undefined}
+            max={getRemaining(r) > 0 ? getRemaining(r) : undefined}
             step={1000}
             onChange={(v) =>
               onQuotaChange(r.salesOrderItemId, { quotaQty: v ?? null })
@@ -351,8 +410,8 @@ function ItemGroupCard({
 
   const summary = () => {
     const totalPlanned = contracts.reduce((s, c) => s + c.plannedQty, 0);
-    const totalCum = contracts.reduce((s, c) => s + c.cumProducedPrevMonths, 0);
-    const totalRemaining = contracts.reduce((s, c) => s + c.remainingTotal, 0);
+    const totalCum = contracts.reduce((s, c) => s + getProducedBefore(c), 0);
+    const totalRemaining = contracts.reduce((s, c) => s + getRemaining(c), 0);
     const totalProducedThisMonth = contracts.reduce(
       (s, c) => s + c.producedThisMonth,
       0
@@ -369,16 +428,19 @@ function ItemGroupCard({
           {fmtN(totalCum)}
         </Table.Summary.Cell>
         <Table.Summary.Cell index={5} align="right">
-          {fmtN(totalRemaining)}
+          {fmtN(totalCum)}
         </Table.Summary.Cell>
         <Table.Summary.Cell index={6} align="right">
+          {fmtN(totalRemaining)}
+        </Table.Summary.Cell>
+        <Table.Summary.Cell index={7} align="right">
           {fmtN(totalQuota)}
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={7} />
-        <Table.Summary.Cell index={8} align="right">
+        <Table.Summary.Cell index={8} />
+        <Table.Summary.Cell index={9} align="right">
           {fmtN(totalProducedThisMonth)}
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={9} />
+        <Table.Summary.Cell index={10} />
       </Table.Summary.Row>
     );
   };
@@ -444,6 +506,9 @@ export default function MonthlyQuotasPage() {
   const [saving, setSaving] = useState(false);
 
   const [localQuotas, setLocalQuotas] = useState<Record<number, QuotaState>>({});
+  const [localOpeningBalances, setLocalOpeningBalances] = useState<
+    Record<number, OpeningBalanceState>
+  >({});
 
   // Hiển thị cả HĐ đã hoàn thành (remainingTotal <= 0) để nhập quota cho HĐ
   // đa tháng đã "đóng" do rót đầy theo cam kết tổng
@@ -504,6 +569,7 @@ export default function MonthlyQuotasPage() {
 
       // Khởi tạo localQuotas từ DB
       const initial: Record<number, QuotaState> = {};
+      const initialOpening: Record<number, OpeningBalanceState> = {};
       for (const g of fetchedGroups) {
         for (const c of g.contracts) {
           if (c.quota) {
@@ -513,9 +579,15 @@ export default function MonthlyQuotasPage() {
               sortOrder: c.quota.sortOrder,
             };
           }
+          if (c.openingBalance) {
+            initialOpening[c.salesOrderItemId] = {
+              producedBeforeKg: c.openingBalance.producedBeforeKg,
+            };
+          }
         }
       }
       setLocalQuotas(initial);
+      setLocalOpeningBalances(initialOpening);
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : "Lỗi tải dữ liệu");
     } finally {
@@ -573,6 +645,21 @@ export default function MonthlyQuotasPage() {
     []
   );
 
+  const handleOpeningBalanceChange = useCallback(
+    (salesOrderItemId: number, patch: Partial<OpeningBalanceState>) => {
+      setLocalOpeningBalances((prev) => {
+        const existing = prev[salesOrderItemId] ?? {
+          producedBeforeKg: null,
+        };
+        return {
+          ...prev,
+          [salesOrderItemId]: { ...existing, ...patch },
+        };
+      });
+    },
+    []
+  );
+
   // ── Validate ───────────────────────────────────────────────────────────────
   function validate(): boolean {
     for (const group of itemGroups) {
@@ -616,8 +703,18 @@ export default function MonthlyQuotasPage() {
         sortOrder: q.sortOrder || idx,
       }));
 
-    if (quotasToSave.length === 0) {
-      message.info("Chưa có quota nào để lưu");
+    const openingBalancesToSave = Object.entries(localOpeningBalances)
+      .filter(([idStr, b]) => {
+        const id = Number(idStr);
+        return multiSoIds.has(id) && b.producedBeforeKg !== null;
+      })
+      .map(([idStr, b]) => ({
+        salesOrderItemId: Number(idStr),
+        producedBeforeKg: b.producedBeforeKg ?? 0,
+      }));
+
+    if (quotasToSave.length === 0 && openingBalancesToSave.length === 0) {
+      message.info("Chưa có quota hoặc số dư đầu kỳ nào để lưu");
       return;
     }
 
@@ -631,11 +728,12 @@ export default function MonthlyQuotasPage() {
           processId,
           yearMonth,
           quotas: quotasToSave,
+          openingBalances: openingBalancesToSave,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       message.success(
-        `Đã lưu ${quotasToSave.length} quota cho tháng ${yearMonth}`
+        `Đã lưu ${quotasToSave.length} quota và ${openingBalancesToSave.length} số dư đầu kỳ cho tháng ${yearMonth}`
       );
       fetchData();
     } catch (e: unknown) {
@@ -839,7 +937,9 @@ export default function MonthlyQuotasPage() {
                   key={group.itemId}
                   group={group}
                   localQuotas={localQuotas}
+                  localOpeningBalances={localOpeningBalances}
                   onQuotaChange={handleQuotaChange}
+                  onOpeningBalanceChange={handleOpeningBalanceChange}
                   monthLabel={monthLabel}
                 />
               ))}

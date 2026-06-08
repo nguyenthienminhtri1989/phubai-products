@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessKdsx } from "@/lib/permissions";
 import { runAllocationFromProduction } from "@/lib/allocation-engine-v2";
 import {
   getMonthlyItemTotals,
   ItemTotalMode,
 } from "@/lib/kdsx/monthly-item-totals";
+import { getContractRemainingContext } from "@/lib/kdsx/contract-opening-balance";
 
 // GET /api/kdsx/monthly-quotas?factoryId=3&processId=5&yearMonth=2026-05&mode=ACTUAL_PROJECTED
 export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canAccessKdsx(session as any)) {
+    return NextResponse.json(
+      { error: "Không có quyền truy cập module KD-SX" },
+      { status: 403 },
+    );
+  }
+
   const sp = new URL(req.url).searchParams;
   const factoryId = parseInt(sp.get("factoryId") ?? "0");
   const processId = parseInt(sp.get("processId") ?? "0");
@@ -95,22 +107,19 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 4. Tính cumProducedPrevMonths và remainingTotal
+    // 4. Tính cumProducedPrevMonths và remainingTotal.
+    // Nếu có số dư đầu kỳ thì dùng số đó làm điểm cắt dữ liệu quá khứ.
     const contracts = await Promise.all(
       orderItems.map(async (oi) => {
-        const prevAllocated = await prisma.orderAllocation.aggregate({
-          where: {
-            salesOrderItemId: oi.id,
-            productionDate: { lt: firstDayOfMonth },
-          },
-          _sum: { allocatedQty: true },
+        const remainingContext = await getContractRemainingContext({
+          salesOrderItemId: oi.id,
+          factoryId,
+          processId,
+          yearMonth,
+          firstDayOfMonth,
+          plannedQty: oi.plannedQty,
+          deliveredQty: oi.deliveredQty,
         });
-        const cumProducedPrevMonths =
-          prevAllocated._sum?.allocatedQty ?? 0;
-        const remainingTotal = Math.max(
-          0,
-          oi.plannedQty - oi.deliveredQty - cumProducedPrevMonths,
-        );
         const quota = oi.quotas[0] ?? null;
         return {
           salesOrderItemId: oi.id,
@@ -122,8 +131,9 @@ export async function GET(req: NextRequest) {
           plannedQty: oi.plannedQty,
           deliveredQty: oi.deliveredQty,
           note: oi.note,
-          cumProducedPrevMonths,
-          remainingTotal,
+          cumProducedPrevMonths: remainingContext.cumProducedPrevMonths,
+          remainingTotal: remainingContext.remainingTotal,
+          openingBalance: remainingContext.openingBalance,
           producedThisMonth: allocationByContractId.get(oi.id) ?? 0,
           quota: quota
             ? {
@@ -174,9 +184,17 @@ export async function GET(req: NextRequest) {
 
 // POST /api/kdsx/monthly-quotas — same logic as /api/v2/monthly-quotas POST
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userRole = (session.user as any)?.userRole as string | undefined;
+  const KDSX_EDIT_ROLES = ["ADMIN", "DIRECTOR", "SALES", "FACTORY_MANAGER"];
+  if (!userRole || !KDSX_EDIT_ROLES.includes(userRole)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
-    const { factoryId, processId, yearMonth, quotas } = body as {
+    const { factoryId, processId, yearMonth, quotas, openingBalances } = body as {
       factoryId: number;
       processId: number;
       yearMonth: string;
@@ -185,6 +203,11 @@ export async function POST(req: NextRequest) {
         quotaQty: number | null;
         isRemainder: boolean;
         sortOrder?: number;
+      }>;
+      openingBalances?: Array<{
+        salesOrderItemId: number;
+        producedBeforeKg: number;
+        note?: string | null;
       }>;
     };
 
@@ -229,9 +252,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate max 1 REMAINDER per item+yearMonth
-    const orderItemIds = quotas.map((q) => q.salesOrderItemId);
+    const orderItemIds = [...new Set(quotas.map((q) => q.salesOrderItemId))];
     const orderItems = await prisma.salesOrderItem.findMany({
-      where: { id: { in: orderItemIds } },
+      where: {
+        id: { in: orderItemIds },
+        order: { factoryId },
+      },
       select: { id: true, itemId: true },
     });
 
@@ -239,7 +265,9 @@ export async function POST(req: NextRequest) {
       const foundIds = new Set(orderItems.map((o) => o.id));
       const missing = orderItemIds.filter((id) => !foundIds.has(id));
       return NextResponse.json(
-        { error: `salesOrderItemId không tồn tại: ${missing.join(", ")}` },
+        {
+          error: `salesOrderItemId không tồn tại hoặc không thuộc nhà máy đã chọn: ${missing.join(", ")}`,
+        },
         { status: 400 },
       );
     }
@@ -290,7 +318,78 @@ export async function POST(req: NextRequest) {
       ),
     );
 
-    return NextResponse.json({ saved: results.length, yearMonth });
+    const balancePayload = Array.isArray(openingBalances)
+      ? openingBalances
+      : [];
+
+    for (const b of balancePayload) {
+      if (
+        typeof b.producedBeforeKg !== "number" ||
+        !Number.isFinite(b.producedBeforeKg) ||
+        b.producedBeforeKg < 0
+      ) {
+        return NextResponse.json(
+          {
+            error: `salesOrderItemId ${b.salesOrderItemId}: producedBeforeKg phải là số không âm`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const balanceItemIds = balancePayload.map((b) => b.salesOrderItemId);
+    if (balanceItemIds.length > 0) {
+      const found = await prisma.salesOrderItem.findMany({
+        where: {
+          id: { in: balanceItemIds },
+          order: { factoryId },
+        },
+        select: { id: true },
+      });
+      const foundIds = new Set(found.map((x) => x.id));
+      const missing = balanceItemIds.filter((id) => !foundIds.has(id));
+      if (missing.length > 0) {
+        return NextResponse.json(
+          {
+            error: `salesOrderItemId không tồn tại hoặc không thuộc nhà máy đã chọn: ${missing.join(", ")}`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const balanceResults = await Promise.all(
+      balancePayload.map((b) =>
+        prisma.contractOpeningBalance.upsert({
+          where: {
+            salesOrderItemId_factoryId_processId_openingYearMonth: {
+              salesOrderItemId: b.salesOrderItemId,
+              factoryId,
+              processId,
+              openingYearMonth: yearMonth,
+            },
+          },
+          update: {
+            producedBeforeKg: b.producedBeforeKg,
+            note: b.note ?? null,
+          },
+          create: {
+            salesOrderItemId: b.salesOrderItemId,
+            factoryId,
+            processId,
+            openingYearMonth: yearMonth,
+            producedBeforeKg: b.producedBeforeKg,
+            note: b.note ?? null,
+          },
+        }),
+      ),
+    );
+
+    return NextResponse.json({
+      saved: results.length,
+      savedOpeningBalances: balanceResults.length,
+      yearMonth,
+    });
   } catch (error: unknown) {
     const msg =
       error instanceof Error ? error.message : "Lỗi không xác định";

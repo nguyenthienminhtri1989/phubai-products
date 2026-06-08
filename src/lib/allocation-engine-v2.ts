@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getMonthlyItemTotals } from "@/lib/kdsx/monthly-item-totals";
+import { getContractRemainingContext } from "@/lib/kdsx/contract-opening-balance";
 
 // ===== INTERFACES =====
 
@@ -273,19 +274,20 @@ async function waterfallAllocate(
       },
     });
 
-    // Tính "còn cần SX" cho mỗi HĐ từ các tháng trước
+    // Tính "còn cần SX" cho mỗi HĐ.
+    // Nếu có số dư đầu kỳ, dùng nó làm điểm cắt thay vì tin allocation cũ.
     const contractsWithRemaining = await Promise.all(
       contracts.map(async (c: (typeof contracts)[0]) => {
-        const previousAllocated = await prisma.orderAllocation.aggregate({
-          where: {
-            salesOrderItemId: c.id,
-            productionDate: { lt: firstDayOfMonth },
-          },
-          _sum: { allocatedQty: true },
+        const remainingContext = await getContractRemainingContext({
+          salesOrderItemId: c.id,
+          factoryId,
+          processId,
+          yearMonth,
+          firstDayOfMonth,
+          plannedQty: c.plannedQty,
+          deliveredQty: c.deliveredQty,
         });
-        const totalPreviousAllocated = previousAllocated._sum?.allocatedQty ?? 0;
-        const remainingQty = c.plannedQty - c.deliveredQty - totalPreviousAllocated;
-        return { ...c, remainingQty };
+        return { ...c, remainingQty: remainingContext.remainingTotal };
       })
     );
 
