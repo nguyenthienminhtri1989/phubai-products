@@ -57,6 +57,7 @@ interface RowData {
   startIndex: number;
   endIndex: number | null;
   inputNE: number;
+  originalInputNE: number;
   isStopped: boolean;
   efficiency: number | null;
   note: string;
@@ -212,6 +213,7 @@ export default function DailyInputGridPage() {
             startIndex: lastLogMap.get(m.id) ?? 0,
             endIndex: null,
             inputNE: m.currentNE ?? 30,
+            originalInputNE: m.currentNE ?? 30,
             isStopped: false,
             efficiency: null,
             note: "",
@@ -234,6 +236,7 @@ export default function DailyInputGridPage() {
               startIndex: log.startIndex ?? 0,
               endIndex: log.endIndex ?? null,
               inputNE: log.inputNE ?? m.currentNE ?? 30,
+              originalInputNE: log.inputNE ?? m.currentNE ?? 30,
               isStopped: log.note === "Máy dừng",
               efficiency: log.efficiency ?? null,
               note: (log.note === "Máy dừng" || log.note === "Sửa chỉ số trước") ? "" : (log.note ?? ""),
@@ -291,6 +294,7 @@ export default function DailyInputGridPage() {
       startIndex: smartStartIndex,
       endIndex: null,
       inputNE: parentRow.inputNE,
+      originalInputNE: parentRow.inputNE,
       isStopped: false,
       efficiency: null,
       note: "",
@@ -421,6 +425,25 @@ export default function DailyInputGridPage() {
         message.info(`Đã cập nhật điều phối cho ${itemChangedRows.length} máy đổi mặt hàng`);
       }
 
+      // Cập nhật chi số điều phối nếu user sửa NE trên bảng nhập sản lượng.
+      const neChangedRows = dirty.filter(
+        r => !r.isSubRow && (r.formulaType === 3 || r.formulaType === 4) && r.inputNE !== r.originalInputNE
+      );
+      for (const r of neChangedRows) {
+        const res = await fetch("/api/machines/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineIds: [r.machineId], currentNE: r.inputNE }),
+        });
+        if (!res.ok) {
+          const data: { error?: string } = await res.json();
+          throw new Error(`Không thể cập nhật chi số cho máy ${r.machineName}: ${data.error ?? ""}`);
+        }
+      }
+      if (neChangedRows.length > 0) {
+        message.info(`Đã cập nhật chi số cho ${neChangedRows.length} máy`);
+      }
+
       // Ghi ngược lô hàng nếu thay đổi (1 request/máy — primary row đại diện)
       const lotChangedRows = dirty.filter(
         r => !r.isSubRow && (r.currentLotNumber ?? null) !== (r.originalLotNumber ?? null)
@@ -504,6 +527,7 @@ export default function DailyInputGridPage() {
           ...r,
           isDirty: false,
           originalItemId: r.itemId,
+          originalInputNE: r.inputNE,
           originalLotNumber: r.currentLotNumber ?? null,
           existingLogId: newId ?? r.existingLogId,
         };

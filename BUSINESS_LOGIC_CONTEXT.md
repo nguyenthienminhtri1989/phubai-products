@@ -4201,3 +4201,44 @@ tests/test-kdsx-monthly-quotas-opening-balance.sh                 — curl test 
 
 - Bảng mới `contract_opening_balances` lưu `openingYearMonth` dạng `"YYYY-MM"` và `producedBeforeKg` kg.
 - Migration chỉ tạo bảng/index mới, không xóa hoặc sửa dữ liệu hợp đồng/production/allocation cũ.
+
+---
+
+## PRODUCTION INPUT — Ghi ngược chi số NE về điều phối máy
+
+**Status:** ✅ Completed 2026-06-09
+
+### What was built
+
+Khi người dùng sửa trường chi số NE trên trang `/production/daily-input-grid` rồi lưu sản lượng, hệ thống ghi ngược giá trị đó về `Machine.currentNE` để trang `/machines` và các lần nhập sau dùng cùng chi số mới. Logic này chạy tương tự ghi ngược mặt hàng hiện tại, chỉ áp dụng cho máy dùng công thức có NE (`formulaType` 3 hoặc 4).
+
+### Files created/modified
+
+```
+src/app/production/daily-input-grid/page.tsx     — Theo dõi originalInputNE và gọi /api/machines/batch khi NE thay đổi
+src/app/api/machines/batch/route.ts              — Cho phép POST cập nhật currentNE tùy chọn cùng hoặc không cùng itemId
+tests/test-machines-batch-current-ne.sh          — Curl test cho cập nhật currentNE, itemId, validation và auth
+```
+
+### Key business logic implemented
+
+- Row nhập sản lượng lưu thêm `originalInputNE` để chỉ ghi ngược khi user thực sự sửa NE.
+- Chỉ primary row của máy thường và `formulaType` 3/4 mới cập nhật `Machine.currentNE`; sub-row đổi mặt hàng giữa ca không ghi đè chi số máy.
+- `/api/machines/batch` vẫn giữ quyền cũ: update nhiều máy chỉ dành cho Admin/Manager, update 1 máy từ trang nhập sản lượng cho phép user đã đăng nhập.
+- `currentNE` phải là số dương; payload thiếu cả `itemId` và `currentNE` bị trả 400.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | /api/machines/batch | Cập nhật `currentItemId` và/hoặc `currentNE` cho danh sách máy |
+| POST | /api/production/daily-input | Lưu production log với `inputNE` của từng bản ghi sản lượng |
+
+### Known limitations / not yet implemented
+
+- Script test curl cần app đang chạy và cookie đăng nhập thật để kiểm tra happy path.
+- Trang `/production/daily-input` và `/production/mobile-input` chưa được mở rộng trong thay đổi này; yêu cầu hiện tại chỉ xử lý `/production/daily-input-grid`.
+
+### Data notes
+
+- Không có schema, migration hay seed data mới.
