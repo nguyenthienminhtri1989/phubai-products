@@ -4299,3 +4299,42 @@ tests/test-source-process-revenue.sh                      — curl smoke test ch
 
 - Migration da apply tren local dev bang `npx prisma migrate deploy`; khong xoa/rename field/table nao.
 - Cac cot moi deu nullable de bao toan du lieu lich su: `processes.revenueFactoryId`, `machines.currentSourceProcessId`, `production_logs.sourceProcessId`.
+
+---
+
+## PRODUCTION / KDSX — Fix cau hinh dropdown nguon soi danh ong
+
+**Status:** ✅ Completed 2026-06-17
+
+### What was built
+
+Bo sung data migration cau hinh `Process.revenueFactoryId` cho cac process nguon soi hien co de dropdown "Nguon soi" khong con hien No data. Seed moi cung duoc cap nhat de DB khoi tao moi co san mapping doanh thu cho nguon soi.
+
+### Files created/modified
+
+```
+prisma/migrations/20260617000002_configure_source_process_revenue/ — data migration set revenueFactoryId cho Soi con NM1/NM2/G37
+prisma/seed.ts                                                    — seed source processes voi revenueFactoryId mac dinh
+BUSINESS_LOGIC_CONTEXT.md                                        — ghi nhan fix cau hinh nguon soi
+```
+
+### Key business logic implemented
+
+- `Soi con NM1` duoc quy ve doanh thu `Nha may Soi 1`.
+- `Soi con NM2` duoc quy ve doanh thu `Nha may Soi 1` theo rule TQ -> NM1 trong spec.
+- `Soi con G37` duoc quy ve doanh thu `Nha may Soi 2`.
+- Dropdown `/api/processes/source-options` tiep tuc chi tra cac process da co `revenueFactoryId`, giu backend validation chat che.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/processes/source-options | Lay danh sach process nguon soi da cau hinh revenueFactoryId |
+
+### Known limitations / not yet implemented
+
+- Chua doi ten process hien co thanh G33/TQ; mapping tam dung ten seed hien tai `Soi con NM1` va `Soi con NM2`.
+
+### Data notes
+
+- Migration da apply vao DB hien tai va tra ve 3 option: `Soi con NM1 -> Nha may Soi 1`, `Soi con NM2 -> Nha may Soi 1`, `Soi con G37 -> Nha may Soi 2`.

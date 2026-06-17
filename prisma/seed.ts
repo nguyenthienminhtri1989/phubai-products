@@ -33,7 +33,7 @@ async function main() {
     data: { name: "Ghép Thô NM1", factoryId: factory1.id },
   });
   const proSoiCon1 = await prisma.process.create({
-    data: { name: "Sợi con NM1", factoryId: factory1.id },
+    data: { name: "Sợi con NM1", factoryId: factory1.id, revenueFactoryId: factory1.id },
   });
   const proDanhOng1 = await prisma.process.create({
     data: { name: "Đánh ống NM1", factoryId: factory1.id },
@@ -46,7 +46,10 @@ async function main() {
     data: { name: "Ghép Thô NM2", factoryId: factory2.id },
   });
   const proSoiCon2 = await prisma.process.create({
-    data: { name: "Sợi con NM2", factoryId: factory2.id },
+    data: { name: "Sợi con NM2", factoryId: factory2.id, revenueFactoryId: factory1.id },
+  });
+  await prisma.process.create({
+    data: { name: "Sợi con G37", factoryId: factory2.id, revenueFactoryId: factory2.id },
   });
   const proDanhOng2 = await prisma.process.create({
     data: { name: "Đánh ống NM2", factoryId: factory2.id },
