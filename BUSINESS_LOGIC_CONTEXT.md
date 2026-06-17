@@ -4338,3 +4338,43 @@ BUSINESS_LOGIC_CONTEXT.md                                        — ghi nhan fi
 ### Data notes
 
 - Migration da apply vao DB hien tai va tra ve 3 option: `Soi con NM1 -> Nha may Soi 1`, `Soi con NM2 -> Nha may Soi 1`, `Soi con G37 -> Nha may Soi 2`.
+
+---
+
+## PRODUCTION MOBILE — Chon nguon soi tren mobile winding
+
+**Status:** ✅ Completed 2026-06-17
+
+### What was built
+
+Bo sung thao tac chon/doi nguon soi truc tiep tren giao dien mobile `/production/mobile-winding`, dung cung logic voi desktop `/production/winding-input`. Nguoi nhap bam chip nguon soi duoi ten may, chon source process trong modal, sau do backend cap nhat `Machine.currentSourceProcessId` de cac log moi snapshot `sourceProcessId`.
+
+### Files created/modified
+
+```
+src/app/production/mobile-winding/page.tsx — them source options, modal chon nguon soi va PUT /api/machines/[id]
+BUSINESS_LOGIC_CONTEXT.md                  — ghi nhan mobile winding source selector
+```
+
+### Key business logic implemented
+
+- Mobile winding chi doi cau hinh `Machine.currentSourceProcessId`; frontend khong gui `sourceProcessId` khi luu san luong.
+- Log moi van do `/api/production/daily-input` snapshot source tu machine, giong desktop winding-input.
+- Sau khi doi nguon soi, mobile reload lai danh sach may cua ngay/ca hien tai va giu may dang xem.
+- Log da luu truoc do khong bi backfill hoac ghi de nguon soi.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/processes/source-options | Lay danh sach source process da cau hinh revenueFactoryId |
+| PUT | /api/machines/[id] | Cap nhat currentSourceProcessId cho may danh ong |
+| POST | /api/production/daily-input | Luu san luong; log moi snapshot sourceProcessId tu machine |
+
+### Known limitations / not yet implemented
+
+- Chua them offline/mobile cache cho danh sach source options; trang fetch truc tiep tu API khi user da dang nhap.
+
+### Data notes
+
+- Mobile dung lai mapping source process hien co trong DB: `Soi con NM1`, `Soi con NM2`, `Soi con G37` va revenue factory tu `Process.revenueFactoryId`.

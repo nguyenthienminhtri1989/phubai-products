@@ -25,6 +25,7 @@ import {
   ThunderboltOutlined,
   EditOutlined,
   SwapOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -49,6 +50,8 @@ interface WMachine {
   name: string;
   processId: number;
   allowMultiItemPerShift?: boolean;
+  currentSourceProcessId?: number | null;
+  currentSourceProcess?: SourceOption | null;
   currentItem?: { id: number; name: string };
   currentLot?: { id: number; lotNumber: string } | null;
   itemAssignments?: WAssignment[];
@@ -93,6 +96,21 @@ interface LotOption {
   lotNumber: string;
   item?: { id: number; name: string } | null;
 }
+interface SourceOption {
+  id: number;
+  name: string;
+  revenueFactory?: { id: number; name: string } | null;
+}
+interface SessionUserShape {
+  role?: string | null;
+  accessLevel?: string | null;
+  processIds?: Array<number | string>;
+}
+interface AssignmentPayload {
+  itemId: number;
+  lotId: number | null;
+  sortOrder: number;
+}
 
 // Mode cho modal thao tác giữa ca
 type ShiftActionMode = "correction" | "change" | "add";
@@ -105,12 +123,15 @@ const SHIFT_LABEL: Record<number, string> = { 1: "Ca 1", 2: "Ca 2", 3: "Ca 3" };
 // Chuẩn hóa so sánh lotId (undefined/null đều coi là null)
 const sameLot = (a: number | null | undefined, b: number | null | undefined) =>
   (a ?? null) === (b ?? null);
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 // ============================
 // MAIN COMPONENT
 // ============================
 function MobileWindingContent() {
   const { data: session, status } = useSession();
+  const sessionUser = session?.user as SessionUserShape | undefined;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -132,6 +153,7 @@ function MobileWindingContent() {
   const [processes, setProcesses] = useState<Process[]>([]);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [allLots, setAllLots] = useState<LotOption[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
 
   // State chọn công đoạn
   const [selectedProcessId, setSelectedProcessId] = useState<number | null>(
@@ -169,6 +191,9 @@ function MobileWindingContent() {
   const [mNewLotId, setMNewLotId] = useState<number | null>(null);
   const [mOldOutputKg, setMOldOutputKg] = useState<number | null>(null);
   const [mChangeMode, setMChangeMode] = useState<"switch" | "stop">("switch");
+  const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [pendingSourceId, setPendingSourceId] = useState<number | undefined>();
+  const [sourceSaving, setSourceSaving] = useState(false);
 
   // ============================
   // FETCH METADATA
@@ -187,8 +212,8 @@ function MobileWindingContent() {
         if (pRes.ok) {
           const allProc: Process[] = await pRes.json();
           const userProcessIds: number[] =
-            (session?.user as any)?.processIds || [];
-          const isAdmin = session?.user?.role === "ADMIN";
+            sessionUser?.processIds?.map(Number) || [];
+          const isAdmin = sessionUser?.role === "ADMIN";
           const visible =
             isAdmin || userProcessIds.length === 0
               ? allProc
@@ -204,6 +229,14 @@ function MobileWindingContent() {
     };
     load();
   }, [status, session]);
+
+  useEffect(() => {
+    if (status === "loading" || status === "unauthenticated") return;
+    fetch("/api/processes/source-options")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSourceOptions(Array.isArray(data) ? data : []))
+      .catch(() => setSourceOptions([]));
+  }, [status]);
 
   // ============================
   // FETCH MACHINES
@@ -239,6 +272,44 @@ function MobileWindingContent() {
   const reloadMachines = async () => {
     if (selectedProcessId)
       await fetchMachines(selectedProcessId, selectedDate, selectedShift, true);
+  };
+
+  const openSourceModal = () => {
+    if (!currentMachine) return;
+    setPendingSourceId(
+      currentMachine.currentSourceProcessId ??
+        currentMachine.currentSourceProcess?.id ??
+        undefined,
+    );
+    setSourceModalOpen(true);
+  };
+
+  const handleChangeSource = async () => {
+    if (!currentMachine) return;
+    if (!pendingSourceId) {
+      message.warning("Vui long chon nguon soi");
+      return;
+    }
+
+    setSourceSaving(true);
+    try {
+      const res = await fetch(`/api/machines/${currentMachine.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentSourceProcessId: pendingSourceId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Doi nguon soi that bai");
+      }
+      message.success("Da doi nguon soi. Log moi se ap dung nguon nay.");
+      setSourceModalOpen(false);
+      await reloadMachines();
+    } catch (e: unknown) {
+      message.error(getErrorMessage(e, "Doi nguon soi that bai"));
+    } finally {
+      setSourceSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -373,7 +444,10 @@ function MobileWindingContent() {
     }));
 
   // PUT assignment cho máy
-  const putAssignments = async (machineId: number, assignments: any[]) => {
+  const putAssignments = async (
+    machineId: number,
+    assignments: AssignmentPayload[],
+  ) => {
     const res = await fetch(`/api/machines/${machineId}/assignments`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -635,8 +709,8 @@ function MobileWindingContent() {
 
       closeActionModal();
       await reloadMachines();
-    } catch (e: any) {
-      message.error(e.message || "Lỗi thao tác");
+    } catch (e: unknown) {
+      message.error(getErrorMessage(e, "Lỗi thao tác"));
     } finally {
       setActionSaving(false);
     }
@@ -740,7 +814,7 @@ function MobileWindingContent() {
       </div>
     );
   }
-  const isReadOnly = (session?.user as any)?.accessLevel === "READ_ONLY";
+  const isReadOnly = sessionUser?.accessLevel === "READ_ONLY";
   if (isReadOnly) {
     return (
       <div style={S.center}>
@@ -1028,7 +1102,7 @@ function MobileWindingContent() {
             gap: 6,
             overflowX: "auto",
             padding: "8px 12px",
-            WebkitOverflowScrolling: "touch" as any,
+            WebkitOverflowScrolling: "touch",
           }}
         >
           {machines.map((m, idx) => {
@@ -1100,6 +1174,30 @@ function MobileWindingContent() {
         <div style={{ fontSize: 22, fontWeight: 800, color: "#1677ff" }}>
           {currentMachine?.name}
         </div>
+        {currentMachine && (
+          <button
+            type="button"
+            onClick={openSourceModal}
+            style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${
+                currentMachine.currentSourceProcess ? "#91d5ff" : "#ffa39e"
+              }`,
+              background: currentMachine.currentSourceProcess ? "#e6f7ff" : "#fff1f0",
+              color: currentMachine.currentSourceProcess ? "#0958d9" : "#cf1322",
+              fontSize: 12,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            Nguon: {currentMachine.currentSourceProcess?.name || "Chua gan"}
+            <DownOutlined style={{ fontSize: 10 }} />
+          </button>
+        )}
         {hasDirty && (
           <Tag color="orange" style={{ marginTop: 4, fontSize: 11 }}>
             Chưa lưu
@@ -1337,6 +1435,47 @@ function MobileWindingContent() {
       </div>
 
       {dateShiftModal}
+      <Modal
+        open={sourceModalOpen}
+        onCancel={() => setSourceModalOpen(false)}
+        title="Doi nguon soi"
+        centered
+        footer={[
+          <Button key="cancel" onClick={() => setSourceModalOpen(false)} size="large">
+            Huy
+          </Button>,
+          <Button
+            key="ok"
+            type="primary"
+            size="large"
+            loading={sourceSaving}
+            onClick={handleChangeSource}
+          >
+            Xac nhan
+          </Button>,
+        ]}
+      >
+        <div style={{ marginBottom: 8, fontSize: 13, color: "#666" }}>
+          May: <strong>{currentMachine?.name}</strong>
+        </div>
+        <Select
+          size="large"
+          style={{ width: "100%" }}
+          placeholder="Chon nguon soi..."
+          showSearch
+          optionFilterProp="label"
+          value={pendingSourceId}
+          onChange={(v: number) => setPendingSourceId(v)}
+          options={sourceOptions.map((p) => ({
+            label: `${p.name} -> ${p.revenueFactory?.name || "?"}`,
+            value: p.id,
+          }))}
+        />
+        <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>
+          Log moi tao sau khi doi se snapshot nguon soi nay. Log da luu truoc do
+          khong bi ghi de.
+        </div>
+      </Modal>
       {actionModal.open && renderActionModal()}
     </div>
   );

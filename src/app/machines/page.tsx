@@ -38,7 +38,11 @@ interface MachineData {
   id: number;
   name: string;
   processId: number;
-  process?: { name: string; isRevenueProcess?: boolean; factory?: { name: string } };
+  process?: {
+    name: string;
+    isRevenueProcess?: boolean;
+    factory?: { name: string };
+  };
   currentItem?: { name: string; code: string };
   currentLot?: { id: number; lotNumber: string } | null;
   currentLotId?: number | null;
@@ -289,7 +293,8 @@ export default function MachinesPage() {
 
       const key = `${a.itemId}:${a.lotId ?? "null"}`;
       if (seen.has(key)) {
-        const itemName = items.find((it) => it.id === a.itemId)?.name ?? a.itemId;
+        const itemName =
+          items.find((it) => it.id === a.itemId)?.name ?? a.itemId;
         message.error(
           a.lotId == null
             ? `Dòng ${i + 1}: Mặt hàng "${itemName}" bị trùng. Khi gán cùng mặt hàng cho 2 lô khác nhau, cả 2 dòng đều phải chọn lô cụ thể.`
@@ -447,7 +452,7 @@ export default function MachinesPage() {
       },
     },
     {
-      title: "Nguon soi",
+      title: "Nguồn sợi",
       key: "source",
       width: 150,
       render: (_: any, r: MachineData) => {
@@ -784,7 +789,7 @@ export default function MachinesPage() {
             <Form.Item
               name="currentSourceProcessId"
               label="Nguon soi"
-              tooltip="Nguon soi dang quyen vao may ong, dung de quy doanh thu ve nha may"
+              tooltip="Nguồn sợi đang cấp cho máy ống, dùng để tính doanh thu nhà máy"
             >
               <Select
                 allowClear
