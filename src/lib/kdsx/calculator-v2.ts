@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type {
   AllocationResult,
   AllocationLine,
+  AllocationWarning,
 } from "@/lib/allocation-engine-v2";
 
 // ===== INTERFACES =====
@@ -65,6 +66,7 @@ export interface PnLResult {
   byContract: ContractPnL[];
   fixedCosts: FixedCostLine[];
   materialWarnings?: MaterialWarning[];
+  allocationWarnings?: AllocationWarning[];
   meta: {
     exchangeRate: number;
     wasteAdjustmentFactor: number;
@@ -432,6 +434,7 @@ export async function calculateRevenuePnL(
     byContract,
     fixedCosts,
     materialWarnings,
+    allocationWarnings: allocationResult.warnings ?? [],
     meta: {
       exchangeRate,
       wasteAdjustmentFactor,

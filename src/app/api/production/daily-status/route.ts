@@ -20,6 +20,13 @@ export async function GET(request: Request) {
       include: {
         currentItem: true,
         currentLot: { select: { id: true, lotNumber: true } },
+        currentSourceProcess: {
+          select: {
+            id: true,
+            name: true,
+            revenueFactory: { select: { id: true, name: true } },
+          },
+        },
         itemAssignments: {
           where: { isActive: true },
           include: {

@@ -23,6 +23,7 @@ import {
   PlusOutlined,
   DeleteOutlined,
   EditOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
@@ -57,6 +58,12 @@ interface WindingRow {
   isExtra?: boolean;      // Dòng thêm giữa ca (không có trong assignment)
   originalItemId?: number; // Item gốc từ assignment — dùng để detect thay đổi
   editMode?: boolean;      // Đang trong chế độ sửa mặt hàng
+}
+
+interface SourceOption {
+  id: number;
+  name: string;
+  revenueFactory?: { id: number; name: string } | null;
 }
 
 let _uidCounter = 0;
@@ -103,6 +110,8 @@ export default function WindingInputPage() {
   const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [machinesRaw, setMachinesRaw] = useState<MachineForInput[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
+  const [pendingSource, setPendingSource] = useState<Record<number, number | undefined>>({});
 
   // Processes thuộc factory đã chọn
   const filteredProcesses = useMemo(() => {
@@ -126,6 +135,13 @@ export default function WindingInputPage() {
     }
   }, [processes, isAdmin, su]);
 
+  useEffect(() => {
+    fetch("/api/processes/source-options")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSourceOptions(Array.isArray(data) ? data : []))
+      .catch(() => setSourceOptions([]));
+  }, []);
+
   // ============================================================
   // Load data
   // ============================================================
@@ -146,6 +162,14 @@ export default function WindingInputPage() {
       // Chỉ lấy máy multi-item
       const multiMachines = allMachines.filter((m) => m.allowMultiItemPerShift);
       setMachinesRaw(multiMachines);
+      setPendingSource(
+        Object.fromEntries(
+          multiMachines.map((m) => [
+            m.id,
+            m.currentSourceProcessId ?? m.currentSourceProcess?.id ?? undefined,
+          ]),
+        ),
+      );
 
       const newRows: WindingRow[] = [];
 
@@ -227,6 +251,32 @@ export default function WindingInputPage() {
   useEffect(() => {
     if (processId && date && shift) handleLoad();
   }, [processId, date, shift, handleLoad]);
+
+  const handleChangeSource = async (
+    machineId: number,
+    newSourceProcessId?: number,
+  ) => {
+    if (!newSourceProcessId) {
+      message.warning("Vui long chon nguon soi");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/machines/${machineId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentSourceProcessId: newSourceProcessId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Doi nguon soi that bai");
+      }
+      message.success("Da doi nguon soi. Log moi se ap dung nguon nay.");
+      await handleLoad();
+    } catch (error: any) {
+      message.error(error.message || "Doi nguon soi that bai");
+    }
+  };
 
   // ============================================================
   // Row editing
@@ -470,11 +520,54 @@ export default function WindingInputPage() {
         const firstIndex = rows.findIndex(
           (r) => r.machineId === record.machineId,
         );
+        const currentMachine = machinesRaw.find((m) => m.id === record.machineId);
         if (index === firstIndex) {
           return {
             children: (
               <div>
                 <strong>{val}</strong>
+                <div style={{ marginTop: 4 }}>
+                  <Popconfirm
+                    title="Doi nguon soi"
+                    description={
+                      <div style={{ minWidth: 240, paddingTop: 8 }}>
+                        <Select
+                          size="small"
+                          style={{ width: "100%" }}
+                          placeholder="Chon nguon soi"
+                          value={pendingSource[record.machineId]}
+                          onChange={(v) =>
+                            setPendingSource((prev) => ({
+                              ...prev,
+                              [record.machineId]: v,
+                            }))
+                          }
+                          options={sourceOptions.map((p) => ({
+                            label: `${p.name} -> ${p.revenueFactory?.name || "?"}`,
+                            value: p.id,
+                          }))}
+                        />
+                        <div style={{ marginTop: 8, fontSize: 11, color: "#888" }}>
+                          Log moi tao sau khi doi se snapshot nguon soi nay.
+                        </div>
+                      </div>
+                    }
+                    onConfirm={() =>
+                      handleChangeSource(
+                        record.machineId,
+                        pendingSource[record.machineId],
+                      )
+                    }
+                    okText="Xac nhan"
+                    cancelText="Huy"
+                    disabled={isReadOnly}
+                  >
+                    <Tag color={currentMachine?.currentSourceProcess ? "cyan" : "red"} style={{ cursor: isReadOnly ? "default" : "pointer", marginTop: 4 }}>
+                      Nguon: {currentMachine?.currentSourceProcess?.name || "Chua gan"}
+                      {!isReadOnly && <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} />}
+                    </Tag>
+                  </Popconfirm>
+                </div>
                 <div style={{ marginTop: 4 }}>
                   <Button
                     size="small"

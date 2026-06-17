@@ -4242,3 +4242,60 @@ tests/test-machines-batch-current-ne.sh          — Curl test cho cập nhật 
 ### Data notes
 
 - Không có schema, migration hay seed data mới.
+---
+
+## PRODUCTION / KDSX — Phan tach doanh thu danh ong theo nguon soi
+
+**Status:** ✅ Completed 2026-06-17
+
+### What was built
+
+Them truc nguon soi cho may danh ong de log san luong moi snapshot `sourceProcessId` tu cau hinh may, sau do Revenue Dashboard v2 nhom san luong theo `sourceProcess.revenueFactoryId` thay vi chi dua vao factory dia ly cua may. UI `/machines` va `/production/winding-input` cho xem/doi nguon soi cua may danh ong, con log cu chua co source van fallback theo `machine.process.factoryId`.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                      — them Process.revenueFactoryId, Machine.currentSourceProcessId, ProductionLog.sourceProcessId va relations/index
+prisma/migrations/20260617000001_add_source_process_for_revenue/ — migration additive them 3 cot nullable, FK va index
+src/app/api/processes/source-options/route.ts             — GET danh sach process co revenueFactoryId de chon lam nguon soi
+src/app/api/machines/route.ts                             — GET include currentSourceProcess; POST nhan currentSourceProcessId neu co
+src/app/api/machines/[id]/route.ts                        — PUT partial-update an toan va validate currentSourceProcessId phai co revenueFactoryId
+src/app/api/production/daily-status/route.ts              — tra currentSourceProcess cho man winding-input
+src/app/api/production/daily-input/route.ts               — khi create ProductionLog moi, snapshot sourceProcessId tu Machine.currentSourceProcessId
+src/app/machines/page.tsx                                 — hien cot/form Nguon soi cho may revenue process
+src/app/production/winding-input/page.tsx                 — tag doi nguon soi tai cho tren dong may danh ong
+src/lib/allocation-engine-v2.ts                           — group san luong theo sourceProcess.revenueFactoryId, fallback log cu theo factory dia ly, them warning missing_source
+src/lib/kdsx/calculator-v2.ts                             — propagate allocationWarnings sang PnLResult
+src/app/kdsx/revenue/page.tsx                             — hien banner neu log danh ong trong ky thieu sourceProcessId
+tests/test-source-process-revenue.sh                      — curl smoke test cho source-options, machine partial PUT va daily-input snapshot
+```
+
+### Key business logic implemented
+
+- `Process.revenueFactoryId` la nha may doanh thu quy uoc cua nguon soi; `Machine.currentSourceProcessId` la cau hinh sticky tren may danh ong; `ProductionLog.sourceProcessId` la snapshot tai thoi diem tao log.
+- Log moi tao qua `/api/production/daily-input` tu dong copy `Machine.currentSourceProcessId`; frontend khong gui `sourceProcessId`, va log cu khi update khong bi ghi de source.
+- Revenue v2 tinh san luong theo `sourceProcess.revenueFactoryId`; neu `sourceProcessId = null` thi fallback theo `machine.process.factoryId` de bao cao lich su khong hong.
+- `PUT /api/machines/[id]` chuyen sang merge-update theo field duoc gui, tranh viec doi rieng nguon soi lam mat cac field cau hinh may khac.
+- Dashboard canh bao `missing_source` khi trong ky co log revenue process chua co `sourceProcessId`.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/processes/source-options | Lay danh sach process co `revenueFactoryId` de chon lam nguon soi |
+| PUT | /api/machines/[id] | Cap nhat partial may, bao gom `currentSourceProcessId` |
+| GET | /api/machines | Include `currentSourceProcess` cho danh sach may |
+| GET | /api/production/daily-status | Include `currentSourceProcess` cho man nhap danh ong |
+| POST | /api/production/daily-input | Tao/cap nhat log san luong; log moi snapshot `sourceProcessId` tu may |
+| GET | /api/v2/dashboard/revenue | Ket qua PnL co them `allocationWarnings` khi thieu nguon soi |
+
+### Known limitations / not yet implemented
+
+- Chua tao UI rieng de cau hinh `Process.revenueFactoryId`; hien can cap nhat truc tiep DB hoac API/script rieng neu muon set G33/TQ/G37 hang loat.
+- DB dev hien chi co process ro ten `Soi con G37`; chua thay process G33/TQ theo ten nen chua backfill duoc mapping G33+TQ -> NM1, G37 -> NM2 mot cach chac chan.
+- Projection mode dem may theo `Machine.currentSourceProcessId`; neu may danh ong chua gan nguon thi van fallback theo factory dia ly.
+
+### Data notes
+
+- Migration da apply tren local dev bang `npx prisma migrate deploy`; khong xoa/rename field/table nao.
+- Cac cot moi deu nullable de bao toan du lieu lich su: `processes.revenueFactoryId`, `machines.currentSourceProcessId`, `production_logs.sourceProcessId`.

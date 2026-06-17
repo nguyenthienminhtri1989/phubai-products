@@ -92,11 +92,18 @@ interface MaterialWarning {
   hasConfig: boolean;
 }
 
+interface AllocationWarning {
+  type: "missing_source";
+  count: number;
+  message: string;
+}
+
 interface PnLResult {
   summary: PnLSummary;
   byContract: ContractPnL[];
   fixedCosts: FixedCostLine[];
   materialWarnings?: MaterialWarning[];
+  allocationWarnings?: AllocationWarning[];
   meta: { exchangeRate: number; wasteAdjustmentFactor: number; mode: string };
 }
 
@@ -772,6 +779,30 @@ export default function RevenueDashboard() {
                     }
                   >
                     Cập nhật ngay
+                  </Button>
+                }
+              />
+            )}
+          {dashData &&
+            (dashData.mtd.allocationWarnings?.length ?? 0) > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Mot so ban ghi danh ong trong ky chua co nguon soi"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {dashData.mtd.allocationWarnings!.map((w) => (
+                      <li key={`${w.type}-${w.count}`}>{w.message}</li>
+                    ))}
+                  </ul>
+                }
+                action={
+                  <Button
+                    size="small"
+                    onClick={() => (window.location.href = "/machines")}
+                  >
+                    Kiem tra may
                   </Button>
                 }
               />

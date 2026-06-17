@@ -297,3 +297,19 @@ BUSINESS_LOGIC_CONTEXT.md         — Full context (file gốc, đọc khi cần
 - UI trang traceability riêng (hiện chỉ có API)
 - Tự động clear Machine.currentLotId khi đóng lô
 - Lọc lịch sử sản xuất theo lô
+---
+
+## Cap nhat 2026-06-17: Revenue source process cho may danh ong
+
+### Da hoan thanh
+
+- **Schema additive**: them `Process.revenueFactoryId`, `Machine.currentSourceProcessId`, `ProductionLog.sourceProcessId` cung relations/index.
+- **API**: `/api/processes/source-options` tra danh sach source process da gan `revenueFactoryId`; `/api/machines/[id]` ho tro partial PUT va validate source; `/api/production/daily-input` snapshot sourceProcessId khi tao log moi.
+- **UI**: `/machines` hien/form chon "Nguon soi" cho may revenue process; `/production/winding-input` co tag doi nguon tai cho theo may.
+- **Revenue v2**: `allocation-engine-v2` group san luong theo `sourceProcess.revenueFactoryId`, fallback log cu `sourceProcessId=null` theo factory dia ly, va dashboard `/kdsx/revenue` hien warning missing source.
+- **Test**: `tests/test-source-process-revenue.sh` smoke test source-options, machine partial PUT va daily-input snapshot.
+
+### Luu y du lieu
+
+- DB dev da apply migration `20260617000001_add_source_process_for_revenue`.
+- Chua backfill G33/TQ/G37 hang loat vi du lieu dev hien chi thay ro `Soi con G37`; can xac nhan ten process thuc te truoc khi set `revenueFactoryId` cho G33/TQ.

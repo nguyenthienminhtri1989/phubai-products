@@ -278,6 +278,14 @@ TẤT CẢ migration từ đầu nên 1 migration cũ lỗi là chặn toàn b�
 
 **Lưu ý:** `npx prisma db execute --file x.sql` chỉ chạy lệnh, KHÔNG in kết quả SELECT.
 
+### Revenue source process cho may danh ong (2026-06-17)
+
+Khi can tach doanh thu danh ong theo nguon soi:
+- `Process.revenueFactoryId` la factory doanh thu quy uoc cua nguon soi.
+- `Machine.currentSourceProcessId` la cau hinh hien tai/sticky tren may danh ong.
+- `ProductionLog.sourceProcessId` la snapshot khi TAO log moi. Khi doi `Machine.currentSourceProcessId`, KHONG backfill va KHONG ghi de log cu.
+- Revenue v2 group theo `sourceProcess.revenueFactoryId`; log cu `sourceProcessId=null` fallback theo `machine.process.factoryId`.
+
 ### ⚠️ Partial unique index — Prisma chưa hỗ trợ trong schema
 
 Khi cần unique có điều kiện (VD: unique theo lô CHỈ KHI lotId IS NOT NULL), KHÔNG khai báo

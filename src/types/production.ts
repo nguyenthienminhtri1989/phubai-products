@@ -7,6 +7,13 @@ export interface Process {
   id: number;
   name: string;
   factoryId: number;
+  isRevenueProcess?: boolean;
+}
+
+export interface SourceProcessOption {
+  id: number;
+  name: string;
+  revenueFactory?: { id: number; name: string } | null;
 }
 
 export interface ItemOption {
@@ -56,6 +63,8 @@ export interface MachineForInput {
   allowMultiItemPerShift?: boolean;
   currentItem?: { id: number; name: string } | null;
   currentLot?: { id: number; lotNumber: string } | null;
+  currentSourceProcessId?: number | null;
+  currentSourceProcess?: SourceProcessOption | null;
   todayLog?: ProductionLogEntry | null;
   todayLogs?: ProductionLogEntry[];
   itemAssignments?: MachineAssignment[];

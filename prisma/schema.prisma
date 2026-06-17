@@ -53,12 +53,13 @@ model Factory {
   productionLines ProductionLine[]
 
   // KD-SX relations
-  salesOrders        SalesOrder[]
-  monthlyInputParams MonthlyInputParam[]
-  monthlyPlans       MonthlyPlan[]
-  monthlyActuals     MonthlyActual[]
-  summarySnapshots   MonthlySummarySnapshot[]
+  salesOrders             SalesOrder[]
+  monthlyInputParams      MonthlyInputParam[]
+  monthlyPlans            MonthlyPlan[]
+  monthlyActuals          MonthlyActual[]
+  summarySnapshots        MonthlySummarySnapshot[]
   contractOpeningBalances ContractOpeningBalance[]
+  processesForRevenue     Process[]                @relation("ProcessRevenueFactory")
 
   // Định mức năng suất
   benchmarkVersions BenchmarkVersion[]
@@ -95,17 +96,23 @@ model Process {
   factoryId Int
   factory   Factory @relation(fields: [factoryId], references: [id])
 
+  revenueFactoryId Int?
+  revenueFactory   Factory? @relation("ProcessRevenueFactory", fields: [revenueFactoryId], references: [id])
+
   machines      Machine[] // 1 Công đoạn quản lý nhiều Máy
   userProcesses UserProcess[] // Phân quyền: User nào thuộc công đoạn nào
 
   // Định mức năng suất
+  machinesAsSource Machine[]       @relation("MachineSourceProcess")
+  logsAsSource     ProductionLog[] @relation("LogSourceProcess")
+
   productivityBenchmarks ProductivityBenchmark[]
 
   // Module Kế hoạch SX tháng
   productionSchedules ProductionSchedule[]
 
   // Monthly quota
-  monthlyQuotas MonthlyQuota[]
+  monthlyQuotas           MonthlyQuota[]
   contractOpeningBalances ContractOpeningBalance[]
 
   @@map("processes")
@@ -208,6 +215,9 @@ model Machine {
   currentLotId Int?
   currentLot   Lot? @relation("CurrentLot", fields: [currentLotId], references: [id])
 
+  currentSourceProcessId Int?
+  currentSourceProcess   Process? @relation("MachineSourceProcess", fields: [currentSourceProcessId], references: [id])
+
   maintenanceTasks MaintenanceTask[]
 
   // --- Dữ liệu lịch sử ---
@@ -266,6 +276,9 @@ model ProductionLog {
   lotId Int?
   lot   Lot? @relation(fields: [lotId], references: [id])
 
+  sourceProcessId Int?
+  sourceProcess   Process? @relation("LogSourceProcess", fields: [sourceProcessId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -281,6 +294,7 @@ model ProductionLog {
   @@index([machineId, shift])
   @@index([itemId])
   @@index([lotId])
+  @@index([sourceProcessId])
   @@map("production_logs")
 }
 
@@ -891,17 +905,17 @@ model SalesOrderItem {
   itemId Int
   item   Item @relation(fields: [itemId], references: [id])
 
-  plannedQty      Float // Số lượng HĐ (kg)
-  unitPrice       Float // Đơn giá (USD/kg)
-  sellingCostRate Float? // Hệ số CP bán hàng (VD: 0.08 = 8%)
-  deliveredQty    Float     @default(0) // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
-  deliveryDate    DateTime? @db.Date // deadline riêng nếu khác HĐ
-  allocatedQty    Float     @default(0) // cached, cập nhật tự động
-  priorityOverride  Int?      // Ưu tiên thủ công: số nhỏ = ưu tiên cao. NULL = tự động theo deadline/signDate
-  deferToMonth      String?   // "YYYY-MM" — hoãn HĐ đến tháng này. NULL = active ngay
-  wasteRecoveryRate Float?    // Tỷ lệ phế thu hồi (0.0–1.0, VD: 0.07 = 7% unitPrice). Per-contract override
-  doubleTwistGcRate Float?   // CP GC sợi xe đôi (0.0–1.0, VD: 0.05 = 5% unitPrice). Chỉ sợi /2
-  note            String?
+  plannedQty        Float // Số lượng HĐ (kg)
+  unitPrice         Float // Đơn giá (USD/kg)
+  sellingCostRate   Float? // Hệ số CP bán hàng (VD: 0.08 = 8%)
+  deliveredQty      Float     @default(0) // Số lượng đã giao TRƯỚC khi dùng phần mềm (kg)
+  deliveryDate      DateTime? @db.Date // deadline riêng nếu khác HĐ
+  allocatedQty      Float     @default(0) // cached, cập nhật tự động
+  priorityOverride  Int? // Ưu tiên thủ công: số nhỏ = ưu tiên cao. NULL = tự động theo deadline/signDate
+  deferToMonth      String? // "YYYY-MM" — hoãn HĐ đến tháng này. NULL = active ngay
+  wasteRecoveryRate Float? // Tỷ lệ phế thu hồi (0.0–1.0, VD: 0.07 = 7% unitPrice). Per-contract override
+  doubleTwistGcRate Float? // CP GC sợi xe đôi (0.0–1.0, VD: 0.05 = 5% unitPrice). Chỉ sợi /2
+  note              String?
 
   planLineItems   PlanLineItem[]
   actualLineItems ActualLineItem[]
@@ -922,13 +936,13 @@ model SalesOrderItem {
 model MonthlyQuota {
   id               Int    @id @default(autoincrement())
   salesOrderItemId Int
-  factoryId        Int    // scope: nhà máy
-  processId        Int    // scope: công đoạn (ống / sợi con tách biệt)
+  factoryId        Int // scope: nhà máy
+  processId        Int // scope: công đoạn (ống / sợi con tách biệt)
   yearMonth        String @db.VarChar(7) // "2026-05"
 
   /// Số kg tối đa rót cho dòng HĐ này trong tháng.
   /// NULL khi isRemainder=true (tự tính = tổng SL item - tổng FIXED)
-  quotaQty    Float?
+  quotaQty Float?
 
   /// true = HĐ cuối cùng nhận phần dư. Mỗi item+yearMonth chỉ có 1 REMAINDER.
   isRemainder Boolean @default(false)
@@ -958,7 +972,7 @@ model ContractOpeningBalance {
   openingYearMonth String @db.VarChar(7) // "2026-06"
 
   /// Sản lượng đã SX/giao/tính trước kỳ mở sổ phần mềm (kg).
-  producedBeforeKg Float @default(0)
+  producedBeforeKg Float   @default(0)
   note             String?
 
   createdAt DateTime @default(now())
@@ -1132,16 +1146,16 @@ model FixedCostEntry {
   monthlyActualId Int?
   monthlyActual   MonthlyActual? @relation(fields: [monthlyActualId], references: [id], onDelete: Cascade)
 
-  factoryId  Int      // FK → Factory
-  yearMonth  String   // "YYYY-MM"
-  factory    Factory  @relation(fields: [factoryId], references: [id])
+  factoryId Int // FK → Factory
+  yearMonth String // "YYYY-MM"
+  factory   Factory @relation(fields: [factoryId], references: [id])
 
   amountVnd Float // Số tiền (VNĐ)
   note      String?
 
+  @@unique([factoryId, yearMonth, costType], map: "fixed_cost_factory_month_type")
   @@index([monthlyPlanId])
   @@index([monthlyActualId])
-  @@unique([factoryId, yearMonth, costType], map: "fixed_cost_factory_month_type")
   @@map("fixed_cost_entries")
 }
 
@@ -1312,7 +1326,7 @@ model KdDailyInput {
   machine     Machine  @relation(fields: [machineId], references: [id])
   itemId      Int
   item        Item     @relation(fields: [itemId], references: [id])
-  lotId       Int?     // Lô sợi đang SX (từ MachineItemAssignment.lotId cho máy multi-item)
+  lotId       Int? // Lô sợi đang SX (từ MachineItemAssignment.lotId cho máy multi-item)
   lot         Lot?     @relation(fields: [lotId], references: [id])
   recordDate  DateTime @db.Date
   outputKg    Float // sản lượng cả ngày (3 ca gộp) — KD tự tổng hợp
@@ -1410,7 +1424,7 @@ model ProductionSchedule {
   // Bảng màu per-item trong schedule này: {"1":"#4CAF50","5":"#2196F3",...}
   itemColors Json @default("{}")
 
-  processId Int?    // Công đoạn. Mỗi (factory, process, yearMonth) = 1 schedule
+  processId Int? // Công đoạn. Mỗi (factory, process, yearMonth) = 1 schedule
   process   Process? @relation(fields: [processId], references: [id])
 
   segments ScheduleSegment[]
@@ -1492,7 +1506,7 @@ model ItemMonthlyMaterial {
   /// Loại bông dùng (Cotton AUS, US-PVC, Brazil...). NULL nếu không dùng cotton (hiếm).
   cottonMaterialTypeId Int?
   /// Loại xơ nhân tạo (PE Benma, Modal Liva Eco...). NULL nếu sợi thuần cotton.
-  peMaterialTypeId Int?
+  peMaterialTypeId     Int?
 
   note String?
 
@@ -1537,11 +1551,11 @@ model MachineItemAssignment {
   machine   Machine @relation(fields: [machineId], references: [id])
   itemId    Int
   item      Item    @relation(fields: [itemId], references: [id])
-  lotId     Int?                                                          // Lô sợi đang chạy cho mặt hàng này
-  lot       Lot?    @relation(fields: [lotId], references: [id])          // Quan hệ tới Lot
+  lotId     Int? // Lô sợi đang chạy cho mặt hàng này
+  lot       Lot?    @relation(fields: [lotId], references: [id]) // Quan hệ tới Lot
 
-  isActive    Boolean @default(true)
-  sortOrder   Int     @default(0)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

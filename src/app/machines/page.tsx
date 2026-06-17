@@ -38,10 +38,12 @@ interface MachineData {
   id: number;
   name: string;
   processId: number;
-  process?: { name: string; factory?: { name: string } };
+  process?: { name: string; isRevenueProcess?: boolean; factory?: { name: string } };
   currentItem?: { name: string; code: string };
   currentLot?: { id: number; lotNumber: string } | null;
   currentLotId?: number | null;
+  currentSourceProcessId?: number | null;
+  currentSourceProcess?: SourceOption | null;
   formulaType: number;
   spindleCount?: number;
   currentNE?: number;
@@ -60,6 +62,12 @@ interface AssignmentData {
   lot?: { id: number; lotNumber: string } | null;
 }
 
+interface SourceOption {
+  id: number;
+  name: string;
+  revenueFactory?: { id: number; name: string } | null;
+}
+
 export default function MachinesPage() {
   const { data: session } = useSession();
   const [machines, setMachines] = useState<MachineData[]>([]);
@@ -69,6 +77,7 @@ export default function MachinesPage() {
   const [factories, setFactories] = useState<any[]>([]);
   const [processes, setProcesses] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
 
   // Filter state
   const [filterFactory, setFilterFactory] = useState<number | null>(null);
@@ -172,6 +181,13 @@ export default function MachinesPage() {
   useEffect(() => {
     fetchData();
   }, [filterFactory, filterProcess, session]);
+
+  useEffect(() => {
+    fetch("/api/processes/source-options")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSourceOptions(Array.isArray(data) ? data : []))
+      .catch(() => setSourceOptions([]));
+  }, []);
 
   // 2. Xử lý Thêm / Sửa
   const handleSave = async (values: any) => {
@@ -431,7 +447,26 @@ export default function MachinesPage() {
       },
     },
     {
-      title: "Loại máy",
+      title: "Nguon soi",
+      key: "source",
+      width: 150,
+      render: (_: any, r: MachineData) => {
+        if (!r.process?.isRevenueProcess) return null;
+        if (!r.currentSourceProcess) return <Tag color="red">Chua gan</Tag>;
+        return (
+          <Tag color="cyan" style={{ fontWeight: 600 }}>
+            {r.currentSourceProcess.name}
+            {r.currentSourceProcess.revenueFactory?.name && (
+              <span style={{ marginLeft: 4, fontWeight: 400, fontSize: 11 }}>
+                -&gt; {r.currentSourceProcess.revenueFactory.name}
+              </span>
+            )}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: "Loai may",
       dataIndex: "model",
       key: "model",
       width: 140,
@@ -483,6 +518,7 @@ export default function MachinesPage() {
                 form.setFieldsValue({
                   ...r,
                   currentLotId: r.currentLotId ?? undefined,
+                  currentSourceProcessId: r.currentSourceProcessId ?? undefined,
                 });
                 setIsModalOpen(true);
                 // Tải danh sách lô sợi đang mở
@@ -743,6 +779,25 @@ export default function MachinesPage() {
               }))}
             />
           </Form.Item>
+
+          {editingMachine?.process?.isRevenueProcess && (
+            <Form.Item
+              name="currentSourceProcessId"
+              label="Nguon soi"
+              tooltip="Nguon soi dang quyen vao may ong, dung de quy doanh thu ve nha may"
+            >
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="Chon nguon soi..."
+                options={sourceOptions.map((p) => ({
+                  label: `${p.name} -> ${p.revenueFactory?.name || "?"}`,
+                  value: p.id,
+                }))}
+              />
+            </Form.Item>
+          )}
 
           <Button type="primary" htmlType="submit" block>
             Lưu thông tin

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
@@ -6,7 +7,7 @@ export async function GET(request: Request) {
   const factoryId = searchParams.get("factoryId");
   const processId = searchParams.get("processId");
 
-  const where: any = {};
+  const where: Prisma.MachineWhereInput = {};
   if (factoryId) where.process = { factoryId: parseInt(factoryId) };
   if (processId) where.processId = parseInt(processId);
 
@@ -16,6 +17,13 @@ export async function GET(request: Request) {
       process: { include: { factory: true } },
       currentItem: true,
       currentLot: { select: { id: true, lotNumber: true } },
+      currentSourceProcess: {
+        select: {
+          id: true,
+          name: true,
+          revenueFactory: { select: { id: true, name: true } },
+        },
+      },
       itemAssignments: {
         where: { isActive: true },
         include: {
@@ -45,14 +53,18 @@ export async function POST(req: Request) {
         currentNE: body.currentNE !== undefined && body.currentNE !== null && body.currentNE !== '' ? parseFloat(body.currentNE) : undefined,
         ...(body.model !== undefined && { model: body.model || null }),
         ...(body.allowMultiItemPerShift !== undefined && { allowMultiItemPerShift: body.allowMultiItemPerShift }),
+        ...(body.currentSourceProcessId !== undefined && {
+          currentSourceProcessId: body.currentSourceProcessId ? parseInt(body.currentSourceProcessId) : null,
+        }),
       },
     });
     return NextResponse.json(newMachine);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Machine create error:", e);
-    if (e.code === 'P2002') {
+    if (typeof e === "object" && e !== null && "code" in e && e.code === "P2002") {
       return NextResponse.json({ error: "Tên máy đã tồn tại. Vui lòng đặt tên khác." }, { status: 400 });
     }
-    return NextResponse.json({ error: e.message || "Lỗi tạo máy" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Lỗi tạo máy";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

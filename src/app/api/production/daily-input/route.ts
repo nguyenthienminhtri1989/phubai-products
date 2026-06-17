@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     // fallback về machine.currentLotId (máy thường — công nhân không cần chọn)
     const machine = await prisma.machine.findUnique({
       where: { id: machineId },
-      select: { currentLotId: true },
+      select: { currentLotId: true, currentSourceProcessId: true },
     });
     const lotId = bodyLotId ?? machine?.currentLotId ?? null;
 
@@ -147,7 +147,11 @@ export async function POST(request: Request) {
           data: { ...dataToSave, lotId },
         })
       : await prisma.productionLog.create({
-          data: { ...dataToSave, lotId },
+          data: {
+            ...dataToSave,
+            lotId,
+            sourceProcessId: machine?.currentSourceProcessId ?? null,
+          },
         });
 
     // 5. Cập nhật thông tin máy — chỉ khi nhập cho ngày hôm nay

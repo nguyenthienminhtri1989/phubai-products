@@ -28,9 +28,16 @@ export interface ProductionByItem {
   totalQty: number;
 }
 
+export interface AllocationWarning {
+  type: "missing_source";
+  count: number;
+  message: string;
+}
+
 export interface AllocationResult {
   allocations: AllocationLine[];
   productionByItem: ProductionByItem[];
+  warnings?: AllocationWarning[];
   meta: {
     factoryId: number;
     yearMonth: string;
@@ -110,10 +117,12 @@ export async function runAllocationFromProduction(
     firstDay,
     processId,
   );
+  const warnings = await getMissingSourceWarnings(factoryId, firstDay, toDate);
 
   return {
     allocations,
     productionByItem,
+    warnings,
     meta: {
       factoryId,
       yearMonth,
@@ -140,11 +149,14 @@ async function getProductionByItem(
     by: ["itemId"],
     where: {
       recordDate: { gte: fromDate, lte: toDate },
-      machine: {
-        process: {
-          factoryId: factoryId,
+      machine: { process: { isRevenueProcess: true } },
+      OR: [
+        { sourceProcess: { revenueFactoryId: factoryId } },
+        {
+          sourceProcessId: null,
+          machine: { process: { factoryId } },
         },
-      },
+      ],
     },
     _sum: { finalOutput: true },
   });
@@ -195,7 +207,14 @@ async function addProjectedProduction(
       where: {
         currentItemId: item.itemId,
         isActive: true,
-        process: { factoryId },
+        process: { isRevenueProcess: true },
+        OR: [
+          { currentSourceProcess: { revenueFactoryId: factoryId } },
+          {
+            currentSourceProcessId: null,
+            process: { factoryId },
+          },
+        ],
       },
     });
 
@@ -225,6 +244,34 @@ async function addProjectedProduction(
 
     item.totalQty += projectedQty;
   }
+}
+
+async function getMissingSourceWarnings(
+  factoryId: number,
+  fromDate: Date,
+  toDate: Date,
+): Promise<AllocationWarning[]> {
+  const missingCount = await prisma.productionLog.count({
+    where: {
+      sourceProcessId: null,
+      recordDate: { gte: fromDate, lte: toDate },
+      machine: {
+        process: {
+          factoryId,
+          isRevenueProcess: true,
+        },
+      },
+    },
+  });
+
+  if (missingCount === 0) return [];
+  return [
+    {
+      type: "missing_source",
+      count: missingCount,
+      message: `Co ${missingCount} ban ghi danh ong trong ky chua gan nguon soi - kiem tra cau hinh o /machines`,
+    },
+  ];
 }
 
 /**
@@ -461,6 +508,7 @@ export async function runAllocationToday(
 
   // Lấy SL chỉ hôm nay
   const todayProduction = await getProductionByItem(factoryId, today, today);
+  const warnings = await getMissingSourceWarnings(factoryId, today, today);
 
   // Waterfall vẫn cần biết "đã rót bao nhiêu trước hôm nay" để biết HĐ nào đang active.
   // Do đó vẫn dùng waterfallAllocate nhưng truyền SL = chỉ hôm nay
@@ -474,6 +522,7 @@ export async function runAllocationToday(
   return {
     allocations,
     productionByItem: todayProduction,
+    warnings,
     meta: {
       factoryId,
       yearMonth,
