@@ -32,6 +32,13 @@ export async function GET(request: Request) {
           include: {
             item: { select: { id: true, name: true } },
             lot: { select: { id: true, lotNumber: true } },
+            sourceProcess: {
+              select: {
+                id: true,
+                name: true,
+                revenueFactory: { select: { id: true, name: true } },
+              },
+            },
           },
           orderBy: { sortOrder: "asc" },
         },
@@ -59,7 +66,7 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json(formattedData);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Lỗi server" }, { status: 500 });
   }
 }

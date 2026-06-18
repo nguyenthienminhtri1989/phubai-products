@@ -57,6 +57,10 @@ interface WindingRow {
   existingLogId?: number;
   isExtra?: boolean;      // Dòng thêm giữa ca (không có trong assignment)
   originalItemId?: number; // Item gốc từ assignment — dùng để detect thay đổi
+  originalLotId?: number | null;
+  sourceProcessId?: number | null;
+  sourceProcess?: SourceOption | null;
+  fallbackSourceProcess?: SourceOption | null;
   editMode?: boolean;      // Đang trong chế độ sửa mặt hàng
 }
 
@@ -68,6 +72,8 @@ interface SourceOption {
 
 let _uidCounter = 0;
 const nextUid = () => `wr-${++_uidCounter}`;
+const assignmentSourceKey = (machineId: number, itemId: number, lotId?: number | null) =>
+  `${machineId}-${itemId}-${lotId ?? "no-lot"}`;
 
 // ============================================================
 // Main Page
@@ -112,6 +118,7 @@ export default function WindingInputPage() {
   const [machinesRaw, setMachinesRaw] = useState<MachineForInput[]>([]);
   const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
   const [pendingSource, setPendingSource] = useState<Record<number, number | undefined>>({});
+  const [pendingAssignmentSource, setPendingAssignmentSource] = useState<Record<string, number | undefined>>({});
 
   // Processes thuộc factory đã chọn
   const filteredProcesses = useMemo(() => {
@@ -170,6 +177,16 @@ export default function WindingInputPage() {
           ]),
         ),
       );
+      setPendingAssignmentSource(
+        Object.fromEntries(
+          multiMachines.flatMap((m) =>
+            (m.itemAssignments || []).map((a) => [
+              assignmentSourceKey(m.id, a.itemId, a.lotId ?? null),
+              a.sourceProcessId ?? a.sourceProcess?.id ?? undefined,
+            ]),
+          ),
+        ),
+      );
 
       const newRows: WindingRow[] = [];
 
@@ -190,6 +207,7 @@ export default function WindingInputPage() {
             outputKg: null,
             note: "",
             isDirty: false,
+            fallbackSourceProcess: m.currentSourceProcess ?? null,
           });
           continue;
         }
@@ -199,7 +217,11 @@ export default function WindingInputPage() {
           // Không dùng assignments làm cấu trúc chính → tránh hiện sai item của ca khác
           for (const log of todayLogs) {
             // Tìm assignment tương ứng (nếu có) để biết dòng này có thể edit item không
-            const assignment = assignments.find((a) => a.itemId === log.itemId);
+            const assignment = assignments.find(
+              (a) =>
+                a.itemId === log.itemId &&
+                (a.lotId ?? null) === (log.lotId ?? null),
+            );
             newRows.push({
               _uid: nextUid(),
               machineId: m.id,
@@ -214,6 +236,10 @@ export default function WindingInputPage() {
               existingLogId: log.id,
               // Chỉ set originalItemId nếu item này vẫn còn trong assignment → cho phép ✏️
               originalItemId: assignment ? log.itemId : undefined,
+              originalLotId: assignment?.lotId ?? null,
+              sourceProcessId: assignment?.sourceProcessId ?? null,
+              sourceProcess: assignment?.sourceProcess ?? null,
+              fallbackSourceProcess: m.currentSourceProcess ?? null,
               // isExtra nếu item không còn trong assignment hiện tại
               isExtra: !assignment,
             });
@@ -234,6 +260,10 @@ export default function WindingInputPage() {
               note: "",
               isDirty: false,
               originalItemId: a.itemId,
+              originalLotId: a.lotId ?? null,
+              sourceProcessId: a.sourceProcessId ?? null,
+              sourceProcess: a.sourceProcess ?? null,
+              fallbackSourceProcess: m.currentSourceProcess ?? null,
             });
           }
         }
@@ -272,6 +302,54 @@ export default function WindingInputPage() {
         throw new Error(data.error || "Doi nguon soi that bai");
       }
       message.success("Da doi nguon soi. Log moi se ap dung nguon nay.");
+      await handleLoad();
+    } catch (error: any) {
+      message.error(error.message || "Doi nguon soi that bai");
+    }
+  };
+
+  const handleChangeAssignmentSource = async (
+    machineId: number,
+    itemId: number,
+    lotId: number | null,
+    newSourceProcessId?: number,
+  ) => {
+    if (!newSourceProcessId) {
+      message.warning("Vui long chon nguon soi");
+      return;
+    }
+
+    const machine = machinesRaw.find((m) => m.id === machineId);
+    if (!machine?.itemAssignments?.length) {
+      message.error("Khong tim thay phan cong mat hang cua may");
+      return;
+    }
+
+    const newAssignments = machine.itemAssignments.map((a, i) => ({
+      itemId: a.itemId,
+      lotId: a.lotId ?? null,
+      sourceProcessId:
+        a.itemId === itemId && (a.lotId ?? null) === lotId
+          ? newSourceProcessId
+          : (a.sourceProcessId ?? null),
+      sortOrder: a.sortOrder ?? i,
+    }));
+
+    try {
+      const res = await fetch(`/api/machines/${machineId}/assignments`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignments: newAssignments }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Doi nguon soi that bai");
+      }
+      message.success("Da doi nguon soi cho mat hang. Log moi se ap dung nguon nay.");
+      setPendingAssignmentSource((prev) => ({
+        ...prev,
+        [assignmentSourceKey(machineId, itemId, lotId)]: undefined,
+      }));
       await handleLoad();
     } catch (error: any) {
       message.error(error.message || "Doi nguon soi that bai");
@@ -405,10 +483,12 @@ export default function WindingInputPage() {
             const current = (machine?.itemAssignments || []).map((a, i) => ({
               itemId: a.itemId,
               lotId: a.lotId ?? null,
+              sourceProcessId: a.sourceProcessId ?? null,
               sortOrder: a.sortOrder ?? i,
             }));
             const newAssignments = current.map((a) =>
-              a.itemId === r.originalItemId
+              a.itemId === r.originalItemId &&
+              (a.lotId ?? null) === (r.originalLotId ?? null)
                 ? { ...a, itemId: r.itemId, lotId: r.lotId ?? null }
                 : a,
             );
@@ -504,6 +584,73 @@ export default function WindingInputPage() {
   // ============================================================
   const getLotsForItem = (itemId: number) =>
     lots.filter((l) => l.item?.id === itemId || !l.item);
+
+  const renderRowSourceTag = (record: WindingRow) => {
+    const source = record.sourceProcess ?? record.fallbackSourceProcess;
+    const sourceKey = assignmentSourceKey(record.machineId, record.itemId, record.lotId);
+    const label = record.sourceProcess
+      ? source?.name
+      : source
+        ? `${source.name} (mac dinh)`
+        : "Chua gan";
+
+    if (record.isExtra || record.originalItemId === undefined) {
+      return (
+        <Tag color={source ? "blue" : "red"} style={{ fontSize: 11, marginTop: 4 }}>
+          Nguon: {label}
+        </Tag>
+      );
+    }
+
+    return (
+      <Popconfirm
+        title={`Doi nguon soi cho ${record.itemName}`}
+        description={
+          <div style={{ minWidth: 240, paddingTop: 8 }}>
+            <Select
+              size="small"
+              style={{ width: "100%" }}
+              placeholder="Chon nguon soi"
+              value={pendingAssignmentSource[sourceKey] ?? record.sourceProcessId ?? undefined}
+              onChange={(v) =>
+                setPendingAssignmentSource((prev) => ({
+                  ...prev,
+                  [sourceKey]: v,
+                }))
+              }
+              options={sourceOptions.map((p) => ({
+                label: `${p.name} -> ${p.revenueFactory?.name || "?"}`,
+                value: p.id,
+              }))}
+            />
+            <div style={{ marginTop: 8, fontSize: 11, color: "#888" }}>
+              Chi ap dung cho mat hang nay tren may nay. Log moi tao sau khi doi
+              se snapshot nguon soi nay.
+            </div>
+          </div>
+        }
+        onConfirm={() =>
+          handleChangeAssignmentSource(
+            record.machineId,
+            record.itemId,
+            record.lotId,
+            pendingAssignmentSource[sourceKey] ?? record.sourceProcessId ?? undefined,
+          )
+        }
+        okText="Xac nhan"
+        cancelText="Huy"
+        disabled={isReadOnly}
+      >
+        <Tag
+          color={record.sourceProcess ? "cyan" : source ? "blue" : "red"}
+          style={{ cursor: isReadOnly ? "default" : "pointer", fontSize: 11, marginTop: 4 }}
+        >
+          Nguon: {label}
+          {!isReadOnly && <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} />}
+        </Tag>
+      </Popconfirm>
+    );
+  };
 
   // ============================================================
   // Render
@@ -677,7 +824,8 @@ export default function WindingInputPage() {
           record.originalItemId !== undefined &&
           record.originalItemId !== record.itemId;
         return (
-          <Space size={4}>
+          <div>
+          <Space size={4} wrap>
             <Tag color={itemChanged ? "orange" : "blue"}>{val}</Tag>
             {!record.isExtra && !isReadOnly && (
               <Tooltip title="Đổi mặt hàng">
@@ -696,6 +844,8 @@ export default function WindingInputPage() {
               </Tag>
             )}
           </Space>
+          <div>{renderRowSourceTag(record)}</div>
+          </div>
         );
       },
     },

@@ -790,7 +790,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             transition: "all 0.3s",
           }}
         >
-          {collapsed ? "PB" : "PHU BAI ERP"}
+          {collapsed ? "PB" : "PHU BAI MES"}
         </div>
 
         <Menu

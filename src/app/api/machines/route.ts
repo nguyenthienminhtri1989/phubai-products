@@ -29,6 +29,13 @@ export async function GET(request: Request) {
         include: {
           item: { select: { id: true, name: true } },
           lot: { select: { id: true, lotNumber: true } },
+          sourceProcess: {
+            select: {
+              id: true,
+              name: true,
+              revenueFactory: { select: { id: true, name: true } },
+            },
+          },
         },
         orderBy: { sortOrder: "asc" },
       },

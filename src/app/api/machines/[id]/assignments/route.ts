@@ -18,6 +18,13 @@ export async function GET(
     include: {
       item: { select: { id: true, name: true } },
       lot: { select: { id: true, lotNumber: true } },
+      sourceProcess: {
+        select: {
+          id: true,
+          name: true,
+          revenueFactory: { select: { id: true, name: true } },
+        },
+      },
     },
     orderBy: { sortOrder: "asc" },
   });
@@ -38,8 +45,12 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const assignments: { itemId: number; lotId?: number | null; sortOrder?: number }[] =
-      body.assignments ?? [];
+    const assignments: {
+      itemId: number;
+      lotId?: number | null;
+      sourceProcessId?: number | null;
+      sortOrder?: number;
+    }[] = body.assignments ?? [];
 
     // VALIDATION: phát hiện trùng (itemId, lotId) trong cùng request
     const seen = new Map<string, number>();
@@ -80,6 +91,26 @@ export async function PUT(
       }
     }
 
+    const sourceIds = [
+      ...new Set(
+        assignments
+          .map((a) => (a.sourceProcessId ? Number(a.sourceProcessId) : null))
+          .filter((id): id is number => !!id),
+      ),
+    ];
+    if (sourceIds.length > 0) {
+      const validSources = await prisma.process.findMany({
+        where: { id: { in: sourceIds }, revenueFactoryId: { not: null } },
+        select: { id: true },
+      });
+      if (validSources.length !== sourceIds.length) {
+        return NextResponse.json(
+          { error: "Nguon soi trong phan cong khong hop le" },
+          { status: 400 },
+        );
+      }
+    }
+
     // Replace all: xóa cũ, tạo mới
     await prisma.machineItemAssignment.deleteMany({ where: { machineId } });
 
@@ -89,6 +120,7 @@ export async function PUT(
           machineId,
           itemId: a.itemId,
           lotId: a.lotId ?? null,
+          sourceProcessId: a.sourceProcessId ?? null,
           sortOrder: a.sortOrder ?? i,
           isActive: true,
         })),
@@ -101,17 +133,24 @@ export async function PUT(
       include: {
         item: { select: { id: true, name: true } },
         lot: { select: { id: true, lotNumber: true } },
+        sourceProcess: {
+          select: {
+            id: true,
+            name: true,
+            revenueFactory: { select: { id: true, name: true } },
+          },
+        },
       },
       orderBy: { sortOrder: "asc" },
     });
 
     return NextResponse.json(result);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Assignment update error:", e);
-    if (e.code === "P2002") {
+    if (typeof e === "object" && e !== null && "code" in e && e.code === "P2002") {
       return NextResponse.json({ error: "Mặt hàng đã được gán cho máy này rồi" }, { status: 400 });
     }
-    return NextResponse.json({ error: e.message || "Lỗi cập nhật assignments" }, { status: 500 });
+    return NextResponse.json({ error: (e instanceof Error ? e.message : undefined) || "Lỗi cập nhật assignments" }, { status: 500 });
   }
 }
 

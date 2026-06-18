@@ -61,9 +61,11 @@ interface AssignmentData {
   id?: number;
   itemId: number;
   lotId?: number | null;
+  sourceProcessId?: number | null;
   sortOrder?: number;
   item?: { id: number; name: string };
   lot?: { id: number; lotNumber: string } | null;
+  sourceProcess?: SourceOption | null;
 }
 
 interface SourceOption {
@@ -268,6 +270,7 @@ export default function MachinesPage() {
         assignments: data.map((a) => ({
           itemId: a.itemId,
           lotId: a.lotId ?? undefined,
+          sourceProcessId: a.sourceProcessId ?? undefined,
         })),
       });
     } catch {
@@ -457,6 +460,30 @@ export default function MachinesPage() {
       width: 150,
       render: (_: any, r: MachineData) => {
         if (!r.process?.isRevenueProcess) return null;
+        if (r.allowMultiItemPerShift && r.itemAssignments?.length) {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {r.itemAssignments.map((a, idx) => {
+                const source = a.sourceProcess ?? r.currentSourceProcess;
+                if (!source) {
+                  return (
+                    <Tag key={`${a.itemId}-${a.lotId ?? "no-lot"}-${idx}`} color="red" style={{ fontSize: 11, margin: 0 }}>
+                      {a.item?.name}: Chua gan
+                    </Tag>
+                  );
+                }
+                return (
+                  <Tag key={`${a.itemId}-${a.lotId ?? "no-lot"}-${idx}`} color={a.sourceProcess ? "cyan" : "blue"} style={{ fontSize: 11, margin: 0 }}>
+                    {a.item?.name}: {source.name}
+                    {!a.sourceProcess && (
+                      <span style={{ marginLeft: 4, fontSize: 10 }}>(mac dinh)</span>
+                    )}
+                  </Tag>
+                );
+              })}
+            </div>
+          );
+        }
         if (!r.currentSourceProcess) return <Tag color="red">Chua gan</Tag>;
         return (
           <Tag color="cyan" style={{ fontWeight: 600 }}>
@@ -861,7 +888,7 @@ export default function MachinesPage() {
         open={isMultiItemModalOpen}
         onCancel={() => setIsMultiItemModalOpen(false)}
         footer={null}
-        width={780}
+        width={980}
       >
         <div style={{ marginBottom: 12, color: "#666", fontSize: 13 }}>
           Cấu hình danh sách mặt hàng chạy trên máy{" "}
@@ -888,6 +915,7 @@ export default function MachinesPage() {
                 >
                   <Col flex="1">Mặt hàng</Col>
                   <Col style={{ width: 200 }}>Lô sợi</Col>
+                  <Col style={{ width: 190 }}>Nguon soi</Col>
                   <Col style={{ width: 36 }}></Col>
                 </Row>
 
@@ -955,6 +983,24 @@ export default function MachinesPage() {
                       </Form.Item>
                     </Col>
                     {/* Nút xóa */}
+                    <Col style={{ width: 190 }}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, "sourceProcessId"]}
+                        style={{ margin: 0 }}
+                      >
+                        <Select
+                          allowClear
+                          showSearch
+                          optionFilterProp="label"
+                          placeholder="Nguon soi..."
+                          options={sourceOptions.map((p) => ({
+                            label: `${p.name} -> ${p.revenueFactory?.name || "?"}`,
+                            value: p.id,
+                          }))}
+                        />
+                      </Form.Item>
+                    </Col>
                     <Col style={{ width: 36, textAlign: "center" }}>
                       <MinusCircleOutlined
                         onClick={() => remove(name)}

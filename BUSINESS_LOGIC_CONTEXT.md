@@ -4378,3 +4378,57 @@ BUSINESS_LOGIC_CONTEXT.md                  — ghi nhan mobile winding source se
 ### Data notes
 
 - Mobile dung lai mapping source process hien co trong DB: `Soi con NM1`, `Soi con NM2`, `Soi con G37` va revenue factory tu `Process.revenueFactoryId`.
+
+---
+
+## PRODUCTION / KDSX — Nguon soi theo tung mat hang multi-item
+
+**Status:** ✅ Completed 2026-06-18
+
+### What was built
+
+Mo rong cau hinh nguon soi tu cap may sang cap `MachineItemAssignment` cho may danh ong multi-item. Moi dong phan cong mat hang co the gan `sourceProcessId` rieng; khi tao log moi, backend uu tien source cua assignment theo cap `(machineId, itemId, lotId)` roi fallback ve `Machine.currentSourceProcessId`.
+
+### Files created/modified
+
+```
+prisma/schema.prisma                                             — them MachineItemAssignment.sourceProcessId va relation/index
+prisma/migrations/20260618000001_add_source_process_to_assignment/ — migration nullable column + FK + index
+src/app/api/machines/[id]/assignments/route.ts                  — GET include sourceProcess, PUT validate/luu sourceProcessId
+src/app/api/machines/route.ts                                   — include sourceProcess trong itemAssignments
+src/app/api/production/daily-status/route.ts                    — include sourceProcess trong itemAssignments cho UI nhap lieu
+src/app/api/production/daily-input/route.ts                     — resolve sourceProcessId tu assignment truoc khi fallback machine
+src/app/machines/page.tsx                                       — modal phan cong multi-item them Select nguon soi moi dong
+src/app/production/winding-input/page.tsx                       — tag/doi nguon soi theo tung mat hang tren may multi-item
+src/app/production/mobile-winding/page.tsx                      — preserve sourceProcessId khi PUT replace-all assignments tren mobile
+src/types/production.ts                                         — type MachineAssignment them sourceProcessId/sourceProcess
+tests/test-assignment-source-process.sh                         — curl smoke test cho assignment source va daily-input snapshot
+BUSINESS_LOGIC_CONTEXT.md                                       — ghi nhan feature
+```
+
+### Key business logic implemented
+
+- May thuong tiep tuc dung `Machine.currentSourceProcessId`.
+- May multi-item uu tien `MachineItemAssignment.sourceProcessId` theo dung cap `(machineId, itemId, lotId)`; neu assignment chua gan nguon thi fallback ve `Machine.currentSourceProcessId`.
+- `ProductionLog.sourceProcessId` van la snapshot tai thoi diem tao log; update log cu khong ghi de nguon da co.
+- PUT assignments van la replace-all; frontend phai gui du danh sach assignments de khong lam mat dong khac.
+- `sourceProcessId` tren assignment chi hop le khi Process co `revenueFactoryId`.
+
+### API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | /api/machines/[id]/assignments | Lay assignments kem sourceProcess |
+| PUT | /api/machines/[id]/assignments | Thay the assignments va luu sourceProcessId tung dong |
+| GET | /api/machines | Lay danh sach may kem itemAssignments.sourceProcess |
+| GET | /api/production/daily-status | Lay trang thai may/assignment kem sourceProcess cho UI nhap lieu |
+| POST | /api/production/daily-input | Tao/cap nhat log; log moi snapshot sourceProcessId tu assignment hoac machine fallback |
+
+### Known limitations / not yet implemented
+
+- Chua them audit log cho thao tac doi nguon soi theo assignment.
+- Mobile winding hien chi preserve sourceProcessId khi thay doi assignments; UI chon nguon rieng theo tung mat hang duoc lam tren desktop `/production/winding-input`.
+
+### Data notes
+
+- Cot moi nullable, khong backfill assignments cu. Assignments cu co `sourceProcessId = NULL` se fallback ve nguon cap may.

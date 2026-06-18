@@ -103,8 +103,9 @@ model Process {
   userProcesses UserProcess[] // Phân quyền: User nào thuộc công đoạn nào
 
   // Định mức năng suất
-  machinesAsSource Machine[]       @relation("MachineSourceProcess")
-  logsAsSource     ProductionLog[] @relation("LogSourceProcess")
+  machinesAsSource    Machine[]               @relation("MachineSourceProcess")
+  logsAsSource        ProductionLog[]         @relation("LogSourceProcess")
+  assignmentsAsSource MachineItemAssignment[] @relation("AssignmentSourceProcess")
 
   productivityBenchmarks ProductivityBenchmark[]
 
@@ -1546,13 +1547,15 @@ model MaterialPrice {
 // MODEL: PHÂN CÔNG MẶT HÀNG CHO MÁY ỐNG MULTI-ITEM
 // ==========================================
 model MachineItemAssignment {
-  id        Int     @id @default(autoincrement())
-  machineId Int
-  machine   Machine @relation(fields: [machineId], references: [id])
-  itemId    Int
-  item      Item    @relation(fields: [itemId], references: [id])
-  lotId     Int? // Lô sợi đang chạy cho mặt hàng này
-  lot       Lot?    @relation(fields: [lotId], references: [id]) // Quan hệ tới Lot
+  id              Int      @id @default(autoincrement())
+  machineId       Int
+  machine         Machine  @relation(fields: [machineId], references: [id])
+  itemId          Int
+  item            Item     @relation(fields: [itemId], references: [id])
+  lotId           Int? // Lô sợi đang chạy cho mặt hàng này
+  lot             Lot?     @relation(fields: [lotId], references: [id]) // Quan hệ tới Lot
+  sourceProcessId Int?
+  sourceProcess   Process? @relation("AssignmentSourceProcess", fields: [sourceProcessId], references: [id])
 
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
@@ -1566,6 +1569,7 @@ model MachineItemAssignment {
   //   - machine_assignment_unique_no_lot:   (machineId, itemId)        WHERE lotId IS NULL
   // Cho phép 1 máy chạy cùng 1 mặt hàng từ 2 lô khác nhau.
   @@index([machineId])
+  @@index([sourceProcessId])
   @@map("machine_item_assignments")
 }
 

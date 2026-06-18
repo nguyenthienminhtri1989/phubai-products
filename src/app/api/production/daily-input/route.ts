@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
 
     const body = await request.json();
-    const { recordDate, note } = body;
+    const { recordDate, note, efficiency } = body;
     const bodyLotId: number | null = body.lotId != null ? parseInt(body.lotId) : null;
     let {
       machineId,
@@ -65,7 +65,6 @@ export async function POST(request: Request) {
       endIndex,
       inputNE,
       finalOutput,
-      efficiency,
     } = body;
 
     // 1. Ép kiểu dữ liệu an toàn
@@ -110,9 +109,27 @@ export async function POST(request: Request) {
     // fallback về machine.currentLotId (máy thường — công nhân không cần chọn)
     const machine = await prisma.machine.findUnique({
       where: { id: machineId },
-      select: { currentLotId: true, currentSourceProcessId: true },
+      select: {
+        allowMultiItemPerShift: true,
+        currentLotId: true,
+        currentSourceProcessId: true,
+      },
     });
     const lotId = bodyLotId ?? machine?.currentLotId ?? null;
+    let resolvedSourceProcessId = machine?.currentSourceProcessId ?? null;
+    if (machine?.allowMultiItemPerShift) {
+      const assignment = await prisma.machineItemAssignment.findFirst({
+        where: {
+          machineId,
+          itemId,
+          isActive: true,
+          lotId: lotId == null ? null : lotId,
+        },
+        select: { sourceProcessId: true },
+      });
+      resolvedSourceProcessId =
+        assignment?.sourceProcessId ?? machine.currentSourceProcessId ?? null;
+    }
 
     // 4. Tìm log đã tồn tại với key 5 cột (bao gồm lotId).
     //    Unique constraint cũ 4 cột đã được thay bằng 2 partial unique index
@@ -147,10 +164,10 @@ export async function POST(request: Request) {
           data: { ...dataToSave, lotId },
         })
       : await prisma.productionLog.create({
-          data: {
+        data: {
             ...dataToSave,
             lotId,
-            sourceProcessId: machine?.currentSourceProcessId ?? null,
+            sourceProcessId: resolvedSourceProcessId,
           },
         });
 
@@ -185,16 +202,16 @@ export async function POST(request: Request) {
     // }
 
     return NextResponse.json(savedLog);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Save Error Details:", error);
     // Nếu vẫn lỗi P2002 sau khi dùng upsert, có thể do itemId bị thay đổi
     return NextResponse.json(
       {
         error: "Lỗi lưu dữ liệu",
         detail:
-          error.code === "P2002"
+          typeof error === "object" && error !== null && "code" in error && error.code === "P2002"
             ? "Bản ghi này (máy + ngày + ca + sợi + lô) đã tồn tại. Vui lòng chọn lô khác hoặc kiểm tra dữ liệu hiện có."
-            : error.message,
+            : error instanceof Error ? error.message : "Lỗi không xác định",
       },
       { status: 500 },
     );
@@ -207,7 +224,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
 
   // Phân quyền: ADMIN hoặc các role quản lý mới được xóa
-  const userRole = (session.user as any)?.userRole as string | undefined;
+  const userRole = (session.user as { userRole?: string })?.userRole;
   const ALLOWED_DELETE_ROLES = ["ADMIN", "DIRECTOR", "FACTORY_MANAGER", "STATISTICIAN"];
   if (!userRole || !ALLOWED_DELETE_ROLES.includes(userRole)) {
     return NextResponse.json({ error: "Không có quyền xóa bản ghi" }, { status: 403 });
@@ -222,11 +239,11 @@ export async function DELETE(request: Request) {
   try {
     await prisma.productionLog.delete({ where: { id: parseInt(id) } });
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    if (error.code === "P2025") {
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
       return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Lỗi xóa bản ghi", detail: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Lỗi xóa bản ghi", detail: error instanceof Error ? error.message : "Lỗi không xác định" }, { status: 500 });
   }
 }
 

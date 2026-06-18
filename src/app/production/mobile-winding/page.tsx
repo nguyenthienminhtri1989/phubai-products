@@ -42,6 +42,8 @@ interface WAssignment {
   item: { id: number; name: string };
   lotId?: number | null;
   lot?: { id: number; lotNumber: string } | null;
+  sourceProcessId?: number | null;
+  sourceProcess?: SourceOption | null;
   sortOrder: number;
 }
 
@@ -109,6 +111,7 @@ interface SessionUserShape {
 interface AssignmentPayload {
   itemId: number;
   lotId: number | null;
+  sourceProcessId?: number | null;
   sortOrder: number;
 }
 
@@ -440,6 +443,7 @@ function MobileWindingContent() {
     (machine.itemAssignments || []).map((a, i) => ({
       itemId: a.itemId,
       lotId: a.lotId ?? null,
+      sourceProcessId: a.sourceProcessId ?? null,
       sortOrder: a.sortOrder ?? i,
     }));
 

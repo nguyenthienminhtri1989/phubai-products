@@ -48,6 +48,8 @@ export interface MachineAssignment {
   item: { id: number; name: string };
   lot?: { id: number; lotNumber: string } | null;
   lotId?: number | null;
+  sourceProcessId?: number | null;
+  sourceProcess?: SourceProcessOption | null;
   sortOrder?: number;
   isActive?: boolean;
 }
