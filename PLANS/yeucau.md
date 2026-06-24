@@ -1,608 +1,910 @@
-# SPEC PATCH — Nguồn sợi theo từng mặt hàng cho máy multi-item
+# SPEC — Tab "Báo cáo theo nguồn sợi" trong `/production/history`
 
-> **Phiên bản:** 1.0 — patch cho `SPEC_SOURCE_PROCESS_FOR_REVENUE`
-> **Vai trò:** Cho phép máy multi-item gán nguồn sợi RIÊNG cho từng mặt hàng. Máy thường giữ nguyên (1 nguồn / máy như spec gốc).
-> **Tham chiếu pattern:** giống cách `TASK_MULTI_ITEM_LOT_ASSIGNMENT` đã thêm `lotId` vào `MachineItemAssignment` trước đây.
+> **Phiên bản:** 1.0 — 2026-06-24
+> **Vai trò:** Bổ sung báo cáo chuyên biệt cho công đoạn ống — phân tách sản lượng/doanh thu theo nguồn sợi (G33/TQ/G37) và quy về nhà máy doanh thu (NM1/NM2). Đặt làm tab phụ trong trang `/production/history` hiện có, không tạo route/menu mới.
+> **Phụ thuộc:** `SPEC_SOURCE_PROCESS_FOR_REVENUE` và `SPEC_PATCH_SOURCE_PROCESS_PER_ITEM` đã triển khai (`ProductionLog.sourceProcessId`, `Process.revenueFactoryId` đã có dữ liệu).
 
 ---
 
 ## BỐI CẢNH
 
-`SPEC_SOURCE_PROCESS_FOR_REVENUE` đã triển khai với giả định **1 máy = 1 nguồn sợi** qua `Machine.currentSourceProcessId`. Phát hiện trường hợp thực tế: có máy multi-item chạy đồng thời 2 mặt hàng với 2 nguồn sợi khác nhau (ví dụ: mặt hàng A từ G37, mặt hàng B từ TQ).
+Trang `/production/history` hiện tại là tra cứu lịch sử chi tiết toàn nhà máy (mọi công đoạn) với filter đa cấp, bảng chi tiết edit/delete admin, biểu đồ phân bố theo process, export Excel. Phục vụ vận hành và admin.
 
-**Giải pháp:** thêm `sourceProcessId` vào bảng `MachineItemAssignment`. Logic resolve khi tạo `ProductionLog`:
+Báo cáo phân tách doanh thu theo nguồn sợi có mục tiêu khác hẳn — phục vụ phòng KD/lãnh đạo, format giống Excel TH-DT (Ngày × Nguồn sợi), không cần edit/delete, scope chỉ công đoạn ống (`isRevenueProcess = true`).
 
-| Loại máy                                               | Nguồn lấy từ đâu                                |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| Máy thường (`allowMultiItemPerShift = false`)          | `Machine.currentSourceProcessId` (KHÔNG đổi)    |
-| Máy multi-item, có assignment cho cặp (machine, item)  | Ưu tiên `MachineItemAssignment.sourceProcessId` |
-| Máy multi-item, assignment có `sourceProcessId = NULL` | Fallback `Machine.currentSourceProcessId`       |
-
-**Calculator v2 KHÔNG cần đổi** — vẫn đọc `sourceProcessId` từ `ProductionLog`. Spec này chỉ thay đổi _cách resolve_ nguồn khi tạo log, bản thân log vẫn chỉ có 1 field `sourceProcessId`.
+**Giải pháp:** Refactor `page.tsx` thành wrapper `<Tabs>`, giữ logic cũ nguyên vẹn trong tab "Lịch sử chi tiết", thêm tab thứ 2 "Báo cáo theo nguồn sợi" với UI/API chuyên biệt.
 
 ---
 
 ## ĐỌC TRƯỚC KHI CODE
 
-- `prisma/schema.prisma` (model `MachineItemAssignment` — đã có `lotId` từ TASK_MULTI_ITEM_LOT_ASSIGNMENT)
-- `src/app/api/machines/[id]/assignments/route.ts` (GET/PUT assignments)
-- `src/app/api/machines/route.ts` (GET danh sách máy — đã include `itemAssignments`)
-- `src/app/machines/page.tsx` (modal "Phân công mặt hàng" — Form.List dòng mặt hàng + lô)
-- `src/app/production/winding-input/page.tsx` (UI tag nguồn sợi đã có từ spec gốc)
-- `src/app/api/production/winding/route.ts` (hoặc tên thực tế — file lưu log winding, có logic copy `sourceProcessId` từ `machine.currentSourceProcessId`)
+- `src/app/production/history/page.tsx` (file sẽ refactor thành wrapper)
+- `src/app/api/production/history/route.ts` (tham chiếu pattern API + response format)
+- `prisma/schema.prisma` (Process, ProductionLog, Machine với các field source\*)
+- `src/utils/itemColors.ts`, `src/utils/naturalSort.ts` (tái dùng)
 
 ---
 
-## 1. SCHEMA
+## 1. CẤU TRÚC FILE
 
-### 1.1 Thêm `sourceProcessId` vào `MachineItemAssignment`
-
-```prisma
-model MachineItemAssignment {
-  id              Int      @id @default(autoincrement())
-  machineId       Int
-  machine         Machine  @relation(fields: [machineId], references: [id])
-  itemId          Int
-  item            Item     @relation(fields: [itemId], references: [id])
-  lotId           Int?
-  lot             Lot?     @relation(fields: [lotId], references: [id])
-
-  sourceProcessId Int?                                  // ← THÊM MỚI
-  sourceProcess   Process? @relation("AssignmentSourceProcess", fields: [sourceProcessId], references: [id])  // ← THÊM MỚI
-
-  fromSpindle Int?
-  toSpindle   Int?
-  isActive    Boolean @default(true)
-  sortOrder   Int     @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([machineId, itemId])
-  @@index([machineId])
-  @@index([sourceProcessId])
-  @@map("machine_item_assignments")
-}
-```
-
-### 1.2 Thêm relation ngược trong `Process`
-
-```prisma
-model Process {
-  // ... giữ nguyên các relation hiện có ...
-  assignmentsAsSource MachineItemAssignment[] @relation("AssignmentSourceProcess")  // ← THÊM
-}
-```
-
-### 1.3 Migration
-
-```bash
-npx prisma migrate dev --name add_source_process_to_assignment
-```
-
-**Nếu schema drift trên server (P3018/42710):**
-
-```sql
-ALTER TABLE machine_item_assignments
-  ADD COLUMN IF NOT EXISTS "sourceProcessId" INTEGER REFERENCES processes(id);
-
-CREATE INDEX IF NOT EXISTS "idx_assignments_source_process"
-  ON machine_item_assignments("sourceProcessId");
-```
-
-Rồi `npx prisma migrate resolve --applied add_source_process_to_assignment`.
-
-> **KHÔNG backfill dữ liệu cũ.** Assignments hiện có để `sourceProcessId = NULL` — chúng sẽ tự fallback về `machine.currentSourceProcessId`. Chỉ cần điều phối viên cập nhật assignment cho máy multi-item đang chạy 2 nguồn khác nhau.
-
----
-
-## 2. API
-
-### 2.1 GET `/api/machines/[id]/assignments` — include `sourceProcess`
-
-**File:** `src/app/api/machines/[id]/assignments/route.ts`
-
-Trong `findMany`:
-
-```typescript
-const assignments = await prisma.machineItemAssignment.findMany({
-  where: { machineId: id, isActive: true },
-  include: {
-    item: { select: { id: true, name: true } },
-    lot: { select: { id: true, lotNumber: true } },
-    sourceProcess: {
-      // ← THÊM
-      select: {
-        id: true,
-        name: true,
-        revenueFactory: { select: { id: true, code: true, name: true } },
-      },
-    },
-  },
-  orderBy: { sortOrder: "asc" },
-});
-```
-
-### 2.2 PUT `/api/machines/[id]/assignments` — nhận thêm `sourceProcessId`
-
-```typescript
-// Body: { assignments: [{ itemId, lotId?, sourceProcessId?, fromSpindle?, toSpindle?, sortOrder }] }
-await prisma.machineItemAssignment.deleteMany({ where: { machineId: id } });
-await prisma.machineItemAssignment.createMany({
-  data: body.assignments.map((a: any, i: number) => ({
-    machineId: id,
-    itemId: a.itemId,
-    lotId: a.lotId ?? null,
-    sourceProcessId: a.sourceProcessId ?? null, // ← THÊM
-    fromSpindle: a.fromSpindle ?? null,
-    toSpindle: a.toSpindle ?? null,
-    sortOrder: a.sortOrder ?? i,
-    isActive: true,
-  })),
-});
-```
-
-### 2.3 GET `/api/machines` — include `sourceProcess` trong `itemAssignments`
-
-**File:** `src/app/api/machines/route.ts`
-
-Cập nhật `include` của `itemAssignments`:
-
-```typescript
-itemAssignments: {
-  where: { isActive: true },
-  include: {
-    item: { select: { id: true, name: true } },
-    lot:  { select: { id: true, lotNumber: true } },
-    sourceProcess: {                                    // ← THÊM
-      select: {
-        id: true, name: true,
-        revenueFactory: { select: { id: true, code: true, name: true } }
-      }
-    },
-  },
-  orderBy: { sortOrder: "asc" },
-}
-```
-
-### 2.4 API lưu log winding — sửa logic resolve `sourceProcessId`
-
-**File:** `src/app/api/production/winding/route.ts` (hoặc tên thực tế)
-
-Hiện tại đang copy thẳng `machine.currentSourceProcessId`. Sửa thành:
-
-```typescript
-const machine = await prisma.machine.findUnique({
-  where: { id: machineId },
-  select: {
-    allowMultiItemPerShift: true,
-    currentSourceProcessId: true,
-  },
-});
-
-// Resolve sourceProcessId theo loại máy
-let resolvedSourceProcessId: number | null = null;
-
-if (machine?.allowMultiItemPerShift && itemId) {
-  // Máy multi-item: ưu tiên assignment cho cặp (machine, item)
-  const assignment = await prisma.machineItemAssignment.findUnique({
-    where: { machineId_itemId: { machineId, itemId } },
-    select: { sourceProcessId: true },
-  });
-  resolvedSourceProcessId = assignment?.sourceProcessId ?? null;
-}
-
-// Fallback machine-level (cho máy thường, hoặc multi-item chưa gán assignment)
-if (!resolvedSourceProcessId) {
-  resolvedSourceProcessId = machine?.currentSourceProcessId ?? null;
-}
-
-await prisma.productionLog.create({
-  data: {
-    // ... các field hiện có ...
-    sourceProcessId: resolvedSourceProcessId,
-  },
-});
-```
-
-> **Lưu ý unique constraint:** `MachineItemAssignment` có `@@unique([machineId, itemId])` nên dùng được `findUnique` với compound key `machineId_itemId`. Prisma sẽ generate đúng key này tự động.
-
----
-
-## 3. UI `/machines` — Modal "Phân công mặt hàng"
-
-**File:** `src/app/machines/page.tsx`
-
-### 3.1 Cập nhật interface `AssignmentData`
-
-```typescript
-interface AssignmentData {
-  id?: number;
-  itemId: number;
-  lotId?: number | null;
-  sourceProcessId?: number | null; // ← THÊM
-  fromSpindle?: number | null;
-  toSpindle?: number | null;
-  sortOrder?: number;
-  item?: { id: number; name: string };
-  lot?: { id: number; lotNumber: string } | null;
-  sourceProcess?: {
-    // ← THÊM
-    id: number;
-    name: string;
-    revenueFactory?: { id: number; code: string; name: string } | null;
-  } | null;
-}
-```
-
-### 3.2 State `sourceOptions` đã có sẵn từ spec gốc
-
-Modal điều phối chi tiết tái dùng state `sourceOptions` đã load ở mount component (từ `/api/processes/source-options`). Nếu modal đang là component con không share state, fetch riêng trong modal.
-
-### 3.3 `Form.List` thêm Select "Nguồn sợi" mỗi dòng
-
-Trong modal "Điều phối chi tiết", mỗi dòng trong `Form.List` hiện có cấu trúc: Mặt hàng + Lô + Cọc từ + Cọc đến. Thêm Select "Nguồn sợi":
+### 1.1 Refactor `src/app/production/history/page.tsx` thành wrapper Tabs
 
 ```tsx
-<Form.List name="assignments">
-  {(fields, { add, remove }) => (
-    <>
-      {fields.map(({ key, name, ...rest }) => (
-        <Space
-          key={key}
-          align="baseline"
-          style={{ display: "flex", marginBottom: 8 }}
-        >
-          {/* Mặt hàng — giữ nguyên */}
-          <Form.Item
-            {...rest}
-            name={[name, "itemId"]}
-            rules={[{ required: true }]}
-          >
-            <Select
-              style={{ width: 180 }}
-              options={itemOptions}
-              placeholder="Mặt hàng"
-            />
-          </Form.Item>
+"use client";
 
-          {/* Lô — giữ nguyên */}
-          <Form.Item
-            shouldUpdate={/* ... logic lọc lô theo itemId hiện có ... */}
-            noStyle
-          >
-            {/* ... Select lô ... */}
-          </Form.Item>
+import { Tabs } from "antd";
+import HistoryDetailTab from "./components/HistoryDetailTab";
+import WindingReportTab from "./components/WindingReportTab";
 
-          {/* Nguồn sợi — THÊM MỚI */}
-          <Form.Item {...rest} name={[name, "sourceProcessId"]}>
-            <Select
-              allowClear
-              style={{ width: 160 }}
-              placeholder="Nguồn sợi"
-              options={sourceOptions.map((p) => ({
-                label: `${p.name} → ${p.revenueFactory?.code || "?"}`,
-                value: p.id,
-              }))}
-            />
-          </Form.Item>
-
-          {/* Cọc từ, cọc đến, nút xóa — giữ nguyên */}
-          {/* ... */}
-        </Space>
-      ))}
-      <Button onClick={() => add()}>+ Thêm mặt hàng</Button>
-    </>
-  )}
-</Form.List>
-```
-
-### 3.4 Khi load assignments để mở modal — set `sourceProcessId` vào form
-
-Hàm `openMultiItemModal` (hoặc tương đương) đang setFieldsValue với `assignments` từ API. Vì API GET đã trả `sourceProcessId` (mục 2.1), `form.setFieldsValue` tự fill — KHÔNG cần sửa code load.
-
-### 3.5 Khi `handleSaveAssignments` gửi PUT — bao gồm `sourceProcessId`
-
-Form.List tự gom field `sourceProcessId` vào `values.assignments[i]`. PUT API đã nhận field này (mục 2.2). **Không cần sửa hàm save** — chỉ verify body request có `sourceProcessId` bằng console.log nếu nghi ngờ.
-
-### 3.6 (TÙY CHỌN) Cột bảng máy hiển thị nhiều nguồn cho multi-item
-
-Cột "Nguồn sợi" trong bảng máy ở spec gốc đang render `currentSourceProcess` (mức máy). Với máy multi-item, có thể render danh sách nguồn từ assignments:
-
-```tsx
-{
-  title: "Nguồn sợi",
-  key: "source",
-  width: 160,
-  render: (_: any, r: MachineData) => {
-    if (!r.process?.isRevenueProcess) return null;
-
-    // Máy multi-item: hiển thị nguồn từ assignments
-    if (r.allowMultiItemPerShift && r.itemAssignments?.length) {
-      const sources = r.itemAssignments
-        .filter(a => a.sourceProcess)
-        .map(a => a.sourceProcess!);
-
-      if (sources.length === 0) {
-        // Tất cả assignment chưa gán → hiển thị nguồn cấp máy (fallback)
-        return r.currentSourceProcess
-          ? <Tag color="cyan">{r.currentSourceProcess.name} <span style={{ fontSize: 10 }}>(mặc định)</span></Tag>
-          : <Tag color="red">Chưa gán</Tag>;
-      }
-
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {sources.map((sp, i) => (
-            <Tag key={`${sp.id}-${i}`} color="cyan" style={{ fontSize: 11, margin: 0 }}>
-              {sp.name} → {sp.revenueFactory?.code || '?'}
-            </Tag>
-          ))}
-        </div>
-      );
-    }
-
-    // Máy thường: giữ logic spec gốc
-    return r.currentSourceProcess
-      ? <Tag color="cyan" style={{ fontWeight: 600 }}>
-          {r.currentSourceProcess.name}
-          {r.currentSourceProcess.revenueFactory?.code &&
-            <span style={{ marginLeft: 4, fontWeight: 400, fontSize: 11 }}>
-              →{r.currentSourceProcess.revenueFactory.code}
-            </span>
-          }
-        </Tag>
-      : <Tag color="red">Chưa gán</Tag>;
-  }
-}
-```
-
----
-
-## 4. UI `/production/winding-input` — Tag nguồn theo từng mặt hàng (chỉ cho máy multi-item)
-
-**File:** `src/app/production/winding-input/page.tsx`
-
-### 4.1 Hiện trạng theo spec gốc
-
-Mỗi dòng máy có 1 tag "Nguồn: ..." clickable ở mức máy → click mở UI đổi `Machine.currentSourceProcessId`. **Logic này GIỮ NGUYÊN cho máy thường.**
-
-### 4.2 Với máy multi-item — tag riêng cho từng mặt hàng
-
-Máy multi-item render N ô nhập (mỗi ô 1 mặt hàng theo `MachineItemAssignment`). Tag nguồn sợi phải gắn theo **từng ô**, không phải theo cả máy.
-
-```tsx
-{
-  /* Máy multi-item: render N ô */
-}
-{
-  machine.allowMultiItemPerShift &&
-    machine.itemAssignments?.map((a) => (
-      <div key={a.itemId} style={{ marginBottom: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 4,
-          }}
-        >
-          <Tag color="purple">{a.item?.name}</Tag>
-          {a.lot && <Tag color="orange">{a.lot.lotNumber}</Tag>}
-
-          {/* Tag NGUỒN SỢI — clickable, mỗi mặt hàng riêng */}
-          <Popconfirm
-            title={`Đổi nguồn sợi cho mặt hàng "${a.item?.name}"`}
-            description={
-              <div style={{ minWidth: 220, paddingTop: 8 }}>
-                <Select
-                  style={{ width: "100%" }}
-                  placeholder="Chọn nguồn sợi mới"
-                  value={pendingAssignmentSource[`${machine.id}-${a.itemId}`]}
-                  onChange={(v) =>
-                    setPendingAssignmentSource((prev) => ({
-                      ...prev,
-                      [`${machine.id}-${a.itemId}`]: v,
-                    }))
-                  }
-                  options={sourceOptions.map((p) => ({
-                    label: `${p.name} → ${p.revenueFactory?.code || "?"}`,
-                    value: p.id,
-                  }))}
-                />
-                <div style={{ marginTop: 8, fontSize: 11, color: "#888" }}>
-                  Chỉ áp dụng cho mặt hàng "{a.item?.name}" trên máy này. Các
-                  bản ghi từ giờ sẽ áp dụng nguồn mới.
-                </div>
-              </div>
-            }
-            onConfirm={() =>
-              handleChangeAssignmentSource(
-                machine.id,
-                a.itemId,
-                pendingAssignmentSource[`${machine.id}-${a.itemId}`],
-              )
-            }
-            okText="Xác nhận"
-            cancelText="Hủy"
-          >
-            <Tag color="cyan" style={{ cursor: "pointer" }}>
-              Nguồn:{" "}
-              {a.sourceProcess?.name ||
-                machine.currentSourceProcess?.name ||
-                "Chưa gán"}
-              <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} />
-            </Tag>
-          </Popconfirm>
-        </div>
-
-        {/* Ô nhập sản lượng cho mặt hàng a — giữ logic hiện có */}
-        <InputNumber
-          placeholder="Sản lượng (kg)"
-          value={multiInputStates[machine.id]?.[a.itemId]}
-          onChange={(v) => updateMultiInput(machine.id, a.itemId, v)}
-          style={{ width: "100%" }}
-        />
-      </div>
-    ));
-}
-
-{
-  /* Máy thường: giữ logic spec gốc — tag nguồn ở mức máy */
-}
-{
-  !machine.allowMultiItemPerShift && (
-    <>{/* ... UI hiện có, bao gồm tag nguồn mức máy ... */}</>
+export default function ProductionHistoryPage() {
+  return (
+    <div style={{ padding: 20 }}>
+      <Tabs
+        defaultActiveKey="detail"
+        items={[
+          {
+            key: "detail",
+            label: "Lịch sử chi tiết",
+            children: <HistoryDetailTab />,
+          },
+          {
+            key: "report",
+            label: "Báo cáo theo nguồn sợi",
+            children: <WindingReportTab />,
+          },
+        ]}
+        destroyInactiveTabPane={false}
+      />
+    </div>
   );
 }
 ```
 
-### 4.3 State `pendingAssignmentSource` — key theo cặp (machineId, itemId)
+> `destroyInactiveTabPane={false}` để giữ state (filter, dữ liệu đã load) khi user switch tab — không reload mỗi lần.
+
+### 1.2 Tạo `src/app/production/history/components/HistoryDetailTab.tsx`
+
+**Move toàn bộ nội dung component hiện tại** (state, useEffect, filter, dashboard, table, modal edit/delete, export) từ `page.tsx` vào file mới này. Đổi tên function từ `ProductionHistoryPage` → `HistoryDetailTab`. **KHÔNG đổi logic gì**, chỉ chuyển vị trí.
+
+Bỏ wrapper `<div style={{ padding: 20 }}>` vì layout cha (Tabs) đã có padding.
+
+### 1.3 Tạo `src/app/production/history/components/WindingReportTab.tsx`
+
+Component mới — chi tiết ở mục 3.
+
+---
+
+## 2. API MỚI
+
+### 2.1 File mới: `src/app/api/production/winding-report/route.ts`
+
+**POST body:**
 
 ```typescript
-const [pendingAssignmentSource, setPendingAssignmentSource] = useState<
-  Record<string, number | undefined>
->({});
+{
+  fromDate: string;             // "YYYY-MM-DD"
+  toDate: string;
+  revenueFactoryIds?: number[]; // filter theo nhà máy doanh thu (NM1, NM2)
+  sourceProcessIds?: number[];  // filter theo nguồn sợi (G33, TQ, G37)
+  machineIds?: number[];        // filter máy ống
+  itemIds?: number[];
+  shifts?: number[];
+}
 ```
 
-Key dạng `"${machineId}-${itemId}"` để phân biệt từng mặt hàng trong máy multi-item.
-
-### 4.4 Handler `handleChangeAssignmentSource` — gọi PUT assignments
-
-Cách 1 (đơn giản, an toàn): gọi `PUT /api/machines/[id]/assignments` với toàn bộ danh sách, chỉ thay đổi `sourceProcessId` của 1 dòng:
+**Response:**
 
 ```typescript
-const handleChangeAssignmentSource = async (
-  machineId: number,
-  itemId: number,
-  newSourceProcessId?: number,
-) => {
-  if (!newSourceProcessId) {
-    message.warning("Vui lòng chọn nguồn sợi");
-    return;
+{
+  // Tổng theo nhà máy doanh thu (cho dashboard 2 card)
+  byRevenueFactory: Array<{
+    id: number;
+    code: string;
+    name: string;
+    totalKg: number;
+    recordCount: number;
+    bySource: Array<{
+      sourceProcessId: number;
+      sourceName: string;
+      kg: number;
+    }>;
+  }>;
+
+  // Pivot Ngày × Nguồn sợi (cho bảng)
+  pivot: Array<{
+    date: string; // "YYYY-MM-DD"
+    bySource: Record<number, number>; // { sourceProcessId: kg }
+    total: number;
+  }>;
+
+  // Danh sách nguồn sợi để render header cột (KHÔNG hardcode G33/TQ/G37)
+  sourceProcesses: Array<{
+    id: number;
+    name: string;
+    revenueFactory: { id: number; code: string; name: string };
+  }>;
+
+  // Cảnh báo
+  orphanCount: number; // số log đánh ống trong range thiếu sourceProcessId
+  totalKg: number; // tổng toàn bộ (bao gồm orphan)
+}
+```
+
+### 2.2 Logic backend
+
+```typescript
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  const {
+    fromDate,
+    toDate,
+    revenueFactoryIds,
+    sourceProcessIds,
+    machineIds,
+    itemIds,
+    shifts,
+  } = body;
+
+  // UTC date range — theo pattern dự án
+  const fromUTC = new Date(`${fromDate}T00:00:00.000Z`);
+  const toUTC = new Date(`${toDate}T23:59:59.999Z`);
+
+  // Base where — chỉ công đoạn có isRevenueProcess = true (đánh ống)
+  const baseWhere: any = {
+    process: { isRevenueProcess: true },
+    recordDate: { gte: fromUTC, lte: toUTC },
+  };
+  if (machineIds?.length) baseWhere.machineId = { in: machineIds };
+  if (itemIds?.length) baseWhere.itemId = { in: itemIds };
+  if (shifts?.length) baseWhere.shift = { in: shifts };
+
+  // Where cho log đã có sourceProcessId (có filter theo nguồn / nhà máy doanh thu)
+  const whereWithSource: any = {
+    ...baseWhere,
+    sourceProcessId: { not: null },
+  };
+  if (sourceProcessIds?.length) {
+    whereWithSource.sourceProcessId = { in: sourceProcessIds };
+  }
+  if (revenueFactoryIds?.length) {
+    whereWithSource.sourceProcess = {
+      revenueFactoryId: { in: revenueFactoryIds },
+    };
   }
 
-  // Lấy assignments hiện tại (từ state machine đã load)
-  const machine = machines.find((m) => m.id === machineId);
-  if (!machine?.itemAssignments) return;
-
-  // Tạo payload assignments mới với sourceProcessId thay đổi cho 1 dòng
-  const newAssignments = machine.itemAssignments.map((a) => ({
-    itemId: a.itemId,
-    lotId: a.lotId ?? null,
-    sourceProcessId:
-      a.itemId === itemId ? newSourceProcessId : (a.sourceProcessId ?? null),
-    fromSpindle: a.fromSpindle ?? null,
-    toSpindle: a.toSpindle ?? null,
-    sortOrder: a.sortOrder ?? 0,
-  }));
-
-  const res = await fetch(`/api/machines/${machineId}/assignments`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignments: newAssignments }),
+  // 1. Lấy logs đã có sourceProcessId
+  const logs = await prisma.productionLog.findMany({
+    where: whereWithSource,
+    select: {
+      id: true,
+      recordDate: true,
+      finalOutput: true,
+      sourceProcessId: true,
+      sourceProcess: {
+        select: {
+          id: true,
+          name: true,
+          revenueFactory: { select: { id: true, code: true, name: true } },
+        },
+      },
+    },
+    orderBy: { recordDate: "asc" },
   });
 
-  if (!res.ok) {
-    message.error("Đổi nguồn sợi thất bại");
-    return;
+  // 2. Đếm orphan logs (thiếu sourceProcessId) — không áp filter source/revenueFactory
+  const orphanCount = await prisma.productionLog.count({
+    where: {
+      ...baseWhere,
+      sourceProcessId: null,
+    },
+  });
+
+  // 3. Build byRevenueFactory
+  const rfMap = new Map<number, any>();
+  for (const log of logs) {
+    const rf = log.sourceProcess?.revenueFactory;
+    if (!rf) continue;
+    if (!rfMap.has(rf.id)) {
+      rfMap.set(rf.id, {
+        id: rf.id,
+        code: rf.code,
+        name: rf.name,
+        totalKg: 0,
+        recordCount: 0,
+        bySourceMap: new Map<
+          number,
+          { sourceProcessId: number; sourceName: string; kg: number }
+        >(),
+      });
+    }
+    const entry = rfMap.get(rf.id);
+    entry.totalKg += log.finalOutput;
+    entry.recordCount += 1;
+
+    const spId = log.sourceProcessId!;
+    if (!entry.bySourceMap.has(spId)) {
+      entry.bySourceMap.set(spId, {
+        sourceProcessId: spId,
+        sourceName: log.sourceProcess!.name,
+        kg: 0,
+      });
+    }
+    entry.bySourceMap.get(spId).kg += log.finalOutput;
   }
 
-  message.success(`Đã đổi nguồn sợi cho mặt hàng. Bản ghi từ giờ sẽ áp dụng.`);
-  setPendingAssignmentSource((prev) => ({
-    ...prev,
-    [`${machineId}-${itemId}`]: undefined,
-  }));
-  await refetchMachines();
+  const byRevenueFactory = Array.from(rfMap.values())
+    .map((e) => ({
+      id: e.id,
+      code: e.code,
+      name: e.name,
+      totalKg: e.totalKg,
+      recordCount: e.recordCount,
+      bySource: Array.from(e.bySourceMap.values()).sort(
+        (a: any, b: any) => b.kg - a.kg,
+      ),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  // 4. Build pivot Ngày × Nguồn sợi
+  const pivotMap = new Map<
+    string,
+    { date: string; bySource: Record<number, number>; total: number }
+  >();
+  for (const log of logs) {
+    const dateKey = log.recordDate.toISOString().split("T")[0];
+    if (!pivotMap.has(dateKey)) {
+      pivotMap.set(dateKey, { date: dateKey, bySource: {}, total: 0 });
+    }
+    const row = pivotMap.get(dateKey)!;
+    const spId = log.sourceProcessId!;
+    row.bySource[spId] = (row.bySource[spId] || 0) + log.finalOutput;
+    row.total += log.finalOutput;
+  }
+  const pivot = Array.from(pivotMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+
+  // 5. Lấy danh sách nguồn sợi để FE render header (lọc theo filter nếu có)
+  const sourceProcesses = await prisma.process.findMany({
+    where: {
+      revenueFactoryId: { not: null },
+      ...(revenueFactoryIds?.length
+        ? { revenueFactoryId: { in: revenueFactoryIds } }
+        : {}),
+      ...(sourceProcessIds?.length ? { id: { in: sourceProcessIds } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      revenueFactory: { select: { id: true, code: true, name: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const totalKg = logs.reduce((s, l) => s + l.finalOutput, 0);
+
+  return NextResponse.json({
+    byRevenueFactory,
+    pivot,
+    sourceProcesses,
+    orphanCount,
+    totalKg,
+  });
+}
+```
+
+> **Lưu ý hiệu năng:** với khoảng thời gian rộng (vài tháng) số log có thể lớn. Hiện tại build group trên Node.js — đủ với volume Phú Bài (vài nghìn log/tháng). Nếu sau này cần tối ưu, có thể dùng `prisma.productionLog.groupBy` ở DB. Để pattern hiện tại đơn giản trước.
+
+---
+
+## 3. COMPONENT `WindingReportTab`
+
+**File:** `src/app/production/history/components/WindingReportTab.tsx`
+
+### 3.1 Imports & state
+
+```tsx
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Card,
+  DatePicker,
+  Select,
+  Button,
+  Table,
+  Row,
+  Col,
+  Statistic,
+  Space,
+  message,
+  Tag,
+  Alert,
+  Divider,
+} from "antd";
+import {
+  SearchOutlined,
+  FileExcelOutlined,
+  ReloadOutlined,
+  FilterOutlined,
+  BankOutlined,
+} from "@ant-design/icons";
+import dayjs from "dayjs";
+import * as XLSX from "xlsx";
+import { naturalSortBy } from "@/utils/naturalSort";
+
+const { RangePicker } = DatePicker;
+
+export default function WindingReportTab() {
+  // Dữ liệu danh mục
+  const [factories, setFactories] = useState<any[]>([]); // sẽ dùng cho filter Nhà máy doanh thu
+  const [sourceOptions, setSourceOptions] = useState<any[]>([]); // 3 nguồn sợi
+  const [machines, setMachines] = useState<any[]>([]); // chỉ máy ống
+  const [items, setItems] = useState<any[]>([]);
+
+  // Bộ lọc
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
+    dayjs().startOf("month"),
+    dayjs(),
+  ]);
+  const [selectedRevenueFactories, setSelectedRevenueFactories] = useState<
+    number[]
+  >([]);
+  const [selectedSources, setSelectedSources] = useState<number[]>([]);
+  const [selectedMachines, setSelectedMachines] = useState<number[]>([]);
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [selectedShifts, setSelectedShifts] = useState<number[]>([]);
+
+  // Kết quả
+  const [byRevenueFactory, setByRevenueFactory] = useState<any[]>([]);
+  const [pivot, setPivot] = useState<any[]>([]);
+  const [sourceProcesses, setSourceProcesses] = useState<any[]>([]);
+  const [orphanCount, setOrphanCount] = useState(0);
+  const [totalKg, setTotalKg] = useState(0);
+
+  const [loading, setLoading] = useState(false);
+
+  // ... (load danh mục + handleSearch + render — xem mục 3.2-3.6)
+}
+```
+
+### 3.2 Load danh mục lúc mount
+
+```tsx
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const [f, sp, m, i] = await Promise.all([
+        fetch("/api/factories").then((r) => r.json()),
+        fetch("/api/processes/source-options").then((r) => r.json()), // có sẵn từ SPEC trước
+        fetch("/api/machines").then((r) => r.json()),
+        fetch("/api/items").then((r) => r.json()),
+      ]);
+
+      // Chỉ giữ Factory có process với isRevenueProcess = true gắn revenueFactoryId trỏ về
+      // Đơn giản hơn: hiện tại NM1 và NM2 đều có nguồn sợi trỏ về → lấy unique từ sourceOptions
+      const revenueFactories = Array.from(
+        new Map(
+          (Array.isArray(sp) ? sp : [])
+            .map((p: any) => p.revenueFactory)
+            .filter(Boolean)
+            .map((rf: any) => [rf.id, rf]),
+        ).values(),
+      );
+
+      setFactories(revenueFactories);
+      setSourceOptions(Array.isArray(sp) ? sp : []);
+
+      // Chỉ giữ máy ống (process.isRevenueProcess = true)
+      const windingMachines = (Array.isArray(m) ? m : []).filter(
+        (mc: any) => mc.process?.isRevenueProcess === true,
+      );
+      setMachines(windingMachines);
+
+      setItems(Array.isArray(i) ? i : []);
+    } catch (e) {
+      console.error(e);
+      message.error("Lỗi tải danh mục");
+    }
+  };
+  fetchData();
+  handleSearch();
+}, []);
+```
+
+### 3.3 Hàm `handleSearch`
+
+```tsx
+const handleSearch = async () => {
+  setLoading(true);
+  try {
+    const payload = {
+      fromDate: dateRange[0].format("YYYY-MM-DD"),
+      toDate: dateRange[1].format("YYYY-MM-DD"),
+      revenueFactoryIds: selectedRevenueFactories,
+      sourceProcessIds: selectedSources,
+      machineIds: selectedMachines,
+      itemIds: selectedItems,
+      shifts: selectedShifts,
+    };
+
+    const res = await fetch("/api/production/winding-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    setByRevenueFactory(data.byRevenueFactory || []);
+    setPivot(data.pivot || []);
+    setSourceProcesses(data.sourceProcesses || []);
+    setOrphanCount(data.orphanCount || 0);
+    setTotalKg(data.totalKg || 0);
+  } catch (e) {
+    message.error("Lỗi tải báo cáo");
+  } finally {
+    setLoading(false);
+  }
 };
 ```
 
-> **Lý do dùng PUT replace-all thay vì PATCH 1 dòng:** API `assignments` hiện tại là replace-all (xóa hết rồi tạo lại — xem mục 2.2 spec gốc TASK_MULTI_ITEM_LOT_ASSIGNMENT). Tái dùng pattern này thay vì tạo endpoint PATCH mới.
+### 3.4 UI — Bộ lọc (giống style trang cũ)
 
-### 4.5 Hiển thị nguồn sợi khi chưa gán riêng — fallback xuống máy
+```tsx
+<Card
+  title={
+    <span>
+      <FilterOutlined /> Bộ lọc
+    </span>
+  }
+  style={{ marginBottom: 20 }}
+  size="small"
+>
+  <Row gutter={[16, 16]}>
+    <Col xs={24} sm={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Khoảng thời gian:</div>
+      <RangePicker
+        value={dateRange}
+        onChange={(v) => setDateRange(v as any)}
+        style={{ width: "100%" }}
+        format="DD/MM/YYYY"
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Nhà máy doanh thu:</div>
+      <Select
+        mode="multiple"
+        allowClear
+        style={{ width: "100%" }}
+        placeholder="Tất cả"
+        options={factories.map((f: any) => ({
+          label: f.name || f.code,
+          value: f.id,
+        }))}
+        onChange={setSelectedRevenueFactories}
+        maxTagCount="responsive"
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Nguồn sợi:</div>
+      <Select
+        mode="multiple"
+        allowClear
+        style={{ width: "100%" }}
+        placeholder="Tất cả nguồn"
+        options={sourceOptions
+          .filter(
+            (p) =>
+              !selectedRevenueFactories.length ||
+              selectedRevenueFactories.includes(p.revenueFactory?.id),
+          )
+          .map((p) => ({
+            label: `${p.name} → ${p.revenueFactory?.code || "?"}`,
+            value: p.id,
+          }))}
+        onChange={setSelectedSources}
+        maxTagCount="responsive"
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Máy ống:</div>
+      <Select
+        mode="multiple"
+        allowClear
+        style={{ width: "100%" }}
+        placeholder="Tất cả"
+        options={machines
+          .sort((a: any, b: any) => naturalSortBy(a.name, b.name))
+          .map((m: any) => ({ label: m.name, value: m.id }))}
+        onChange={setSelectedMachines}
+        maxTagCount="responsive"
+      />
+    </Col>
+    <Col xs={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Ca:</div>
+      <Select
+        mode="multiple"
+        style={{ width: "100%" }}
+        placeholder="Tất cả"
+        options={[
+          { label: "Ca 1", value: 1 },
+          { label: "Ca 2", value: 2 },
+          { label: "Ca 3", value: 3 },
+        ]}
+        onChange={setSelectedShifts}
+      />
+    </Col>
+    <Col xs={12} md={6}>
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>Mặt hàng:</div>
+      <Select
+        mode="multiple"
+        allowClear
+        style={{ width: "100%" }}
+        placeholder="Tất cả"
+        options={items.map((i: any) => ({ label: i.name, value: i.id }))}
+        onChange={setSelectedItems}
+        maxTagCount="responsive"
+      />
+    </Col>
+    <Col
+      xs={24}
+      md={12}
+      style={{
+        textAlign: "right",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "flex-end",
+      }}
+    >
+      <Space>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => {
+            setSelectedRevenueFactories([]);
+            setSelectedSources([]);
+            setSelectedMachines([]);
+            setSelectedItems([]);
+            setSelectedShifts([]);
+          }}
+        >
+          Reset filter
+        </Button>
+        <Button
+          type="primary"
+          icon={<SearchOutlined />}
+          onClick={handleSearch}
+          loading={loading}
+        >
+          Xem báo cáo
+        </Button>
+        <Button
+          icon={<FileExcelOutlined />}
+          onClick={exportToExcel}
+          disabled={pivot.length === 0}
+          style={{ color: "green", borderColor: "green" }}
+        >
+          Xuất Excel
+        </Button>
+      </Space>
+    </Col>
+  </Row>
+</Card>
+```
 
-Trong UI tag nguồn (mục 4.2), thứ tự ưu tiên hiển thị:
+### 3.5 UI — Cảnh báo orphan + Dashboard 2 card NM
 
-1. `a.sourceProcess?.name` (assignment đã gán)
-2. `machine.currentSourceProcess?.name` (fallback mức máy)
-3. `'Chưa gán'`
+```tsx
+{
+  orphanCount > 0 && (
+    <Alert
+      type="warning"
+      showIcon
+      style={{ marginBottom: 16 }}
+      message={`Có ${orphanCount} bản ghi đánh ống chưa gán nguồn sợi`}
+      description="Các bản ghi này KHÔNG được tính vào báo cáo dưới đây. Vào trang /machines hoặc /production/winding-input để cấu hình nguồn."
+    />
+  );
+}
 
-Như vậy điều phối viên nhìn vào UI luôn thấy nguồn thực tế sẽ áp dụng khi tạo log, không bị nhầm.
+<Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+  {byRevenueFactory.map((rf) => (
+    <Col xs={24} md={12} key={rf.id}>
+      <Card
+        variant="borderless"
+        style={{
+          height: "100%",
+          background:
+            rf.code === "NM1"
+              ? "linear-gradient(to right, #e6f7ff, #ffffff)"
+              : "linear-gradient(to right, #fff7e6, #ffffff)",
+        }}
+      >
+        <Statistic
+          title={
+            <span>
+              <BankOutlined /> {rf.name} (theo nguồn sợi)
+            </span>
+          }
+          value={rf.totalKg}
+          precision={1}
+          suffix="kg"
+          styles={{
+            content: {
+              color: rf.code === "NM1" ? "#1677ff" : "#d48806",
+              fontWeight: "bold",
+              fontSize: 28,
+            },
+          }}
+        />
+        <Divider style={{ margin: "12px 0" }} />
+        <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+          {rf.recordCount} bản ghi · phân theo nguồn:
+        </div>
+        <Space wrap>
+          {rf.bySource.map((s: any) => (
+            <Tag
+              key={s.sourceProcessId}
+              color="cyan"
+              style={{ padding: "4px 8px" }}
+            >
+              {s.sourceName}:{" "}
+              <b>
+                {s.kg.toLocaleString(undefined, { maximumFractionDigits: 1 })}{" "}
+                kg
+              </b>
+            </Tag>
+          ))}
+        </Space>
+      </Card>
+    </Col>
+  ))}
+</Row>;
+```
+
+### 3.6 UI — Bảng pivot Ngày × Nguồn sợi
+
+```tsx
+const pivotColumns = useMemo(() => {
+  const cols: any[] = [
+    {
+      title: "Ngày",
+      dataIndex: "date",
+      key: "date",
+      width: 110,
+      fixed: "left" as const,
+      render: (d: string) => dayjs(d).format("DD/MM/YYYY"),
+    },
+  ];
+  // 1 cột cho mỗi nguồn sợi
+  sourceProcesses.forEach((sp) => {
+    cols.push({
+      title: (
+        <div>
+          <div>{sp.name}</div>
+          <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>
+            → {sp.revenueFactory?.code}
+          </Tag>
+        </div>
+      ),
+      key: `src-${sp.id}`,
+      align: "right" as const,
+      render: (_: any, row: any) => {
+        const v = row.bySource?.[sp.id];
+        return v != null ? (
+          <span>
+            {v.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          </span>
+        ) : (
+          <span style={{ color: "#ccc" }}>—</span>
+        );
+      },
+    });
+  });
+  // Cột Tổng
+  cols.push({
+    title: "Tổng (kg)",
+    dataIndex: "total",
+    key: "total",
+    align: "right" as const,
+    fixed: "right" as const,
+    width: 120,
+    render: (n: number) => (
+      <b style={{ color: "#389e0d" }}>
+        {n.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+      </b>
+    ),
+  });
+  return cols;
+}, [sourceProcesses]);
+
+// Row tổng cộng cuối bảng — dùng Table summary
+return (
+  // ... filter, dashboard ở trên ...
+
+  <Card
+    title="Sản lượng theo ngày × nguồn sợi"
+    size="small"
+    styles={{ body: { padding: 0 } }}
+  >
+    <Table
+      rowKey="date"
+      columns={pivotColumns}
+      dataSource={pivot}
+      loading={loading}
+      bordered
+      size="middle"
+      pagination={false}
+      scroll={{ x: "max-content" }}
+      summary={() => {
+        const totals: Record<number, number> = {};
+        let grand = 0;
+        pivot.forEach((r) => {
+          Object.entries(r.bySource).forEach(([id, kg]) => {
+            totals[Number(id)] = (totals[Number(id)] || 0) + (kg as number);
+          });
+          grand += r.total;
+        });
+        return (
+          <Table.Summary fixed>
+            <Table.Summary.Row
+              style={{ background: "#fafafa", fontWeight: 600 }}
+            >
+              <Table.Summary.Cell index={0}>Tổng cộng</Table.Summary.Cell>
+              {sourceProcesses.map((sp, idx) => (
+                <Table.Summary.Cell key={sp.id} index={idx + 1} align="right">
+                  {(totals[sp.id] || 0).toLocaleString(undefined, {
+                    maximumFractionDigits: 1,
+                  })}
+                </Table.Summary.Cell>
+              ))}
+              <Table.Summary.Cell
+                index={sourceProcesses.length + 1}
+                align="right"
+              >
+                <span style={{ color: "#389e0d" }}>
+                  {grand.toLocaleString(undefined, {
+                    maximumFractionDigits: 1,
+                  })}
+                </span>
+              </Table.Summary.Cell>
+            </Table.Summary.Row>
+          </Table.Summary>
+        );
+      }}
+    />
+  </Card>
+);
+```
+
+### 3.7 Hàm `exportToExcel`
+
+Xuất 2 sheets: "Tổng hợp theo NM" + "Pivot ngày × nguồn":
+
+```tsx
+const exportToExcel = () => {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Tổng hợp theo NM
+  const sheet1Data: any[] = [];
+  byRevenueFactory.forEach((rf) => {
+    sheet1Data.push({
+      "Nhà máy": rf.name,
+      "Tổng kg": rf.totalKg,
+      "Số bản ghi": rf.recordCount,
+      "Chi tiết nguồn": rf.bySource
+        .map((s: any) => `${s.sourceName}: ${s.kg.toFixed(1)} kg`)
+        .join(" | "),
+    });
+  });
+  const ws1 = XLSX.utils.json_to_sheet(sheet1Data);
+  XLSX.utils.book_append_sheet(wb, ws1, "Tổng hợp theo NM");
+
+  // Sheet 2: Pivot ngày × nguồn
+  const sheet2Data = pivot.map((row) => {
+    const out: any = { Ngày: dayjs(row.date).format("DD/MM/YYYY") };
+    sourceProcesses.forEach((sp) => {
+      out[sp.name] = row.bySource[sp.id] || 0;
+    });
+    out["Tổng (kg)"] = row.total;
+    return out;
+  });
+  // Thêm dòng tổng cộng
+  const totalsRow: any = { Ngày: "TỔNG CỘNG" };
+  let grand = 0;
+  sourceProcesses.forEach((sp) => {
+    const s = pivot.reduce((acc, r) => acc + (r.bySource[sp.id] || 0), 0);
+    totalsRow[sp.name] = s;
+  });
+  grand = pivot.reduce((acc, r) => acc + r.total, 0);
+  totalsRow["Tổng (kg)"] = grand;
+  sheet2Data.push(totalsRow);
+
+  const ws2 = XLSX.utils.json_to_sheet(sheet2Data);
+  XLSX.utils.book_append_sheet(wb, ws2, "Pivot ngày x nguồn");
+
+  XLSX.writeFile(wb, `BaoCao_NguonSoi_${dayjs().format("DDMM_HHmm")}.xlsx`);
+};
+```
 
 ---
 
-## 5. VERIFY
+## 4. VERIFY
 
-### 5.1 Schema
+### 4.1 Cấu trúc tab
 
-- [ ] Migration chạy OK trên dev + production
-- [ ] `\d machine_item_assignments` (psql) thấy cột `sourceProcessId` và index `idx_assignments_source_process`
-- [ ] Assignments cũ có `sourceProcessId = NULL` (chưa backfill, đúng kế hoạch)
+- [ ] Truy cập `/production/history` → thấy 2 tab "Lịch sử chi tiết" và "Báo cáo theo nguồn sợi"
+- [ ] Tab mặc định: "Lịch sử chi tiết" (giữ nội dung cũ y hệt)
+- [ ] Switch sang tab "Báo cáo theo nguồn sợi" và quay lại tab cũ → state tab cũ không bị reset (filter, dữ liệu vẫn còn)
 
-### 5.2 UI `/machines` — Modal điều phối chi tiết
+### 4.2 Tab "Lịch sử chi tiết"
 
-- [ ] Mở modal "Phân công mặt hàng" của máy multi-item → mỗi dòng có Select "Nguồn sợi" với 3 options (G33/TQ/G37)
-- [ ] Gán mặt hàng A → G37, mặt hàng B → TQ → lưu → reload trang → giá trị giữ đúng
-- [ ] Bảng máy multi-item: cột "Nguồn sợi" hiển thị nhiều tag (mỗi mặt hàng 1 tag), kèm code revenueFactory
+- [ ] Filter, biểu đồ, bảng chi tiết, edit/delete admin, export Excel — tất cả hoạt động y như trước khi refactor
 
-### 5.3 UI `/production/winding-input`
+### 4.3 Tab "Báo cáo theo nguồn sợi"
 
-- [ ] Máy thường: tag "Nguồn: ..." vẫn ở mức máy (như spec gốc), click đổi → PUT `/api/machines/[id]` (không đổi gì)
-- [ ] Máy multi-item: mỗi mặt hàng có tag "Nguồn: ..." riêng
-- [ ] Click tag mặt hàng A → đổi sang TQ → xác nhận → tag cập nhật, các bản ghi tiếp theo cho mặt hàng A có `sourceProcessId = TQ`
-- [ ] Trong khi đó, mặt hàng B trên cùng máy đó vẫn giữ `sourceProcessId = G37`
-- [ ] Assignment chưa gán `sourceProcessId` → UI hiển thị nguồn của Machine (fallback)
+- [ ] Mặc định filter `dateRange` = tháng hiện tại
+- [ ] Filter "Nhà máy doanh thu" hiển thị NM1, NM2 (lấy từ `sourceProcesses[].revenueFactory`)
+- [ ] Filter "Nguồn sợi" hiển thị G33, TQ, G37 với label kèm nhãn nhà máy
+- [ ] Filter "Nguồn sợi" lọc theo "Nhà máy doanh thu" (cascade)
+- [ ] Filter "Máy ống" chỉ hiển thị máy có `process.isRevenueProcess = true`
+- [ ] Bấm "Xem báo cáo" → 2 card NM1/NM2 hiển thị đúng tổng + breakdown theo nguồn
+- [ ] Bảng pivot có cột Ngày + 1 cột cho mỗi nguồn sợi + cột Tổng
+- [ ] Row tổng cộng cuối bảng cộng đúng từng cột và tổng grand
+- [ ] Banner cảnh báo orphan hiển thị khi có log thiếu `sourceProcessId`
+- [ ] Khi reset filter → tự gọi lại API trả về full data của tháng
 
-### 5.4 Backend resolve `sourceProcessId`
+### 4.4 Test kịch bản gốc (multi-item 2 nguồn)
 
-- [ ] Tạo log cho máy multi-item, mặt hàng A có `assignment.sourceProcessId = G37` → SQL kiểm tra log có `sourceProcessId = G37`
-- [ ] Tạo log cho máy multi-item, mặt hàng B trên CÙNG máy, có `assignment.sourceProcessId = TQ` → log có `sourceProcessId = TQ`
-- [ ] Tạo log cho máy multi-item, mặt hàng C có `assignment.sourceProcessId = NULL`, `machine.currentSourceProcessId = G33` → log có `sourceProcessId = G33` (fallback)
-- [ ] Tạo log cho máy thường → log có `sourceProcessId = machine.currentSourceProcessId` (không đổi từ spec gốc)
+- [ ] Máy ống multi-item chạy 2 mặt hàng: 500kg G37 + 300kg TQ trong cùng ngày
+- [ ] Tab báo cáo: card NM1 cộng 300kg (TQ), card NM2 cộng 500kg (G37)
+- [ ] Pivot ngày đó: cột G37 = 500, cột TQ = 300, tổng = 800
 
-### 5.5 Calculator (không cần đổi code, chỉ verify output)
+### 4.5 Export Excel
 
-- [ ] Máy multi-item chạy 2 mặt hàng cùng máy: mặt hàng A (G37, 500kg) và mặt hàng B (TQ, 300kg) trong cùng 1 ca
-- [ ] Dashboard doanh thu: 500kg vào nhóm NM2, 300kg vào nhóm NM1 — tách đúng dù chung 1 máy
-
----
-
-## 6. TỔNG KẾT THAY ĐỔI
-
-| File                                                         | Thay đổi                                                                                                                                                                                                                       |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `prisma/schema.prisma`                                       | Thêm `sourceProcessId` + relation `sourceProcess` vào `MachineItemAssignment`. Thêm `@@index` và relation ngược `assignmentsAsSource` trong `Process`.                                                                         |
-| Migration `add_source_process_to_assignment`                 | DDL 1 cột + 1 index.                                                                                                                                                                                                           |
-| `src/app/api/machines/[id]/assignments/route.ts`             | GET: include `sourceProcess`. PUT: nhận và lưu `sourceProcessId`.                                                                                                                                                              |
-| `src/app/api/machines/route.ts`                              | GET: thêm `sourceProcess` vào `include` của `itemAssignments`.                                                                                                                                                                 |
-| `src/app/api/production/winding/route.ts` (hoặc tên thực tế) | Sửa logic resolve `sourceProcessId`: ưu tiên `MachineItemAssignment.sourceProcessId` cho máy multi-item, fallback `Machine.currentSourceProcessId`.                                                                            |
-| `src/app/machines/page.tsx`                                  | Interface `AssignmentData` thêm `sourceProcessId`/`sourceProcess`. Modal Form.List thêm Select "Nguồn sợi". Cột bảng máy multi-item render nhiều tag nguồn (tùy chọn).                                                         |
-| `src/app/production/winding-input/page.tsx`                  | Máy multi-item: render tag "Nguồn: ..." cho TỪNG mặt hàng. State `pendingAssignmentSource` key theo `${machineId}-${itemId}`. Handler `handleChangeAssignmentSource` gọi PUT assignments (replace-all). Máy thường: KHÔNG đổi. |
-| `src/lib/allocation-engine-v2.ts`                            | **KHÔNG đổi** — vẫn đọc `sourceProcessId` từ `ProductionLog`.                                                                                                                                                                  |
-| `src/lib/revenue-calculator-v2.ts` (nếu có)                  | **KHÔNG đổi**.                                                                                                                                                                                                                 |
+- [ ] File xuất có 2 sheet: "Tổng hợp theo NM" + "Pivot ngày x nguồn"
+- [ ] Sheet pivot có dòng "TỔNG CỘNG" ở cuối
 
 ---
 
-## 7. GHI CHÚ CHO CLAUDE CODE
+## 5. TỔNG KẾT THAY ĐỔI
 
-1. **ĐỌC TRƯỚC** `TASK_MULTI_ITEM_LOT_ASSIGNMENT.md` để hiểu pattern thêm field vào `MachineItemAssignment` đã làm cho `lotId`. Spec này lặp lại y pattern đó, chỉ đổi field thành `sourceProcessId`.
+| File                                                         | Thay đổi                                                                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `src/app/production/history/page.tsx`                        | **Refactor**: thay nội dung thành wrapper `<Tabs>` với 2 tab. Toàn bộ code cũ chuyển vào `HistoryDetailTab`. |
+| `src/app/production/history/components/HistoryDetailTab.tsx` | **File mới** — move toàn bộ nội dung component cũ vào đây, đổi tên export, KHÔNG đổi logic.                  |
+| `src/app/production/history/components/WindingReportTab.tsx` | **File mới** — component báo cáo theo nguồn sợi (filter + dashboard + pivot + cảnh báo + export).            |
+| `src/app/api/production/winding-report/route.ts`             | **File mới** — POST endpoint trả về `byRevenueFactory`, `pivot`, `sourceProcesses`, `orphanCount`.           |
 
-2. **PUT assignments là replace-all** — xóa hết rồi tạo lại. Khi đổi nguồn tại winding-input, FE phải gửi đầy đủ array assignments hiện tại (chỉ thay đổi `sourceProcessId` của 1 dòng). Nếu không gửi đủ, các dòng khác sẽ mất.
+---
 
-3. **Logic resolve có thứ tự ưu tiên rõ ràng** (mục 2.4):
+## 6. GHI CHÚ CHO CLAUDE CODE
 
-   ```
-   if (multi-item && có assignment) → assignment.sourceProcessId
-   else → machine.currentSourceProcessId
-   ```
+1. **Refactor tab "Lịch sử chi tiết" KHÔNG được đổi logic** — chỉ là move file + đổi tên export. Test kỹ tab này sau refactor để chắc không vỡ gì.
 
-   Cả 2 đều có thể NULL → log có `sourceProcessId = NULL` → calculator fallback theo `machine.process.factoryId` (như spec gốc đã xử lý).
+2. **`destroyInactiveTabPane={false}`** quan trọng — nếu để mặc định `true`, mỗi lần switch tab sẽ unmount và mất state (filter, dữ liệu đã load). Trải nghiệm tệ.
 
-4. **KHÔNG sửa calculator** — đây là điều thiết kế tốt: cả máy thường và máy multi-item đều ghi `sourceProcessId` lên `ProductionLog`. Calculator chỉ đọc field này mà không biết nguồn đến từ Machine hay từ Assignment. Tách concern sạch.
+3. **Header cột pivot không hardcode G33/TQ/G37** — render động từ `sourceProcesses` trả về từ API. Nếu sau này phòng KD thêm nguồn thứ 4 (vd "G40"), bảng tự nới rộng.
 
-5. **KHÔNG backfill** assignments cũ. Để `sourceProcessId = NULL` → fallback xuống Machine tự nhiên. Chỉ điều phối viên thấy "máy này đang chạy 2 nguồn" mới vào modal gán riêng.
+4. **UTC date range** trong API — theo pattern dự án. Không dùng `new Date(year, month-1, 1)`.
 
-6. **Tag fallback hiển thị rõ** ở winding-input (mục 4.5) — nếu assignment chưa gán nguồn, tag vẫn hiện nguồn mức máy với chữ "(mặc định)" hoặc tương đương để người dùng biết đây là fallback chứ không phải gán riêng.
+5. **Filter chỉ scope `isRevenueProcess = true`** ngay từ API — tab này không cần xử lý công đoạn khác. Trang `/production/history` tab cũ vẫn xử lý mọi công đoạn như cũ.
 
-7. **Verify mục 5.4 với log thực tế** — đặc biệt test case 2 mặt hàng cùng máy nhưng khác nguồn (case sinh ra spec này). Đây là kịch bản gốc cần được đảm bảo hoạt động.
+6. **Endpoint `/api/processes/source-options` đã có sẵn** từ SPEC_SOURCE_PROCESS_FOR_REVENUE — tái dùng, không tạo mới.
 
-8. **KHÔNG audit log** trong patch này.
+7. **Filter "Máy ống" load từ `/api/machines`** rồi filter FE theo `process.isRevenueProcess`. Nếu API hiện chưa include `process.isRevenueProcess` trong select, cần đảm bảo có (xem `src/app/api/machines/route.ts`).
+
+8. **Pivot dùng `pagination={false}`** — báo cáo theo ngày trong 1 tháng tối đa 31 dòng, không cần phân trang. Nếu user filter cả năm có thể tới 365 dòng — vẫn OK với Table không phân trang, có scroll.
+
+9. **Tag NM1/NM2 màu khác nhau** trong card và header pivot — giúp KD đọc nhanh. Chọn 2 màu tương phản rõ (xanh dương cho NM1, vàng/cam cho NM2 như gợi ý code mục 3.5).
+
+10. **Card variant="borderless"** đã có sẵn ở Ant Design 5+, dùng giống style trang cũ.
+
+11. **KHÔNG có edit/delete trên tab báo cáo** — đây là báo cáo read-only. Sửa số liệu phải sang tab "Lịch sử chi tiết".
+
+12. **KHÔNG bổ sung pie chart hoặc trend line ở MVP** — giữ scope nhỏ. Có thể thêm sau nếu phòng KD yêu cầu.
+
+13. **Tải file Excel test mở bằng Excel/LibreOffice xác nhận layout** — đặc biệt sheet "Pivot ngày x nguồn" phải gần giống TH-DT mà phòng KD đang dùng.

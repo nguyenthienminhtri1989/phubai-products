@@ -4432,3 +4432,41 @@ BUSINESS_LOGIC_CONTEXT.md                                       — ghi nhan fea
 ### Data notes
 
 - Cot moi nullable, khong backfill assignments cu. Assignments cu co `sourceProcessId = NULL` se fallback ve nguon cap may.
+
+---
+
+## PRODUCTION HISTORY — Tab "Báo cáo theo nguồn sợi"
+
+**Status:** ✅ Completed 2026-06-24
+
+### What was built
+
+Refactor `/production/history` thành `<Tabs>` với 2 tab: "Lịch sử chi tiết" (logic cũ giữ nguyên, chỉ move sang component riêng) và "Báo cáo theo nguồn sợi" — báo cáo pivot Ngày × Nguồn sợi cho riêng công đoạn ống (`isRevenueProcess = true`), kèm dashboard 2 card theo nhà máy doanh thu và export Excel.
+
+### Files created/modified
+
+```
+src/app/production/history/page.tsx                          — Refactor thành wrapper <Tabs>, destroyInactiveTabPane={false}
+src/app/production/history/components/HistoryDetailTab.tsx    — File mới, move toàn bộ nội dung cũ vào, đổi tên export, KHÔNG đổi logic
+src/app/production/history/components/WindingReportTab.tsx    — File mới, báo cáo theo nguồn sợi (filter + dashboard + pivot + export)
+src/app/api/production/winding-report/route.ts                — File mới, POST trả về byRevenueFactory, pivot, sourceProcesses, orphanCount, totalKg
+```
+
+### Key business logic implemented
+
+- Scope chỉ log có `machine.process.isRevenueProcess = true` (đánh ống) — không ảnh hưởng tab "Lịch sử chi tiết" vẫn xử lý mọi công đoạn.
+- Log thiếu `sourceProcessId` bị loại khỏi báo cáo, chỉ đếm vào `orphanCount` để cảnh báo, không tính vào `byRevenueFactory`/`pivot`.
+- Header cột pivot render động từ `sourceProcesses` trả về từ API — không hardcode tên nguồn sợi.
+- `Factory` model không có field `code` (chỉ có `id`, `name`) — UI dùng `name` để hiển thị và phân màu card theo index thay vì so sánh chuỗi "NM1"/"NM2".
+- Sửa lỗi so với spec gốc: `ProductionLog` không có relation `process` trực tiếp, where filter phải đi qua `machine: { process: { isRevenueProcess: true } }`.
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/production/winding-report | Trả về báo cáo nguồn sợi theo filter ngày/nhà máy/nguồn/máy/mặt hàng/ca |
+
+### Known limitations / not yet implemented
+
+- Không có pie chart/trend line (giữ MVP theo yêu cầu spec).
+- Group/aggregate thực hiện trên Node.js, chưa dùng `groupBy` ở DB — đủ cho volume hiện tại.
